@@ -14,7 +14,8 @@
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
   ./template.py stamp PROJECT [--type library|server] [--benchmarks] [--mutation] [--fuzz]
-                              [--differential] [--wasm] [--fly] [--database] [--name NAME] [--commit REVISION]
+                              [--differential] [--wasm]
+                              [--explore] [--fly] [--database] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
@@ -58,7 +59,7 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "fly", "database")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "fly", "database")
 
 
 def options(stamp):
@@ -216,8 +217,8 @@ def stamp_command(arguments):
         sys.exit(f"No such directory: {project}")
     if arguments.type == "library" and (arguments.fly or arguments.database):
         sys.exit("--fly and --database apply to the server type only")
-    if arguments.type == "server" and arguments.wasm:
-        sys.exit("--wasm applies to the library type only")
+    if arguments.type == "server" and (arguments.wasm or arguments.explore):
+        sys.exit("--wasm and --explore apply to the library type only")
     name = arguments.name or project.name
     if not re.fullmatch(r"[A-Z][A-Za-z0-9]*", name):
         sys.exit(f"The name must be the UpperCamelCase name the project was made with (a Swift module name), "
@@ -231,6 +232,7 @@ def stamp_command(arguments):
         "fuzz": arguments.fuzz,
         "differential": arguments.differential,
         "wasm": arguments.wasm,
+        "explore": arguments.explore,
         "fly": arguments.fly,
         "database": arguments.database,
     }

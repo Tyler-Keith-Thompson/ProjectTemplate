@@ -1,0 +1,21 @@
+<!-- title: Greetings · Explore ProjectName -->
+<!-- description: A greeting composed from a name and modifiers, built as you type. -->
+<header class="sign">
+  <h1>Greetings</h1>
+  <p class="question">How does a greeting come together from a name and a few modifiers?</p>
+</header>
+<section class="prose first">
+  <p>A <b>Greeting</b> is a value built in one expression: start from a name, then apply modifiers. Each modifier returns a new greeting, so the one you started from never changes.</p>
+</section>
+
+<div id="app"></div>
+
+<section class="prose code-after">
+  <h2><small>In Swift</small>The greeting above</h2>
+  <pre id="code" aria-label="Swift code"></pre>
+</section>
+
+<section class="prose">
+  <h2><small>Two spellings</small>Plain and checked</h2>
+  <p><code>Greeting(name:)</code> stops the program on an empty name, like an array subscript out of range. <code>Greeting(checkedName:)</code> throws <code>EmptyName</code> instead, for names that come from outside the program.</p>
+</section>

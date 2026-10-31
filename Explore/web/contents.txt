@@ -1,0 +1,4 @@
+# The site's reading order: slug|title|group|summary|status. A `page` row is web/pages/<slug>.html,
+# listed in the contents with a link and joined to its neighbours by previous/next links; a
+# `soon` row is listed without a link until its page exists.
+greetings|Greetings|Start here|A greeting composed from a name and modifiers.|page

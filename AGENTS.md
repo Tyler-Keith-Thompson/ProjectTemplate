@@ -21,6 +21,7 @@ scripts/modules.py               The module graph
 scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (scripts/mutate.py) <!-- mutation:line -->
 Fuzz/Sources/Fuzz<Module>/       A libFuzzer target per module, in the separate Fuzz/ package <!-- fuzz:line -->
 Differential/                    The library side of `just diff`; scripts/differential_<area>.py the references <!-- differential:line -->
+Explore/                         The browser explorer: pages running the library as WebAssembly (`just explore`) <!-- explore:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
                                  tools/bazel turns BuildBuddy on when the Keychain holds its key
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
@@ -73,6 +74,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just fuzz [Fuzz<Module>] [-t secs]` | libFuzzer, time-boxed (60 s per target); `just fuzz-regress` replays the corpus, `just fuzz-repro <target> <file>` a crash <!-- fuzz:line --> |
 | `just diff [--module X] [--cases N] [--seed S]` | Differential tests against pinned reference implementations (through `uv`) <!-- differential:line --> |
 | `just wasi-test [-c release] [--targets X,Y]` | SwiftPM tests on wasm32-wasi under wasmtime: a 32-bit `Int` <!-- wasm:line --> |
+| `just explore` | Build the browser explorer into `Explore/dist` (serve it to try a page); the DocC workflow publishes it at `<pages>/explore/` <!-- explore:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -209,6 +211,10 @@ have.
      (`Differential/README.md`, "Adding an area"), then `just diff --module <Module>`. A failure
      becomes a test, then its file is deleted.
 <!-- differential:end -->
+<!-- explore:begin -->
+   - an explorer page (`Explore/README.md`, "Adding a page") where the feature is something a
+     reader would want to try, then `just explore` and the page checked from `Explore/dist`.
+<!-- explore:end -->
 3. **A README example**, if the feature changes how the package is introduced, copied verbatim
    into `Tests/ProjectNameTests`.
 <!-- benchmarks:begin -->

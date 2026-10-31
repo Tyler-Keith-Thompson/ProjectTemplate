@@ -44,4 +44,9 @@ Benchmarks/.benchmarkBaselines/*/*
 # Differential failures (see Differential/README.md): each becomes a test, then goes.
 /Differential/Failures/
 # differential:end
+
+# explore:begin
+# The explorer's build output (just explore).
+/Explore/dist/
+# explore:end
 *.swp

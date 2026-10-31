@@ -28,5 +28,10 @@ Fuzz/.build
 Differential/.build
 # differential:end
 
+# explore:begin
+# The browser explorer is a SwiftPM package; its build directory can contain BUILD files.
+Explore
+# explore:end
+
 # Overlays the bootstrap script copies over the template (server type); not built in place.
 templates

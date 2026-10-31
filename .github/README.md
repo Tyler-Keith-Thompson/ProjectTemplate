@@ -45,6 +45,8 @@ build time.
   reference implementations run through `uv`, with every disagreement saved to reproduce.
 - **WebAssembly tests** (optional, libraries): the test suites built for wasm32-wasi and run under
   wasmtime, where `Int` is 32 bits.
+- **A browser explorer** (optional, libraries): pages that run the library as WebAssembly, with
+  the code each runs beside it, published next to the docs.
 - **Benchmarks** (optional): a separate package on
   [ordo-one/benchmark](https://github.com/ordo-one/benchmark), with wall-clock baselines and,
   with BenchmarkHarness (a separate tool, checked out alongside), simulated instruction and cache
@@ -59,7 +61,8 @@ macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. B
 `jemalloc`; servers need Docker and, for the load test, `k6`; Fly.io deployment needs `flyctl`;
 `just ci-secrets` needs `gh`, signed in. Fuzzing needs `swiftly` with a swift.org toolchain
 (`swiftly install 6.3.3`), since Xcode's has no libFuzzer runtime. Differential testing needs
-`uv`. WebAssembly tests need swiftly's toolchain, its Swift SDK for WebAssembly and `wasmtime`.
+`uv`. WebAssembly tests need swiftly's toolchain, its Swift SDK for WebAssembly and `wasmtime`; the
+explorer needs the same toolchain and SDK, and `binaryen` for `wasm-opt`.
 
 ## Starting a project
 
@@ -94,6 +97,7 @@ then prints what to fill in.
 | `--fuzz` | `Fuzz/`: a separate SwiftPM package of libFuzzer targets (a `FuzzGreetings` example checking `Greeting` against a model), `scripts/fuzz.py`, `just fuzz [Target] [-t secs]` (time-boxed, every target at once), `just fuzz-regress` (replays the local corpus) and `just fuzz-repro <target> <crash>`. Built with a swift.org toolchain through swiftly, in release with AddressSanitizer. The corpus and crashes stay local. |
 | `--differential` | `Differential/`: an executable answering JSON cases with the library (built through Bazel in release, or `--swiftpm`), `scripts/differential.py` (seeded cases, references pinned and run through `uv`, failures saved to `Differential/Failures/` with their seed) with one file per area (a `differential_greetings.py` example against the `regex` package's grapheme clusters), and `just diff [--module X] [--cases N] [--seed S]`. |
 | `--wasm` (library) | `scripts/wasi_test.py` and `just wasi-test [-c release] [--targets X,Y]`: the SwiftPM test targets built with swiftly's toolchain and Swift SDK for WebAssembly, run under wasmtime in groups (`Package.swift` declares only a group's targets when `<PROJECT>_WASI_TESTS` is set, and leaves out exit-test files). A 32-bit `Int` check. |
+| `--explore` (library) | `Explore/`: a SwiftPM package of ElementaryUI pages compiled with the library to WebAssembly (a `greetings` example page), each drawn into its HTML at build time and mounted live in the browser, with code panels taken from the page's own sources. `just explore` builds `Explore/dist`; an `explore` job in `docc.yml` (WebAssembly SDK and wasm-opt cached) publishes it at `<pages>/explore/`, and keeps the live copy when it fails to build. |
 | `--fly` (server) | `fly.toml` (suspend when idle, `/health` checks), a `deploy` job in `Release.yml` after CI (`FLY_API_TOKEN` secret), `just deploy`. Without it nothing deploys. |
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
 | `--fly --database` | Litestream: `litestream.yml` replicates to Backblaze B2 (the `B2_*` Fly secrets), and `scripts/docker-entrypoint.sh` restores the database onto an empty volume, then runs the server under `litestream replicate`. Without the secrets it serves unreplicated. With one machine and one volume, Litestream runs directly, without LiteFS. |
@@ -141,7 +145,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `library`, `server`, `fly`, `database`, `litestream`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `fly`, `database`, `litestream`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -176,6 +180,7 @@ numbering intact.
 | Fuzzing (opt-in) | `Fuzz/`, `scripts/fuzz.py` | libFuzzer through `LLVMFuzzerRunDriver` (each target's `@main` calls `runFuzzer`); swiftly's toolchain, `<PROJECT>_FUZZ_SWIFT` picks its version; corpus in `Fuzz/Corpus/`, crashes in `Fuzz/Crashes/` |
 | Differential testing (opt-in) | `Differential/`, `scripts/differential*.py` | `DIFFERENTIAL_DEPENDENCIES` in `scripts/modules.py` writes the package's BUILD.bazel and Package.swift; areas are discovered by file name |
 | WebAssembly tests (opt-in) | `scripts/wasi_test.py`, `scripts/modules.py` | The generated `Package.swift` reads `<PROJECT>_WASI_TESTS` (marked `wasm` in the generator); builds in `.build/wasm` |
+| Browser explorer (opt-in) | `Explore/`, `docc.yml` | ElementaryUI and JavaScriptKit (PackageToJS); the workflow job is dormant (`#|`) in the template, so only `--explore` projects run it |
 | Mocks (off until needed) | `scripts/modules.py` (`MOCKING`), `tools/BUILD.bazel` | Mockable row commented out in `PACKAGES`; a module depending on it gets `MOCKING` in debug only, in both build systems |
 | CI | `.github/workflows` | Linux arm64 Bazel tests on branches and PRs; tag-and-release on main |
 | Test support | `Tests/ProjectNameTestSupport` | Seeded RNG, tags; data only |
@@ -185,17 +190,15 @@ numbering intact.
 | Agent instructions | `AGENTS.md` (`CLAUDE.md` includes it) | Layout, commands, building blocks, feature checklist, house rules, API conventions |
 | Claude permissions | `.claude/settings.json` | `just`, `bazel build/test/query`, read-only git |
 
-Not included, available in [Grafluent](https://github.com/Tyler-Keith-Thompson/Grafluent) to
-copy: the browser explorer.
 
 ### Checking a change
 
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
-directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential` and `--wasm`; `--server`
+directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential`, `--wasm` and `--explore`; `--server`
 alone, with `--database`, and with `--fly --database`. For a server change, also run `just spm`
 and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30` and
-`just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`.
+`just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`; for an explorer change, `just explore`.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.

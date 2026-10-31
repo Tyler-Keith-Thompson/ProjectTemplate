@@ -90,6 +90,12 @@ wasi-test *args="":
     python3 -u {{PROJECT_ROOT}}/scripts/wasi_test.py {{args}}
 # wasm:end
 
+# explore:begin
+[doc('Build the browser explorer (Explore/) as size-optimized release WebAssembly into Explore/dist; EXPLORE_XCODE=/Applications/Xcode-<older>.app if the toolchain crashes on a newer SDK')]
+explore:
+    {{PROJECT_ROOT}}/Explore/build.sh
+# explore:end
+
 # benchmarks:begin
 # The checkout of BenchmarkHarness whose benchmark-harness tool records simulated baselines.
 BENCHMARK_HARNESS := env("BENCHMARK_HARNESS", home_directory() / "workspace" / "BenchmarkHarness")
@@ -213,6 +219,7 @@ clean:
     rm -rf {{PROJECT_ROOT}}/Benchmarks/.build # benchmarks:line
     rm -rf {{PROJECT_ROOT}}/Fuzz/.build # fuzz:line
     rm -rf {{PROJECT_ROOT}}/Differential/.build # differential:line
+    rm -rf {{PROJECT_ROOT}}/Explore/.build {{PROJECT_ROOT}}/Explore/dist # explore:line
 
 [doc('Print the dependency graph of a target')]
 deps target="//Sources/ProjectName":

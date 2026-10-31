@@ -15,11 +15,14 @@
 #   --fuzz                  libFuzzer targets in Fuzz/ and `just fuzz` (needs swiftly).
 #   --differential          Differential testing against references: `just diff` (needs uv).
 #   --wasm                  Library only: test on wasm32-wasi under wasmtime, `just wasi-test`.
+#   --explore               Library only: a browser explorer (Explore/, `just explore`), published
+#                           with the docs.
 #   --fly                   Server only: deploy to Fly.io (fly.toml and a deploy job in Release).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
 #                           it to object storage and restores it on a new volume.
 #   --no-benchmarks, --no-mutation, --no-fuzz,
-#                           --no-differential, --no-wasm, --no-fly, --no-database
+#                           --no-differential, --no-wasm, --no-explore, --no-fly,
+#                           --no-database
 #   --yes, -y               Ask nothing.
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
@@ -29,7 +32,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,29p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -39,6 +42,7 @@ MUTATION=""
 FUZZ=""
 DIFFERENTIAL=""
 WASM=""
+EXPLORE=""
 FLY=""
 DATABASE=""
 ASK=true
@@ -60,6 +64,8 @@ while [ $# -gt 0 ]; do
         --no-differential) DIFFERENTIAL=false ;;
         --wasm) WASM=true ;;
         --no-wasm) WASM=false ;;
+        --explore) EXPLORE=true ;;
+        --no-explore) EXPLORE=false ;;
         --fly) FLY=true ;;
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
@@ -134,8 +140,8 @@ if [ "$TYPE" = library ] && { [ "$FLY" = true ] || [ "$DATABASE" = true ]; }; th
     echo "--fly and --database apply to the server type only" >&2
     exit 1
 fi
-if [ "$TYPE" = server ] && [ "$WASM" = true ]; then
-    echo "--wasm applies to the library type only (a Vapor server does not build for WASI)" >&2
+if [ "$TYPE" = server ] && { [ "$WASM" = true ] || [ "$EXPLORE" = true ]; }; then
+    echo "--wasm and --explore apply to the library type only" >&2
     exit 1
 fi
 
@@ -153,10 +159,12 @@ if [ "$TYPE" = server ]; then
         DATABASE="$(ask_unset "$DATABASE" "SQLite database?")"
     fi
     WASM=false
+    EXPLORE=false
 else
     FLY=false
     DATABASE=false
     WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi)?")"
+    EXPLORE="$(ask_unset "$EXPLORE" "A browser explorer?")"
 fi
 BENCHMARKS="$(ask_unset "$BENCHMARKS" "Benchmarks package?")"
 MUTATION="$(ask_unset "$MUTATION" "Mutation testing?")"
@@ -171,7 +179,7 @@ LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, fly: $FLY, database: $DATABASE) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, fly: $FLY, database: $DATABASE) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -186,7 +194,7 @@ rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
     --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' \
-    --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '*.xcodeproj' --exclude '.DS_Store'
+    --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '/Explore/dist' --exclude '*.xcodeproj' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
 fi
@@ -202,6 +210,7 @@ remove_unless "$LIBRARY" Tests/ProjectNameTests
 remove_unless "$MUTATION" scripts/mutate.py scripts/mutants
 remove_unless "$FUZZ" Fuzz scripts/fuzz.py
 remove_unless "$WASM" scripts/wasi_test.py
+remove_unless "$EXPLORE" Explore
 remove_unless "$DIFFERENTIAL" Differential scripts/differential.py scripts/differential_greetings.py
 remove_unless "$FLY" fly.toml
 remove_unless "$DATABASE" Sources/App/Database
@@ -231,7 +240,7 @@ done
 #                                                       uncommented when kept
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "library=$LIBRARY" "server=$SERVER" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" <<'PY'
 import pathlib, re, sys
 
@@ -302,13 +311,14 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$FLY" "$DATABASE" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$FLY" "$DATABASE" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, fly, database, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, fly, database, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
          "mutation": mutation == "true", "fuzz": fuzz == "true",
-         "differential": differential == "true", "wasm": wasm == "true", "fly": fly == "true", "database": database == "true"}
+         "differential": differential == "true", "wasm": wasm == "true",
+         "explore": explore == "true", "fly": fly == "true", "database": database == "true"}
 if modified == "true":
     stamp["modified"] = True
 with open(path, "w") as file:
