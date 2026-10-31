@@ -58,6 +58,12 @@ docs:
     rm -rf {{PROJECT_ROOT}}/.build/docs && mkdir -p {{PROJECT_ROOT}}/.build
     cp -RL {{PROJECT_ROOT}}/bazel-bin/docs {{PROJECT_ROOT}}/.build/docs && chmod -R u+w {{PROJECT_ROOT}}/.build/docs
 
+# mutation:begin
+[doc('Mutation testing: plant the bugs in scripts/mutants/<Module>.py and check the tests catch each, e.g. just mutate Greetings, or just mutate Greetings --all')]
+mutate module *args="":
+    python3 {{PROJECT_ROOT}}/scripts/mutate.py {{module}} {{args}}
+# mutation:end
+
 # benchmarks:begin
 # The checkout of BenchmarkHarness whose benchmark-harness tool records simulated baselines.
 BENCHMARK_HARNESS := env("BENCHMARK_HARNESS", home_directory() / "workspace" / "BenchmarkHarness")

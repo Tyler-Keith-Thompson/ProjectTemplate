@@ -13,8 +13,8 @@
       generates are regenerated instead of merged. Nothing is committed. PROJECT must be a git
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
-  ./template.py stamp PROJECT [--type library|server] [--benchmarks] [--fly] [--database]
-                              [--name NAME] [--commit REVISION]
+  ./template.py stamp PROJECT [--type library|server] [--benchmarks] [--mutation] [--fly]
+                              [--database] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
@@ -58,11 +58,13 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
+FEATURES = ("benchmarks", "mutation", "fly", "database")
+
+
 def options(stamp):
-    flags = ["--type", stamp["type"]]
-    for feature in ("benchmarks", "fly", "database"):
-        flags.append(f"--{feature}" if stamp.get(feature) else f"--no-{feature}")
-    return flags
+    """bootstrap.sh's flags for the stamp. Only the features it has are passed: an option off is
+    bootstrap's default, and a template commit older than the option doesn't know its flag."""
+    return ["--type", stamp["type"]] + [f"--{feature}" for feature in FEATURES if stamp.get(feature)]
 
 
 def render(commit, stamp, scratch):
@@ -223,6 +225,7 @@ def stamp_command(arguments):
         "name": name,
         "type": arguments.type,
         "benchmarks": arguments.benchmarks,
+        "mutation": arguments.mutation,
         "fly": arguments.fly,
         "database": arguments.database,
     }
@@ -269,7 +272,7 @@ def main():
     stamp_parser = commands.add_parser("stamp", help="record which template commit and options a project matches")
     stamp_parser.add_argument("project")
     stamp_parser.add_argument("--type", choices=["library", "server"], default="library")
-    for feature in ("benchmarks", "fly", "database"):
+    for feature in FEATURES:
         stamp_parser.add_argument(f"--{feature}", action="store_true")
     stamp_parser.add_argument("--name", help="the project's name (default the directory's)")
     stamp_parser.add_argument("--commit", default="HEAD", help="the template revision it matches (default HEAD)")

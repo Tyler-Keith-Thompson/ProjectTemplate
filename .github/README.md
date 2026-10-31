@@ -33,6 +33,8 @@ build time.
 - **Agent instructions.** `AGENTS.md` (which `CLAUDE.md` includes) tells a coding agent the
   layout, the commands, the feature checklist and the house rules, so agents build the project the
   way a person would.
+- **Mutation testing** (optional): planted bugs per module, compiled into one build behind
+  runtime switches, and a report of any the tests let through.
 - **Benchmarks** (optional): a separate package on
   [ordo-one/benchmark](https://github.com/ordo-one/benchmark), with wall-clock baselines and,
   with BenchmarkHarness (a separate tool, checked out alongside), simulated instruction and cache
@@ -75,6 +77,7 @@ then prints what to fill in.
 | Option | Adds |
 |---|---|
 | `--benchmarks` | `Benchmarks/`: a separate SwiftPM package, `BASELINE` entries, `just bench`, `bench-baseline`, `bench-compare`, and `bench-simulated` / `bench-simulated-compare` (Callgrind in a Linux VM through BenchmarkHarness, a separate tool expected at `~/workspace/BenchmarkHarness` or `$BENCHMARK_HARNESS`). The `main` and `simulated` baselines are committed. |
+| `--mutation` | `scripts/mutate.py` and `just mutate <Module>`: the planted bugs in `scripts/mutants/<Module>.py` (a `Greetings` example), compiled into one build of a scratch copy behind runtime switches; each must make a test fail. Results are stored by a hash of everything a mutant depends on, so a rerun tests only what changed; `--select` runs coverage-selected tests first. |
 | `--fly` (server) | `fly.toml` (suspend when idle, `/health` checks), a `deploy` job in `Release.yml` after CI (`FLY_API_TOKEN` secret), `just deploy`. Without it nothing deploys. |
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
 | `--fly --database` | Litestream: `litestream.yml` replicates to Backblaze B2 (the `B2_*` Fly secrets), and `scripts/docker-entrypoint.sh` restores the database onto an empty volume, then runs the server under `litestream replicate`. Without the secrets it serves unreplicated. With one machine and one volume, Litestream runs directly, without LiteFS. |
@@ -122,7 +125,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `library`, `server`, `fly`, `database`, `litestream`) keeps
+Every optional piece (`benchmarks`, `mutation`, `library`, `server`, `fly`, `database`, `litestream`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -153,6 +156,7 @@ numbering intact.
 | Xcode project from the graph | `just generate` | rules_xcodeproj; schemes derived from `Tests/*` |
 | DocC site | `tools/docc.bzl`, `just docs`, `docc.yml` | One archive per module, merged; published to gh-pages |
 | Benchmarks (opt-in) | `Benchmarks/` | Separate package, ordo-one/benchmark, `BASELINE` entries, committed `main` and `simulated` baselines |
+| Mutation testing (opt-in) | `scripts/mutate.py`, `scripts/mutants/` | Mutant schemata over a scratch SwiftPM copy outside the repository (`~/Library/Caches/<project>-mutation`); `<PROJECT>_MUTANT` picks the live mutant |
 | Mocks (off until needed) | `scripts/modules.py` (`MOCKING`), `tools/BUILD.bazel` | Mockable row commented out in `PACKAGES`; a module depending on it gets `MOCKING` in debug only, in both build systems |
 | CI | `.github/workflows` | Linux arm64 Bazel tests on branches and PRs; tag-and-release on main |
 | Test support | `Tests/ProjectNameTestSupport` | Seeded RNG, tags; data only |
@@ -163,8 +167,8 @@ numbering intact.
 | Claude permissions | `.claude/settings.json` | `just`, `bazel build/test/query`, read-only git |
 
 Not included, available in [Grafluent](https://github.com/Tyler-Keith-Thompson/Grafluent) to
-copy: mutation testing (`scripts/mutate.py`), libFuzzer targets (`Fuzz/`), differential testing
-against Python libraries (`Differential/`), WebAssembly test runs, the browser explorer.
+copy: libFuzzer targets (`Fuzz/`), differential testing against Python libraries
+(`Differential/`), WebAssembly test runs, the browser explorer.
 
 ### Checking a change
 

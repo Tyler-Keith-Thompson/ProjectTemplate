@@ -18,6 +18,7 @@ Sources/ProjectNameServer/       The executable (@main): builds an Application, 
 Tests/ProjectNameTests/          The README examples, verbatim <!-- library:line -->
 Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
+scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (scripts/mutate.py) <!-- mutation:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
 LoadTests/load.js                The k6 load test that `just load` runs against the image <!-- server:line -->
@@ -61,6 +62,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just build` / `just test` | Build / test everything (debug) |
 | `bazel test //Tests/XTests` | One test target (`just test-one //Tests/XTests`) |
 | `just filter <pattern>` | Tests whose name matches |
+| `just mutate <Module> [--all]` | Mutation testing: every planted bug in `scripts/mutants/<Module>.py` must be caught <!-- mutation:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -158,6 +160,11 @@ have.
    - `checked:` spellings and their errors;
    - exit tests for every trap;
    - a property test against a naive reference (`swift-property-based`).
+<!-- mutation:begin -->
+   - planted bugs in `scripts/mutants/<Module>.py` for the new code, then `just mutate <Module>`:
+     every mutant caught, or a note in the spec on why a survivor is equivalent. A new module
+     gets a spec of its own, copied from `Greetings.py`.
+<!-- mutation:end -->
 3. **A README example**, if the feature changes how the package is introduced, copied verbatim
    into `Tests/ProjectNameTests`.
 <!-- benchmarks:begin -->
