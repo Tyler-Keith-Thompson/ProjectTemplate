@@ -22,6 +22,10 @@ build time.
   `BUILD.bazel`; a test fails if the two disagree.
 - **A justfile over the top.** `just test`, `just docs`, `just generate`, `just bench`: one
   vocabulary in every project.
+- **A remote cache with no setup per project.** Store a BuildBuddy API key in the Keychain once
+  (`just buildbuddy-key`) and every project's builds use BuildBuddy's cache and build results;
+  `just ci-secrets` gives a repository's CI the same key with `gh`. The key is never written to
+  a file.
 - **Strict defaults.** Swift 6 language mode, first-party warnings as errors, a debug and a release
   configuration that don't throw away each other's cache.
 - **Tests with Swift Testing**, including an example module (`Greetings`) that shows the house
@@ -46,7 +50,8 @@ A server adds a Vapor application, a production Docker image, a k6 load test aga
 ## Requirements
 
 macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. Benchmarks need
-`jemalloc`; servers need Docker and, for the load test, `k6`; Fly.io deployment needs `flyctl`.
+`jemalloc`; servers need Docker and, for the load test, `k6`; Fly.io deployment needs `flyctl`;
+`just ci-secrets` needs `gh`, signed in.
 
 ## Starting a project
 
@@ -152,7 +157,7 @@ numbering intact.
 | Swift 6 mode, one package name | `tools/swift_rules.bzl` | So `package` access and retroactive conformances agree with SwiftPM |
 | Debug default, release config | `.bazelrc`, `justfile` | Release uses its own output base; `debug-only` tags keep ordinary tests out of release |
 | Analysis-cache guardrail | `.bazelrc` | `--noallow_analysis_cache_discard` |
-| Remote cache hook | `user.bazelrc.example`, CI | BuildBuddy, optional |
+| Remote cache | `tools/bazel`, `tools/buildbuddy.bazelrc`, `tools/buildbuddy-credentials`, CI | BuildBuddy, on when the login Keychain holds the key: Bazelisk runs `tools/bazel`, which adds the BuildBuddy rc file, and a credential helper hands Bazel the key per request. CI writes the same flags from the `BUILDBUDDY_API_KEY` secret (`just ci-secrets`). `user.bazelrc.example` is the manual setup for a machine without a Keychain. |
 | Xcode project from the graph | `just generate` | rules_xcodeproj; schemes derived from `Tests/*` |
 | DocC site | `tools/docc.bzl`, `just docs`, `docc.yml` | One archive per module, merged; published to gh-pages |
 | Benchmarks (opt-in) | `Benchmarks/` | Separate package, ordo-one/benchmark, `BASELINE` entries, committed `main` and `simulated` baselines |

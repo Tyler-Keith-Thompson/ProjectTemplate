@@ -319,7 +319,9 @@ else
     echo "     remove the Greetings rows and directories, run \`just modules\`."
 fi
 next "git add -A && git commit -m \"[main] - $NAME from the project template\""
-next "On GitHub: add the BUILDBUDDY_API_KEY secret (optional) and set Pages to deploy from gh-pages."
+next "On GitHub: set Pages to deploy from gh-pages. For the remote cache in CI, once the repository"
+echo "     exists: \`just ci-secrets\` (the BuildBuddy key, from the Keychain; \`just buildbuddy-key\` stores"
+echo "     it once per Mac, and local builds then use the cache too)."
 if [ "$FLY" = true ]; then
     next "Fly.io: \`fly launch --no-deploy --copy-config --name $LOWER\` (app names are global; if"
     echo "     $LOWER is taken, change \`app\` in fly.toml), then add a FLY_API_TOKEN secret on GitHub"

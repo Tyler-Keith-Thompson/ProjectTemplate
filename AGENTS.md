@@ -19,7 +19,8 @@ Tests/ProjectNameTests/          The README examples, verbatim <!-- library:line
 Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
 scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (scripts/mutate.py) <!-- mutation:line -->
-tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules
+tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
+                                 tools/bazel turns BuildBuddy on when the Keychain holds its key
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
 LoadTests/load.js                The k6 load test that `just load` runs against the image <!-- server:line -->
 fly.toml                         The Fly.io app <!-- fly:line -->
@@ -71,6 +72,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just bench-simulated-compare [--target X]` | Simulated counts (Callgrind in a Linux VM, from `~/workspace/BenchmarkHarness`) against the committed `simulated` baseline; `just bench-simulated [--target X]` re-records it <!-- benchmarks:line --> |
 | `just docs` | Combined DocC site into `.build/docs` |
 | `just generate` | Xcode project from the Bazel graph |
+| `just buildbuddy-key`, `just ci-secrets` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache); set it as this repository's Actions secret with `gh` |
 | `just template-update` | Merge the project template's changes since `.template.json`'s commit; resolve conflicts, then `just modules`, `just test` |
 | `just run [args]` | The server on port 8080 (`bazel run //Sources/ProjectNameServer -- serve`) <!-- server:line --> |
 | `just docker` | Build the production image and run it on port 8080 <!-- server:line --> |
