@@ -84,6 +84,12 @@ diff *args="":
     python3 {{PROJECT_ROOT}}/scripts/differential.py {{args}}
 # differential:end
 
+# wasm:begin
+[doc('SwiftPM tests on wasm32-wasi under wasmtime, a 32-bit Int, in groups of targets, e.g. just wasi-test, just wasi-test -c release, or just wasi-test --targets GreetingsTests')]
+wasi-test *args="":
+    python3 -u {{PROJECT_ROOT}}/scripts/wasi_test.py {{args}}
+# wasm:end
+
 # benchmarks:begin
 # The checkout of BenchmarkHarness whose benchmark-harness tool records simulated baselines.
 BENCHMARK_HARNESS := env("BENCHMARK_HARNESS", home_directory() / "workspace" / "BenchmarkHarness")

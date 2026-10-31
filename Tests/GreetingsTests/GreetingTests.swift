@@ -72,11 +72,4 @@ struct GreetingTests {
         #expect(Greeting(name: "  ").text == "Hi,   ")
         #expect(Greeting(name: "Zoë 👋").formal().text == "Good day, Zoë 👋")
     }
-
-    @Test("The plain spelling traps on an empty name", .tags(.precondition))
-    func plainEmptyNameTraps() async {
-        await #expect(processExitsWith: .failure) {
-            _ = Greeting(name: "")
-        }
-    }
 }

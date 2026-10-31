@@ -72,6 +72,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just mutate <Module> [--all]` | Mutation testing: every planted bug in `scripts/mutants/<Module>.py` must be caught <!-- mutation:line --> |
 | `just fuzz [Fuzz<Module>] [-t secs]` | libFuzzer, time-boxed (60 s per target); `just fuzz-regress` replays the corpus, `just fuzz-repro <target> <file>` a crash <!-- fuzz:line --> |
 | `just diff [--module X] [--cases N] [--seed S]` | Differential tests against pinned reference implementations (through `uv`) <!-- differential:line --> |
+| `just wasi-test [-c release] [--targets X,Y]` | SwiftPM tests on wasm32-wasi under wasmtime: a 32-bit `Int` <!-- wasm:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -97,6 +98,29 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 - Run suites through Bazel, not `swift test --filter`.
 - First-party warnings are errors (`tools/swift_rules.bzl`); dependencies build quietly. Fix the
   warning, never suppress it.
+- Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests:
+  builds for platforms that cannot start a child process leave those files out.
+<!-- wasm:begin -->
+
+### 32-bit `Int` (WebAssembly)
+
+watchOS's arm64_32 and wasm32 have a 32-bit `Int`. `just wasi-test` (`scripts/wasi_test.py`)
+builds the SwiftPM test targets with `swift build --build-tests --swift-sdk
+swift-6.3.3-RELEASE_wasm` through swiftly into `.build/wasm`, then runs each binary with
+`wasmtime run --dir . <binary> --testing-library swift-testing`, logs in `.build/wasm/logs`.
+Needs swiftly's 6.3.3 toolchain, its WebAssembly SDK (`swift sdk list`; swift.org's "Getting
+Started with Swift SDKs for WebAssembly" has the install command) and `brew install wasmtime`. If
+the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
+/Applications/Xcode-<older>.app`.
+
+- One binary of every target can pass wasmtime's limit of a million functions, so targets run in
+  groups (`<PROJECT>_WASI_TESTS`, the project's name in capitals, makes `Package.swift` declare
+  only those).
+- Not run on WASI: files with exit tests (no child processes; the manifest leaves them out), and
+  anything needing threads (`#if !os(WASI)`). On WASI a time limit's timer holds the thread until
+  it expires, after the body has run, so every `.timeLimit` test reports its limit exceeded; the
+  script reports the issues besides those.
+<!-- wasm:end -->
 
 <!-- server:begin -->
 ## Server
@@ -214,6 +238,7 @@ Watch for these:
 | `scripts/modules.py` | `just modules`, `just test` (which runs `//:package_swift_test`), `just spm` |
 | A fuzzed module | `just fuzz-regress` <!-- fuzz:line --> |
 | A module in `DIFFERENTIAL_DEPENDENCIES` | `just diff --module <Module>` <!-- differential:line --> |
+| Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |
 

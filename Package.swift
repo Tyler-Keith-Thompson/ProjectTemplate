@@ -9,6 +9,16 @@ import PackageDescription
 // Every target directory holds a BUILD.bazel, which SwiftPM must be told to ignore.
 let bazelFiles = ["BUILD.bazel"]
 
+// The WebAssembly test run (scripts/wasi_test.py) sets PROJECTNAME_WASI_TESTS to a comma-separated
+// list of test targets: the package then declares only those, as one binary of every target
+// can pass wasmtime's limit of a million functions, and leaves out each test file with an exit
+// test, since WASI cannot start a child process. Unset, nothing changes.
+let wasiTests = Context.environment["PROJECTNAME_WASI_TESTS"].map { Set($0.split(separator: ",").map(String.init)) }
+
+func testExcludes(_ excludes: [String], wasi exitTestFiles: [String]) -> [String] {
+    wasiTests == nil ? excludes : excludes + exitTestFiles
+}
+
 // Typed arrays of their own: as one `Package(...)` expression, a large manifest is too big for
 // the type checker.
 let products: [Product] = [
@@ -30,8 +40,8 @@ let targets: [Target] = [
     // Shared fixtures (data only) for every test target.
     .target(name: "ProjectNameTestSupport", path: "Tests/ProjectNameTestSupport", exclude: bazelFiles),
 
-    .testTarget(name: "GreetingsTests", dependencies: ["Greetings", "ProjectNameTestSupport", .product(name: "PropertyBased", package: "swift-property-based")], exclude: bazelFiles),
-    .testTarget(name: "ProjectNameTests", dependencies: ["ProjectName"], exclude: bazelFiles),
+    .testTarget(name: "GreetingsTests", dependencies: ["Greetings", "ProjectNameTestSupport", .product(name: "PropertyBased", package: "swift-property-based")], exclude: testExcludes(bazelFiles, wasi: ["GreetingExitTests.swift"])),
+    .testTarget(name: "ProjectNameTests", dependencies: ["ProjectName"], exclude: testExcludes(bazelFiles, wasi: [])),
 ]
 
 let package = Package(
@@ -40,5 +50,5 @@ let package = Package(
     platforms: [.macOS(.v15), .iOS(.v18), .tvOS(.v18), .watchOS(.v11), .visionOS(.v2)],
     products: products,
     dependencies: dependencies,
-    targets: targets
+    targets: targets.filter { $0.type != .test || wasiTests?.contains($0.name) ?? true }
 )
