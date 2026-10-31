@@ -20,7 +20,7 @@
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
 # The template is the library type in place. The server type adds templates/server/ on top, and
-# each optional piece keeps or drops the sections marked for it (TEMPLATE.md, "Optional pieces").
+# each optional piece keeps or drops the sections marked for it (.github/README.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
@@ -159,7 +159,7 @@ fi
 rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
-    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude 'TEMPLATE.md' --exclude 'user.bazelrc' --exclude '/templates' \
+    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' \
     --exclude '.claude/worktrees' --exclude '*.xcodeproj' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
@@ -265,7 +265,7 @@ if [ "$RENDER_ONLY" = true ]; then
 fi
 
 # The stamp: which template commit and options made this project, so template.py can merge later
-# template changes into it (TEMPLATE.md, "Updating projects").
+# template changes into it (.github/README.md, "Keeping projects current").
 if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
     MODIFIED=false
     if [ -n "$(git -C "$TEMPLATE" status --porcelain)" ]; then

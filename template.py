@@ -18,8 +18,8 @@
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
-The stamp is PROJECT/.template.json, written by bootstrap.sh. TEMPLATE.md, "Updating projects",
-describes the workflow.
+The stamp is PROJECT/.template.json, written by bootstrap.sh. .github/README.md, "Keeping
+projects current", describes the workflow.
 """
 import argparse
 import json
@@ -50,7 +50,7 @@ def resolve(revision):
 def read_stamp(project):
     path = project / STAMP
     if not path.is_file():
-        sys.exit(f"{project} has no {STAMP}; adopt it first with ./template.py stamp (TEMPLATE.md, \"Updating projects\")")
+        sys.exit(f"{project} has no {STAMP}; adopt it first with ./template.py stamp (.github/README.md, \"Keeping projects current\")")
     return json.loads(path.read_text())
 
 
