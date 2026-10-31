@@ -1,0 +1,17 @@
+# Litestream: continuous replication of the SQLite database to S3-compatible storage (Backblaze
+# B2 by default). scripts/docker-entrypoint.sh restores from the replica when the volume is new,
+# then runs the server under `litestream replicate`. Values come from the environment: fly.toml
+# sets DATABASE_PATH, Fly sets FLY_APP_NAME, and the B2_* values are Fly secrets.
+# Reference: https://litestream.io/reference/config/
+
+access-key-id: ${B2_KEY_ID}
+secret-access-key: ${B2_APPLICATION_KEY}
+
+dbs:
+  - path: ${DATABASE_PATH}
+    replica:
+      type: s3
+      bucket: ${B2_BUCKET_NAME}
+      path: ${FLY_APP_NAME}
+      endpoint: ${B2_ENDPOINT}
+      force-path-style: true

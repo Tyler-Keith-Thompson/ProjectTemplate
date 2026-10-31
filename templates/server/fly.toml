@@ -1,0 +1,43 @@
+# The Fly.io app. `fly launch --no-deploy --copy-config` creates it from this file once; after that
+# the Release workflow deploys every push to main (`just deploy` deploys a local checkout).
+# Reference: https://fly.io/docs/reference/configuration/
+
+app = 'projectname'
+primary_region = 'den'
+
+[build]
+  dockerfile = 'Dockerfile'
+# database:begin
+
+[env]
+  DATABASE_PATH = '/data/projectname.sqlite'
+
+# SQLite lives on one machine's volume, so the app runs on one machine (`--ha=false`).
+[[mounts]]
+  source = 'data'
+  destination = '/data'
+# database:end
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Suspended between requests, resumed on the next one.
+  auto_stop_machines = 'suspend'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = 'requests'
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = '10s'
+    interval = '30s'
+    method = 'GET'
+    path = '/health'
+    timeout = '5s'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

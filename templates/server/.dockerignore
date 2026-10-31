@@ -1,0 +1,12 @@
+# The image needs the manifest, the pins, the sources and (for SwiftPM's target check) the tests.
+*
+!Package.swift
+!swift/Package.resolved
+!Sources/
+!Tests/
+# litestream:begin
+!litestream.yml
+!scripts/docker-entrypoint.sh
+# litestream:end
+**/.build
+**/.DS_Store

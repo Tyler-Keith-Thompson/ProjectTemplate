@@ -1,0 +1,62 @@
+name: Release
+
+# Every push to main that passes CI is released: the patch version is bumped (or #minor / #major
+# in the commit message), tagged, and published as a GitHub release.
+# fly:begin
+# It is also deployed to Fly.io (the deploy job).
+# fly:end
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/CI.yml
+    secrets: inherit
+
+  release:
+    needs: ci
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Bump version and push tag
+        id: bump_version
+        uses: anothrNick/github-tag-action@1.75.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BUMP: patch
+          INITIAL_VERSION: 0.0.0
+          RELEASE_BRANCHES: main
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.bump_version.outputs.new_tag }}
+          name: Release ${{ steps.bump_version.outputs.new_tag }}
+          generate_release_notes: true
+  # fly:begin
+
+  # The app on Fly.io (fly.toml), deployed once CI passes. Needs the FLY_API_TOKEN secret
+  # (`fly tokens create deploy`). Fly builds the image on its own builders.
+  #| deploy:
+  #|   needs: ci
+  #|   runs-on: ubuntu-26.04
+  #|   concurrency:
+  #|     group: deploy
+  #|     cancel-in-progress: false
+  #|   steps:
+  #|     - uses: actions/checkout@v7
+  #|     - uses: superfly/flyctl-actions/setup-flyctl@1.5
+  #|     - name: Deploy
+  #|       env:
+  #|         FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  #|       run: flyctl deploy --remote-only --ha=false
+  # fly:end
