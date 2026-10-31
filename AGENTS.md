@@ -19,6 +19,7 @@ Tests/ProjectNameTests/          The README examples, verbatim <!-- library:line
 Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
 scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (scripts/mutate.py) <!-- mutation:line -->
+Fuzz/Sources/Fuzz<Module>/       A libFuzzer target per module, in the separate Fuzz/ package <!-- fuzz:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
                                  tools/bazel turns BuildBuddy on when the Keychain holds its key
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
@@ -31,6 +32,10 @@ litestream.yml                   SQLite replication to B2; scripts/docker-entryp
 `Benchmarks/` is a separate SwiftPM package (ordo-one/benchmark) that Bazel ignores; see
 `Benchmarks/README.md`.
 <!-- benchmarks:end -->
+<!-- fuzz:begin -->
+`Fuzz/` is a separate SwiftPM package of libFuzzer targets that Bazel ignores, built with a
+swift.org toolchain through swiftly (`swiftly install 6.3.3`); see `Fuzz/README.md`.
+<!-- fuzz:end -->
 
 ### Module graph
 
@@ -64,6 +69,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `bazel test //Tests/XTests` | One test target (`just test-one //Tests/XTests`) |
 | `just filter <pattern>` | Tests whose name matches |
 | `just mutate <Module> [--all]` | Mutation testing: every planted bug in `scripts/mutants/<Module>.py` must be caught <!-- mutation:line --> |
+| `just fuzz [Fuzz<Module>] [-t secs]` | libFuzzer, time-boxed (60 s per target); `just fuzz-regress` replays the corpus, `just fuzz-repro <target> <file>` a crash <!-- fuzz:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -167,6 +173,11 @@ have.
      every mutant caught, or a note in the spec on why a survivor is equivalent. A new module
      gets a spec of its own, copied from `Greetings.py`.
 <!-- mutation:end -->
+<!-- fuzz:begin -->
+   - a fuzz target in `Fuzz/Sources/Fuzz<Module>` checking the new code against a model after
+     every operation (see `Fuzz/README.md`), then `just fuzz Fuzz<Module>`. A crash becomes a
+     test in the module's suite, then its file is deleted.
+<!-- fuzz:end -->
 3. **A README example**, if the feature changes how the package is introduced, copied verbatim
    into `Tests/ProjectNameTests`.
 <!-- benchmarks:begin -->
@@ -194,6 +205,7 @@ Watch for these:
 |---|---|
 | Any library code | `bazel test` for every target in `bazel query 'rdeps(//Tests/..., //Sources/X)'`, then `just test-release` |
 | `scripts/modules.py` | `just modules`, `just test` (which runs `//:package_swift_test`), `just spm` |
+| A fuzzed module | `just fuzz-regress` <!-- fuzz:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |
 

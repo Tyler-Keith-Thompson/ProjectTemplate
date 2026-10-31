@@ -64,6 +64,20 @@ mutate module *args="":
     python3 {{PROJECT_ROOT}}/scripts/mutate.py {{module}} {{args}}
 # mutation:end
 
+# fuzz:begin
+[doc('Fuzz with libFuzzer, time-boxed (a swift.org toolchain through swiftly; Fuzz/README.md), e.g. just fuzz, or just fuzz FuzzGreetings -t 600')]
+fuzz *args="":
+    python3 {{PROJECT_ROOT}}/scripts/fuzz.py run {{args}}
+
+[doc('Replay every fuzz corpus once, after a change')]
+fuzz-regress *args="":
+    python3 {{PROJECT_ROOT}}/scripts/fuzz.py regress {{args}}
+
+[doc('Replay and minimize one crash, e.g. just fuzz-repro FuzzGreetings Fuzz/Crashes/FuzzGreetings/crash-…')]
+fuzz-repro target input:
+    python3 {{PROJECT_ROOT}}/scripts/fuzz.py repro {{target}} {{input}}
+# fuzz:end
+
 # benchmarks:begin
 # The checkout of BenchmarkHarness whose benchmark-harness tool records simulated baselines.
 BENCHMARK_HARNESS := env("BENCHMARK_HARNESS", home_directory() / "workspace" / "BenchmarkHarness")
@@ -185,6 +199,7 @@ clean:
     {{BAZEL_RELEASE}} clean || true
     rm -rf {{PROJECT_ROOT}}/.build
     rm -rf {{PROJECT_ROOT}}/Benchmarks/.build # benchmarks:line
+    rm -rf {{PROJECT_ROOT}}/Fuzz/.build # fuzz:line
 
 [doc('Print the dependency graph of a target')]
 deps target="//Sources/ProjectName":

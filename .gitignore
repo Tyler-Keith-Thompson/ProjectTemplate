@@ -33,4 +33,10 @@ Benchmarks/.benchmarkBaselines/*/*
 !Benchmarks/.benchmarkBaselines/*/main/
 !Benchmarks/.benchmarkBaselines/*/simulated/
 # benchmarks:end
+
+# fuzz:begin
+# Fuzzing (see Fuzz/README.md): the corpus is a local cache; a crash becomes a test, then goes.
+/Fuzz/Corpus/
+/Fuzz/Crashes/
+# fuzz:end
 *.swp

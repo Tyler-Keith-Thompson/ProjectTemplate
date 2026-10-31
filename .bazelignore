@@ -18,5 +18,10 @@ bazel-testlogs
 Benchmarks
 # benchmarks:end
 
+# fuzz:begin
+# The fuzz package builds with SwiftPM.
+Fuzz/.build
+# fuzz:end
+
 # Overlays the bootstrap script copies over the template (server type); not built in place.
 templates

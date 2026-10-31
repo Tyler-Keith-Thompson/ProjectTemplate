@@ -39,6 +39,8 @@ build time.
   way a person would.
 - **Mutation testing** (optional): planted bugs per module, compiled into one build behind
   runtime switches, and a report of any the tests let through.
+- **Fuzzing** (optional): a libFuzzer target per module in a separate package, checking the
+  code against a simple model, with a local corpus each run resumes from.
 - **Benchmarks** (optional): a separate package on
   [ordo-one/benchmark](https://github.com/ordo-one/benchmark), with wall-clock baselines and,
   with BenchmarkHarness (a separate tool, checked out alongside), simulated instruction and cache
@@ -51,7 +53,8 @@ A server adds a Vapor application, a production Docker image, a k6 load test aga
 
 macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. Benchmarks need
 `jemalloc`; servers need Docker and, for the load test, `k6`; Fly.io deployment needs `flyctl`;
-`just ci-secrets` needs `gh`, signed in.
+`just ci-secrets` needs `gh`, signed in. Fuzzing needs `swiftly` with a swift.org toolchain
+(`swiftly install 6.3.3`), since Xcode's has no libFuzzer runtime.
 
 ## Starting a project
 
@@ -83,6 +86,7 @@ then prints what to fill in.
 |---|---|
 | `--benchmarks` | `Benchmarks/`: a separate SwiftPM package, `BASELINE` entries, `just bench`, `bench-baseline`, `bench-compare`, and `bench-simulated` / `bench-simulated-compare` (Callgrind in a Linux VM through BenchmarkHarness, a separate tool expected at `~/workspace/BenchmarkHarness` or `$BENCHMARK_HARNESS`). The `main` and `simulated` baselines are committed. |
 | `--mutation` | `scripts/mutate.py` and `just mutate <Module>`: the planted bugs in `scripts/mutants/<Module>.py` (a `Greetings` example), compiled into one build of a scratch copy behind runtime switches; each must make a test fail. Results are stored by a hash of everything a mutant depends on, so a rerun tests only what changed; `--select` runs coverage-selected tests first. |
+| `--fuzz` | `Fuzz/`: a separate SwiftPM package of libFuzzer targets (a `FuzzGreetings` example checking `Greeting` against a model), `scripts/fuzz.py`, `just fuzz [Target] [-t secs]` (time-boxed, every target at once), `just fuzz-regress` (replays the local corpus) and `just fuzz-repro <target> <crash>`. Built with a swift.org toolchain through swiftly, in release with AddressSanitizer. The corpus and crashes stay local. |
 | `--fly` (server) | `fly.toml` (suspend when idle, `/health` checks), a `deploy` job in `Release.yml` after CI (`FLY_API_TOKEN` secret), `just deploy`. Without it nothing deploys. |
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
 | `--fly --database` | Litestream: `litestream.yml` replicates to Backblaze B2 (the `B2_*` Fly secrets), and `scripts/docker-entrypoint.sh` restores the database onto an empty volume, then runs the server under `litestream replicate`. Without the secrets it serves unreplicated. With one machine and one volume, Litestream runs directly, without LiteFS. |
@@ -130,7 +134,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `library`, `server`, `fly`, `database`, `litestream`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `library`, `server`, `fly`, `database`, `litestream`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -162,6 +166,7 @@ numbering intact.
 | DocC site | `tools/docc.bzl`, `just docs`, `docc.yml` | One archive per module, merged; published to gh-pages |
 | Benchmarks (opt-in) | `Benchmarks/` | Separate package, ordo-one/benchmark, `BASELINE` entries, committed `main` and `simulated` baselines |
 | Mutation testing (opt-in) | `scripts/mutate.py`, `scripts/mutants/` | Mutant schemata over a scratch SwiftPM copy outside the repository (`~/Library/Caches/<project>-mutation`); `<PROJECT>_MUTANT` picks the live mutant |
+| Fuzzing (opt-in) | `Fuzz/`, `scripts/fuzz.py` | libFuzzer through `LLVMFuzzerRunDriver` (each target's `@main` calls `runFuzzer`); swiftly's toolchain, `<PROJECT>_FUZZ_SWIFT` picks its version; corpus in `Fuzz/Corpus/`, crashes in `Fuzz/Crashes/` |
 | Mocks (off until needed) | `scripts/modules.py` (`MOCKING`), `tools/BUILD.bazel` | Mockable row commented out in `PACKAGES`; a module depending on it gets `MOCKING` in debug only, in both build systems |
 | CI | `.github/workflows` | Linux arm64 Bazel tests on branches and PRs; tag-and-release on main |
 | Test support | `Tests/ProjectNameTestSupport` | Seeded RNG, tags; data only |
@@ -172,16 +177,17 @@ numbering intact.
 | Claude permissions | `.claude/settings.json` | `just`, `bazel build/test/query`, read-only git |
 
 Not included, available in [Grafluent](https://github.com/Tyler-Keith-Thompson/Grafluent) to
-copy: libFuzzer targets (`Fuzz/`), differential testing against Python libraries
-(`Differential/`), WebAssembly test runs, the browser explorer.
+copy: differential testing against Python libraries (`Differential/`), WebAssembly test runs, the
+browser explorer.
 
 ### Checking a change
 
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
-directory with `--yes` and check them: `--library` with and without `--benchmarks`; `--server`
+directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation` and `--fuzz`; `--server`
 alone, with `--database`, and with `--fly --database`. For a server change, also run `just spm`
-and `just load` in the bootstrapped project.
+and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30` and
+`just fuzz-regress`.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.
