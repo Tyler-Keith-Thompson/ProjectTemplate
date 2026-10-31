@@ -20,6 +20,7 @@ Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
 scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (scripts/mutate.py) <!-- mutation:line -->
 Fuzz/Sources/Fuzz<Module>/       A libFuzzer target per module, in the separate Fuzz/ package <!-- fuzz:line -->
+Differential/                    The library side of `just diff`; scripts/differential_<area>.py the references <!-- differential:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
                                  tools/bazel turns BuildBuddy on when the Keychain holds its key
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
@@ -70,6 +71,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just filter <pattern>` | Tests whose name matches |
 | `just mutate <Module> [--all]` | Mutation testing: every planted bug in `scripts/mutants/<Module>.py` must be caught <!-- mutation:line --> |
 | `just fuzz [Fuzz<Module>] [-t secs]` | libFuzzer, time-boxed (60 s per target); `just fuzz-regress` replays the corpus, `just fuzz-repro <target> <file>` a crash <!-- fuzz:line --> |
+| `just diff [--module X] [--cases N] [--seed S]` | Differential tests against pinned reference implementations (through `uv`) <!-- differential:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -178,6 +180,11 @@ have.
      every operation (see `Fuzz/README.md`), then `just fuzz Fuzz<Module>`. A crash becomes a
      test in the module's suite, then its file is deleted.
 <!-- fuzz:end -->
+<!-- differential:begin -->
+   - a differential area where an independent implementation answers the same question
+     (`Differential/README.md`, "Adding an area"), then `just diff --module <Module>`. A failure
+     becomes a test, then its file is deleted.
+<!-- differential:end -->
 3. **A README example**, if the feature changes how the package is introduced, copied verbatim
    into `Tests/ProjectNameTests`.
 <!-- benchmarks:begin -->
@@ -206,6 +213,7 @@ Watch for these:
 | Any library code | `bazel test` for every target in `bazel query 'rdeps(//Tests/..., //Sources/X)'`, then `just test-release` |
 | `scripts/modules.py` | `just modules`, `just test` (which runs `//:package_swift_test`), `just spm` |
 | A fuzzed module | `just fuzz-regress` <!-- fuzz:line --> |
+| A module in `DIFFERENTIAL_DEPENDENCIES` | `just diff --module <Module>` <!-- differential:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |
 

@@ -78,6 +78,12 @@ fuzz-repro target input:
     python3 {{PROJECT_ROOT}}/scripts/fuzz.py repro {{target}} {{input}}
 # fuzz:end
 
+# differential:begin
+[doc('Differential testing against reference implementations (Differential/README.md; needs uv), e.g. just diff, just diff --module Greetings, or just diff --cases 20000 --seed 7')]
+diff *args="":
+    python3 {{PROJECT_ROOT}}/scripts/differential.py {{args}}
+# differential:end
+
 # benchmarks:begin
 # The checkout of BenchmarkHarness whose benchmark-harness tool records simulated baselines.
 BENCHMARK_HARNESS := env("BENCHMARK_HARNESS", home_directory() / "workspace" / "BenchmarkHarness")
@@ -200,6 +206,7 @@ clean:
     rm -rf {{PROJECT_ROOT}}/.build
     rm -rf {{PROJECT_ROOT}}/Benchmarks/.build # benchmarks:line
     rm -rf {{PROJECT_ROOT}}/Fuzz/.build # fuzz:line
+    rm -rf {{PROJECT_ROOT}}/Differential/.build # differential:line
 
 [doc('Print the dependency graph of a target')]
 deps target="//Sources/ProjectName":

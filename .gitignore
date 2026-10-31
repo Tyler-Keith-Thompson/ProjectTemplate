@@ -39,4 +39,9 @@ Benchmarks/.benchmarkBaselines/*/*
 /Fuzz/Corpus/
 /Fuzz/Crashes/
 # fuzz:end
+
+# differential:begin
+# Differential failures (see Differential/README.md): each becomes a test, then goes.
+/Differential/Failures/
+# differential:end
 *.swp

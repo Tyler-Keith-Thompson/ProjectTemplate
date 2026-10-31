@@ -13,10 +13,12 @@
 #   --benchmarks            Include the Benchmarks/ package.
 #   --mutation              Mutation testing: scripts/mutate.py and `just mutate <Module>`.
 #   --fuzz                  libFuzzer targets in Fuzz/ and `just fuzz` (needs swiftly).
+#   --differential          Differential testing against references: `just diff` (needs uv).
 #   --fly                   Server only: deploy to Fly.io (fly.toml and a deploy job in Release).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
 #                           it to object storage and restores it on a new volume.
-#   --no-benchmarks, --no-mutation, --no-fuzz, --no-fly, --no-database
+#   --no-benchmarks, --no-mutation, --no-fuzz,
+#                           --no-differential, --no-fly, --no-database
 #   --yes, -y               Ask nothing.
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
@@ -26,7 +28,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '3,23p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -34,6 +36,7 @@ TYPE=""
 BENCHMARKS=""
 MUTATION=""
 FUZZ=""
+DIFFERENTIAL=""
 FLY=""
 DATABASE=""
 ASK=true
@@ -51,6 +54,8 @@ while [ $# -gt 0 ]; do
         --no-mutation) MUTATION=false ;;
         --fuzz) FUZZ=true ;;
         --no-fuzz) FUZZ=false ;;
+        --differential) DIFFERENTIAL=true ;;
+        --no-differential) DIFFERENTIAL=false ;;
         --fly) FLY=true ;;
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
@@ -146,6 +151,7 @@ fi
 BENCHMARKS="$(ask_unset "$BENCHMARKS" "Benchmarks package?")"
 MUTATION="$(ask_unset "$MUTATION" "Mutation testing?")"
 FUZZ="$(ask_unset "$FUZZ" "Fuzzing with libFuzzer?")"
+DIFFERENTIAL="$(ask_unset "$DIFFERENTIAL" "Differential testing?")"
 
 LIBRARY=false
 SERVER=false
@@ -155,7 +161,7 @@ LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, fly: $FLY, database: $DATABASE) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, fly: $FLY, database: $DATABASE) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -170,7 +176,7 @@ rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
     --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' \
-    --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '*.xcodeproj' --exclude '.DS_Store'
+    --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '*.xcodeproj' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
 fi
@@ -185,6 +191,7 @@ remove_unless() {  # remove_unless <enabled> <path>...
 remove_unless "$LIBRARY" Tests/ProjectNameTests
 remove_unless "$MUTATION" scripts/mutate.py scripts/mutants
 remove_unless "$FUZZ" Fuzz scripts/fuzz.py
+remove_unless "$DIFFERENTIAL" Differential scripts/differential.py scripts/differential_greetings.py
 remove_unless "$FLY" fly.toml
 remove_unless "$DATABASE" Sources/App/Database
 remove_unless "$LITESTREAM" litestream.yml scripts/docker-entrypoint.sh
@@ -213,7 +220,7 @@ done
 #                                                       uncommented when kept
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "library=$LIBRARY" "server=$SERVER" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "library=$LIBRARY" "server=$SERVER" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" <<'PY'
 import pathlib, re, sys
 
@@ -284,12 +291,13 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$FLY" "$DATABASE" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$FLY" "$DATABASE" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, fly, database, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, fly, database, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
-         "mutation": mutation == "true", "fuzz": fuzz == "true", "fly": fly == "true", "database": database == "true"}
+         "mutation": mutation == "true", "fuzz": fuzz == "true",
+         "differential": differential == "true", "fly": fly == "true", "database": database == "true"}
 if modified == "true":
     stamp["modified"] = True
 with open(path, "w") as file:

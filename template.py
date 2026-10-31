@@ -14,7 +14,7 @@
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
   ./template.py stamp PROJECT [--type library|server] [--benchmarks] [--mutation] [--fuzz]
-                              [--fly] [--database] [--name NAME] [--commit REVISION]
+                              [--differential] [--fly] [--database] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
@@ -58,7 +58,7 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "fly", "database")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "fly", "database")
 
 
 def options(stamp):
@@ -227,6 +227,7 @@ def stamp_command(arguments):
         "benchmarks": arguments.benchmarks,
         "mutation": arguments.mutation,
         "fuzz": arguments.fuzz,
+        "differential": arguments.differential,
         "fly": arguments.fly,
         "database": arguments.database,
     }

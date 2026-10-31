@@ -23,5 +23,10 @@ Benchmarks
 Fuzz/.build
 # fuzz:end
 
+# differential:begin
+# The differential package's SwiftPM build (`just diff --swiftpm`).
+Differential/.build
+# differential:end
+
 # Overlays the bootstrap script copies over the template (server type); not built in place.
 templates
