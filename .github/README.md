@@ -131,6 +131,11 @@ It needs a clean worktree, never commits, and moves the stamp to the new commit,
 shows the whole update. Then resolve any conflicts, `just modules`, `just test`, and commit.
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
 
+Every project's Bazel builds share one disk cache, `~/.cache/bazel-disk`, which Bazel keeps under
+30 GB. Projects made before that each had their own, `~/.cache/bazel-<name>`, which nothing trims;
+once every project is updated past it, delete those directories by hand (`template-update` only
+changes files in the project).
+
 `add` turns options on later (`--wasm`, `--explore`, `--fuzz`, any of `bootstrap.sh`'s options for
 the project's type). It renders the template at the stamped commit twice, with the project's
 options and with the new ones too, and merges every file that differs the same way, so the result
