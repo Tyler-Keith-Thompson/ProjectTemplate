@@ -112,6 +112,7 @@ The template is versioned by its git commits (each push to `main` is also tagged
 just template-update                           # inside a project
 ./template.py update ~/workspace/MyProject     # the same, from the template
 ./template.py status                           # every project in ~/workspace and how far behind it is
+./template.py add ~/workspace/MyProject --wasm # turn an option on in a project made without it
 ```
 
 `update` renders the template at the stamped commit and at `HEAD` (`bootstrap.sh --render-only`,
@@ -129,6 +130,13 @@ with the project's name and options), then takes each file that changed between 
 It needs a clean worktree, never commits, and moves the stamp to the new commit, so `git diff`
 shows the whole update. Then resolve any conflicts, `just modules`, `just test`, and commit.
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
+
+`add` turns options on later (`--wasm`, `--explore`, `--fuzz`, any of `bootstrap.sh`'s options for
+the project's type). It renders the template at the stamped commit twice, with the project's
+options and with the new ones too, and merges every file that differs the same way, so the result
+matches a project made with those options from the start. It refuses an option the stamped commit
+doesn't know yet (run `update` first) or one that doesn't fit the project's type, needs a clean
+worktree, records the options in the stamp, and never commits.
 
 A project made before stamps existed is adopted with `./template.py stamp <project> --type …
 [--benchmarks] [--fly] [--database]`, which records that it matches the template's `HEAD`. Later

@@ -19,6 +19,15 @@
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
+  ./template.py add PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
+                            [--fly] [--database]
+      Turn options on in a project made without them. The template is rendered at the stamped commit
+      with the stamp's options and again with the new ones added, and every file that differs is
+      merged three ways into the project, as `update` does; the stamp then records the options. It
+      refuses an option the stamped commit's bootstrap.sh doesn't know (run `update` first) or one
+      that doesn't apply to the project's type. Nothing is committed; PROJECT must have no
+      uncommitted changes.
+
 The stamp is PROJECT/.template.json, written by bootstrap.sh. .github/README.md, "Keeping
 projects current", describes the workflow.
 """
@@ -68,16 +77,22 @@ def options(stamp):
     return ["--type", stamp["type"]] + [f"--{feature}" for feature in FEATURES if stamp.get(feature)]
 
 
-def render(commit, stamp, scratch):
-    """The template at `commit`, rendered with the stamp's name and options; returns its directory."""
+def bootstrap_source(commit, scratch):
+    """bootstrap.sh at `commit`, from an archive of the template extracted once into `scratch`."""
     source = scratch / f"template-{commit[:12]}"
-    source.mkdir()
-    archive = subprocess.run(["git", "archive", commit], cwd=TEMPLATE, capture_output=True, check=True).stdout
-    subprocess.run(["tar", "-x", "-C", str(source)], input=archive, check=True)
-    bootstrap = source / "bootstrap.sh"
-    if "--render-only" not in bootstrap.read_text():
+    if not source.is_dir():
+        source.mkdir()
+        archive = subprocess.run(["git", "archive", commit], cwd=TEMPLATE, capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(source)], input=archive, check=True)
+    return (source / "bootstrap.sh").read_text()
+
+
+def render(commit, stamp, scratch, variant=""):
+    """The template at `commit`, rendered with the stamp's name and options; returns its directory."""
+    if "--render-only" not in bootstrap_source(commit, scratch):
         sys.exit(f"The template at {commit[:12]} predates --render-only; stamp the project at a later commit")
-    rendered = scratch / f"rendered-{commit[:12]}"
+    bootstrap = scratch / f"template-{commit[:12]}" / "bootstrap.sh"
+    rendered = scratch / f"rendered-{commit[:12]}{variant}"
     result = subprocess.run(["bash", str(bootstrap), "--render-only", *options(stamp), stamp["name"], str(rendered)],
                             capture_output=True, text=True)
     if result.returncode != 0:
@@ -110,7 +125,7 @@ def install(source, destination):
     shutil.copy2(source, destination)
 
 
-def merge(project, base, new, old_commit, new_commit):
+def merge(project, base, new, base_label, new_label):
     """Merges every file that changed from `base` to `new` into `project`; returns a report by outcome."""
     report = {name: [] for name in ("updated", "added", "removed", "merged", "conflicted",
                                     "kept", "skipped", "regenerated")}
@@ -151,8 +166,7 @@ def merge(project, base, new, old_commit, new_commit):
             report["conflicted"].append(f"{relative} (binary; the template's version is at {theirs})")
             continue
         result = subprocess.run(
-            ["git", "merge-file", "-L", "project", "-L", f"template {old_commit[:12]}",
-             "-L", f"template {new_commit[:12]}", str(current), str(old if old.is_file() else empty), str(theirs)],
+            ["git", "merge-file", "-L", "project", "-L", base_label, "-L", new_label, str(current), str(old if old.is_file() else empty), str(theirs)],
             capture_output=True, text=True)
         if result.returncode < 0 or result.returncode > 127:
             sys.exit(f"git merge-file failed on {relative}:\n{result.stderr.strip()}")
@@ -178,9 +192,8 @@ def update(arguments):
         scratch = pathlib.Path(directory)
         base = render(old_commit, stamp, scratch)
         new = render(new_commit, stamp, scratch)
-        report = merge(project, base, new, old_commit, new_commit)
-    regenerate = subprocess.run([sys.executable, "scripts/modules.py"], cwd=project, capture_output=True, text=True) \
-        if (project / "scripts" / "modules.py").is_file() else None
+        report = merge(project, base, new, f"template {old_commit[:12]}", f"template {new_commit[:12]}")
+    regenerate = regenerate_modules(project)
     stamp.update(commit=new_commit)
     stamp.pop("modified", None)
     write_stamp(project, stamp)
@@ -189,6 +202,16 @@ def update(arguments):
     for line in git("log", "--format=  %h %s", f"{old_commit}..{new_commit}").splitlines():
         print(line)
     print()
+    return print_report(report, regenerate)
+
+
+def regenerate_modules(project):
+    if not (project / "scripts" / "modules.py").is_file():
+        return None
+    return subprocess.run([sys.executable, "scripts/modules.py"], cwd=project, capture_output=True, text=True)
+
+
+def print_report(report, regenerate):
     labels = {
         "updated": "Updated (unchanged here, so taken whole)",
         "added": "Added",
@@ -209,6 +232,49 @@ def update(arguments):
               f"{regenerate.stderr.strip()}")
     print("\nNext: resolve any conflicts, `just modules`, `just test`, review `git diff`, then commit.")
     return 1 if report["conflicted"] or (regenerate is not None and regenerate.returncode != 0) else 0
+
+
+LIBRARY_ONLY = ("wasm", "explore")
+SERVER_ONLY = ("fly", "database")
+
+
+def add(arguments):
+    project = pathlib.Path(arguments.project).resolve()
+    stamp = read_stamp(project)
+    wanted = [feature for feature in FEATURES if getattr(arguments, feature)]
+    if not wanted:
+        sys.exit("Name an option to add, such as --wasm")
+    wrong_type = [feature for feature in wanted
+                  if feature in (SERVER_ONLY if stamp["type"] == "library" else LIBRARY_ONLY)]
+    if wrong_type:
+        sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {stamp['type']} type")
+    new_features = [feature for feature in wanted if not stamp.get(feature)]
+    if not new_features:
+        print(f"{project.name} already has {', '.join('--' + feature for feature in wanted)}.")
+        return 0
+    if git("status", "--porcelain", cwd=project):
+        sys.exit(f"{project} has uncommitted changes; commit or stash them so the diff shows only the new options")
+    commit = resolve(stamp["commit"])
+    if stamp.get("modified"):
+        print("Note: the project was made from a template with uncommitted changes, so its stamp is approximate.",
+              file=sys.stderr)
+    added = "".join(f"+{feature}" for feature in new_features)
+    with tempfile.TemporaryDirectory(prefix="template-add-") as directory:
+        scratch = pathlib.Path(directory)
+        script = bootstrap_source(commit, scratch)
+        unknown = [feature for feature in new_features if f"--{feature})" not in script]
+        if unknown:
+            sys.exit(f"The template at {commit[:12]}, which {project.name} is stamped with, has no "
+                     f"{', '.join('--' + feature for feature in unknown)}; run ./template.py update first")
+        with_options = dict(stamp, **{feature: True for feature in new_features})
+        base = render(commit, stamp, scratch)
+        new = render(commit, with_options, scratch, variant=added)
+        report = merge(project, base, new, f"template {commit[:12]}", f"template {commit[:12]} {added}")
+    regenerate = regenerate_modules(project)
+    write_stamp(project, with_options)
+
+    print(f"{project.name}: {', '.join('--' + feature for feature in new_features)} at template {commit[:12]}\n")
+    return print_report(report, regenerate)
 
 
 def stamp_command(arguments):
@@ -284,6 +350,12 @@ def main():
     stamp_parser.add_argument("--name", help="the project's name (default the directory's)")
     stamp_parser.add_argument("--commit", default="HEAD", help="the template revision it matches (default HEAD)")
     stamp_parser.set_defaults(run=stamp_command)
+
+    add_parser = commands.add_parser("add", help="turn options on in a project made without them")
+    add_parser.add_argument("project")
+    for feature in FEATURES:
+        add_parser.add_argument(f"--{feature}", action="store_true")
+    add_parser.set_defaults(run=add)
 
     arguments = parser.parse_args()
     return arguments.run(arguments)
