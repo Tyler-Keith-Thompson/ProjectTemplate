@@ -17,9 +17,13 @@
 #   --wasm                  Library only: test on wasm32-wasi under wasmtime, `just wasi-test`.
 #   --explore               Library only: a browser explorer (Explore/, `just explore`), published
 #                           with the docs.
-#   --fly                   Server only: deploy to Fly.io (fly.toml and a deploy job in Release).
+#   --fly                   Server only: deploy to Fly.io (fly.toml; with CI, a deploy job in
+#                           Release deploys every push to main, else `just deploy` only).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
 #                           it to object storage and restores it on a new volume.
+#   --no-ci                 No GitHub Actions workflows (.github/workflows): no CI, releases,
+#                           published docs or explorer, or deploys on push. CI is on by default
+#                           (--ci), and the only option asked as [Y/n].
 #   --no-benchmarks, --no-mutation, --no-fuzz,
 #                           --no-differential, --no-wasm, --no-explore, --no-fly,
 #                           --no-database
@@ -32,7 +36,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '3,29p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,33p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -45,6 +49,7 @@ WASM=""
 EXPLORE=""
 FLY=""
 DATABASE=""
+CI=""
 ASK=true
 RENDER_ONLY=false
 POSITIONAL=()
@@ -70,6 +75,8 @@ while [ $# -gt 0 ]; do
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
         --no-database) DATABASE=false ;;
+        --ci) CI=true ;;
+        --no-ci) CI=false ;;
         -y|--yes) ASK=false ;;
         --render-only) RENDER_ONLY=true; ASK=false ;;
         -h|--help) usage 0 ;;
@@ -151,6 +158,20 @@ ask_unset() {  # ask_unset <current value> <question>; prints the value, asking 
     else echo false
     fi
 }
+ask_unset_yes() {  # ask_unset_yes <current value> <question>; like ask_unset, but "yes" by default
+    local answer
+    if [ -n "$1" ]; then echo "$1"; return; fi
+    if [ "$ASK" = false ]; then echo true; return; fi
+    while true; do
+        printf '%s [Y/n] ' "$2" > /dev/tty
+        read -r answer < /dev/tty
+        case "$answer" in
+            ""|[yY]|[yY][eE][sS]) echo true; return ;;
+            [nN]|[nN][oO]) echo false; return ;;
+        esac
+    done
+}
+CI="$(ask_unset_yes "$CI" "GitHub Actions (CI, releases, published docs)?")"
 if [ "$TYPE" = server ]; then
     FLY="$(ask_unset "$FLY" "Deploy to Fly.io?")"
     if [ "$FLY" = true ]; then
@@ -179,7 +200,7 @@ LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, fly: $FLY, database: $DATABASE) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, fly: $FLY, database: $DATABASE, ci: $CI) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -215,6 +236,7 @@ remove_unless "$DIFFERENTIAL" Differential scripts/differential.py scripts/diffe
 remove_unless "$FLY" fly.toml
 remove_unless "$DATABASE" Sources/App/Database
 remove_unless "$LITESTREAM" litestream.yml scripts/docker-entrypoint.sh
+remove_unless "$CI" .github
 
 # Paths first, deepest first, so a renamed directory's children are already renamed.
 find "$DEST" -depth -name '*ProjectName*' -not -path "$DEST/.git/*" | while IFS= read -r path; do
@@ -241,7 +263,7 @@ done
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
 python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "fly=$FLY" \
-    "database=$DATABASE" "litestream=$LITESTREAM" <<'PY'
+    "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" <<'PY'
 import pathlib, re, sys
 
 root = pathlib.Path(sys.argv[1])
@@ -279,13 +301,15 @@ for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p
                 stack.pop()
             continue
         keep = all(kept for _, kept in stack)
-        marked = line_marker.search(line)
+        # A line may carry several markers (`<!-- explore:line --><!-- ci:line -->`): kept when all hold.
+        marked = list(line_marker.finditer(line))
         if marked:
             changed = True
-            negated, name = (marked.group(1), marked.group(2)) if marked.group(2) else (marked.group(3), marked.group(4))
-            keep = keep and on(negated, name)
+            for marker in marked:
+                negated, name = (marker.group(1), marker.group(2)) if marker.group(2) else (marker.group(3), marker.group(4))
+                keep = keep and on(negated, name)
             ending = "\n" if line.endswith("\n") else ""
-            line = line_marker.sub("", line.rstrip("\n"), count=1) + ending
+            line = line_marker.sub("", line.rstrip("\n")) + ending
         if not keep:
             out.append(REMOVED)
             continue
@@ -311,14 +335,15 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$FLY" "$DATABASE" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$FLY" "$DATABASE" "$CI" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, fly, database, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, fly, database, ci, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
          "mutation": mutation == "true", "fuzz": fuzz == "true",
          "differential": differential == "true", "wasm": wasm == "true",
-         "explore": explore == "true", "fly": fly == "true", "database": database == "true"}
+         "explore": explore == "true", "fly": fly == "true", "database": database == "true",
+         "ci": ci == "true"}
 if modified == "true":
     stamp["modified"] = True
 with open(path, "w") as file:
@@ -354,13 +379,18 @@ else
     echo "     remove the Greetings rows and directories, run \`just modules\`."
 fi
 next "git add -A && git commit -m \"[main] - $NAME from the project template\""
-next "On GitHub: set Pages to deploy from gh-pages. For the remote cache in CI, once the repository"
-echo "     exists: \`just ci-secrets\` (the BuildBuddy key, from the Keychain; \`just buildbuddy-key\` stores"
-echo "     it once per Mac, and local builds then use the cache too)."
-if [ "$FLY" = true ]; then
+if [ "$CI" = true ]; then
+    next "On GitHub: set Pages to deploy from gh-pages. For the remote cache in CI, once the repository"
+    echo "     exists: \`just ci-secrets\` (the BuildBuddy key, from the Keychain; \`just buildbuddy-key\` stores"
+    echo "     it once per Mac, and local builds then use the cache too)."
+fi
+if [ "$FLY" = true ] && [ "$CI" = true ]; then
     next "Fly.io: \`fly launch --no-deploy --copy-config --name $LOWER\` (app names are global; if"
     echo "     $LOWER is taken, change \`app\` in fly.toml), then add a FLY_API_TOKEN secret on GitHub"
     echo "     from \`fly tokens create deploy\`. Every push to main deploys."
+elif [ "$FLY" = true ]; then
+    next "Fly.io: \`fly launch --no-deploy --copy-config --name $LOWER\` (app names are global; if"
+    echo "     $LOWER is taken, change \`app\` in fly.toml). \`just deploy\` deploys."
 fi
 if [ "$DATABASE" = true ] && [ "$FLY" = true ]; then
     next "The volume: \`fly volumes create data --size 1 --region den\`."

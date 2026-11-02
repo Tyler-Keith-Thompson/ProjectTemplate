@@ -74,7 +74,8 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just fuzz [Fuzz<Module>] [-t secs]` | libFuzzer, time-boxed (60 s per target); `just fuzz-regress` replays the corpus, `just fuzz-repro <target> <file>` a crash <!-- fuzz:line --> |
 | `just diff [--module X] [--cases N] [--seed S]` | Differential tests against pinned reference implementations (through `uv`) <!-- differential:line --> |
 | `just wasi-test [-c release] [--targets X,Y]` | SwiftPM tests on wasm32-wasi under wasmtime: a 32-bit `Int` <!-- wasm:line --> |
-| `just explore` | Build the browser explorer into `Explore/dist` (serve it to try a page); the DocC workflow publishes it at `<pages>/explore/` <!-- explore:line --> |
+| `just explore` | Build the browser explorer into `Explore/dist` (serve it to try a page); the DocC workflow publishes it at `<pages>/explore/` <!-- explore:line --><!-- ci:line --> |
+| `just explore` | Build the browser explorer into `Explore/dist`; serve it to try a page <!-- explore:line --><!-- !ci:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -83,7 +84,8 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just bench-simulated-compare [--target X]` | Simulated counts (Callgrind in a Linux VM, from `~/workspace/BenchmarkHarness`) against the committed `simulated` baseline; `just bench-simulated [--target X]` re-records it <!-- benchmarks:line --> |
 | `just docs` | Combined DocC site into `.build/docs` |
 | `just generate` | Xcode project from the Bazel graph |
-| `just buildbuddy-key`, `just ci-secrets` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache); set it as this repository's Actions secret with `gh` |
+| `just buildbuddy-key`, `just ci-secrets` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache); set it as this repository's Actions secret with `gh` <!-- ci:line --> |
+| `just buildbuddy-key` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache) <!-- !ci:line --> |
 | `just template-update` | Merge the project template's changes since `.template.json`'s commit; resolve conflicts, then `just modules`, `just test` |
 | `just run [args]` | The server on port 8080 (`bazel run //Sources/ProjectNameServer -- serve`) <!-- server:line --> |
 | `just docker` | Build the production image and run it on port 8080 <!-- server:line --> |
@@ -151,8 +153,10 @@ the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
   purpose: the test writes greetings to whatever database it reaches.
 <!-- database:end -->
 <!-- fly:begin -->
-- Every push to `main` deploys to Fly.io once CI passes (`deploy` in `Release.yml`). Run
-  `just docker` before pushing a change to the image, its entry point or `fly.toml`.
+- Every push to `main` deploys to Fly.io once CI passes (`deploy` in `Release.yml`). Run <!-- ci:line -->
+  `just docker` before pushing a change to the image, its entry point or `fly.toml`. <!-- ci:line -->
+- `just deploy` deploys this checkout to Fly.io; nothing deploys on push. Run `just docker` <!-- !ci:line -->
+  before deploying a change to the image, its entry point or `fly.toml`. <!-- !ci:line -->
 <!-- database:begin -->
 - SQLite lives on one machine's volume, so the app runs on one machine (`--ha=false`). Don't
   scale it out.
@@ -252,6 +256,7 @@ Watch for these:
 ### Pushing
 
 Push finished work to `main` yourself; don't wait to be asked, and never end a task with
+<!-- ci:begin -->
 finished commits unpushed. Every push to `main` releases a patch version, and CI minutes are
 scarce, so push once per batch rather than once per commit: when the work the owner gave you is
 done (the whole request, or Ready is empty when working the backlog), push everything it
@@ -264,6 +269,13 @@ Every push also deploys to Fly.io.
    `--config=release`.
 2. Push, then watch the Release and DocC workflows to green, and fix anything that breaks.
 3. Don't add CI steps that rebuild without the owner's approval.
+<!-- ci:end -->
+<!-- !ci:begin -->
+finished commits unpushed. Push once per batch: when the work the owner gave you is done (the
+whole request, or Ready is empty when working the backlog), push everything it produced together.
+There is no CI, so nothing checks a push but you: verify the committed state in a clean worktree
+first, `bazel test //...` in debug, then `--config=release`.
+<!-- !ci:end -->
 
 ## House rules
 
@@ -279,7 +291,8 @@ Every push also deploys to Fly.io.
   2. Apple: the standard library and Foundation, then Apple's open-source packages
      (swift-collections, swift-algorithms, swift-async-algorithms, swift-numerics, swift-atomics,
      swift-system, swift-argument-parser, swift-log, swift-crypto, swift-nio), then
-     the platform frameworks where every target, Linux CI included, has them.
+     the platform frameworks where every target, Linux CI included, has them. <!-- ci:line -->
+     the platform frameworks where every target, Linux included, has them. <!-- !ci:line -->
   3. Well-maintained community packages (Mockable and swift-property-based are already the
      picks for mocks and property tests).
 

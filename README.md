@@ -2,7 +2,7 @@
 
 <One paragraph: what the package is and what it is for.>
 
-[Documentation](https://tyler-keith-thompson.github.io/ProjectName/documentation/)
+[Documentation](https://tyler-keith-thompson.github.io/ProjectName/documentation/) <!-- ci:line -->
 <!-- library:begin -->
 
 ## Installation
@@ -60,15 +60,16 @@ refuses to start without it). `just run` keeps it in `.build/projectname.sqlite`
 <!-- fly:begin -->
 ## Deployment
 
-Every push to `main` that passes CI deploys to [Fly.io](https://fly.io) (`fly.toml`, the `deploy`
-job in `.github/workflows/Release.yml`); `just deploy` deploys a local checkout. One-time setup:
+Every push to `main` that passes CI deploys to [Fly.io](https://fly.io) (`fly.toml`, the `deploy` <!-- ci:line -->
+job in `.github/workflows/Release.yml`); `just deploy` deploys a local checkout. One-time setup: <!-- ci:line -->
+`just deploy` deploys this checkout to [Fly.io](https://fly.io) (`fly.toml`). One-time setup: <!-- !ci:line -->
 
 ```sh
 fly launch --no-deploy --copy-config --name projectname
 <!-- database:begin -->
 fly volumes create data --size 1 --region den
 <!-- database:end -->
-fly tokens create deploy          # into the FLY_API_TOKEN secret on GitHub
+fly tokens create deploy          # into the FLY_API_TOKEN secret on GitHub <!-- ci:line -->
 ```
 
 <!-- litestream:begin -->

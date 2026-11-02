@@ -52,7 +52,8 @@ verify: test spm-test
 modules:
     python3 {{PROJECT_ROOT}}/scripts/modules.py
 
-[doc('Build the combined DocC site for every library module into .build/docs (what the DocC workflow publishes)')]
+#| [doc('Build the combined DocC site for every library module into .build/docs')] # !ci:line
+[doc('Build the combined DocC site for every library module into .build/docs (what the DocC workflow publishes)')] # ci:line
 docs:
     {{BAZEL}} build //:docs
     rm -rf {{PROJECT_ROOT}}/.build/docs && mkdir -p {{PROJECT_ROOT}}/.build
@@ -167,7 +168,8 @@ load *args="":
 # server:end
 
 # fly:begin
-[doc('Deploy this checkout to Fly.io (the Release workflow deploys every push to main)')]
+#| [doc('Deploy this checkout to Fly.io')] # !ci:line
+[doc('Deploy this checkout to Fly.io (the Release workflow deploys every push to main)')] # ci:line
 deploy:
     flyctl deploy --remote-only --ha=false
 # fly:end
@@ -194,6 +196,7 @@ buildbuddy-key:
     printf 'add-generic-password -U -s buildbuddy -a api-key -l "BuildBuddy API key" -w %s\n' "$key" | security -i >/dev/null
     echo "Stored. Builds use BuildBuddy from the next Bazel command."
 
+# ci:begin
 [doc('Set this repository’s BUILDBUDDY_API_KEY Actions secret from the Keychain with gh, so CI uses the remote cache too')]
 ci-secrets:
     #!/usr/bin/env bash
@@ -203,6 +206,7 @@ ci-secrets:
         exit 1
     fi
     printf '%s' "$key" | gh secret set BUILDBUDDY_API_KEY
+# ci:end
 
 # The checkout of ProjectTemplate this project came from; .template.json records the commit.
 PROJECT_TEMPLATE := env("PROJECT_TEMPLATE", home_directory() / "workspace" / "ProjectTemplate")

@@ -3,8 +3,9 @@
 Interactive pages that run ProjectName itself in the browser: each builds a small example, runs the
 real library on it, and shows what happened, with the code it ran beside it. The interface is
 written with [ElementaryUI](https://github.com/elementary-swift/elementary-ui) and compiled with
-the library to WebAssembly. The DocC workflow publishes the site next to the documentation, at
-`<pages>/explore/`.
+the library to WebAssembly. The DocC workflow publishes the site next to the documentation, at <!-- ci:line -->
+`<pages>/explore/`. <!-- ci:line -->
+the library to WebAssembly. <!-- !ci:line -->
 
 This is a separate SwiftPM package; Bazel ignores it.
 

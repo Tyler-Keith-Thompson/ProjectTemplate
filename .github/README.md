@@ -101,6 +101,7 @@ then prints what to fill in.
 | `--fly` (server) | `fly.toml` (suspend when idle, `/health` checks), a `deploy` job in `Release.yml` after CI (`FLY_API_TOKEN` secret), `just deploy`. Without it nothing deploys. |
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
 | `--fly --database` | Litestream: `litestream.yml` replicates to Backblaze B2 (the `B2_*` Fly secrets), and `scripts/docker-entrypoint.sh` restores the database onto an empty volume, then runs the server under `litestream replicate`. Without the secrets it serves unreplicated. With one machine and one volume, Litestream runs directly, without LiteFS. |
+| `--no-ci` | Removes `.github/workflows/` (CI, PR CI, Release, DocC) and everything that leans on it: `just ci-secrets`, the documentation link, the release and push rules in AGENTS.md. With `--fly`, `just deploy` is the only deploy; with `--explore`, `just explore` builds the site locally and nothing publishes it. CI is the one option on by default, and the only question asked as [Y/n]. |
 
 ## Keeping projects current
 
@@ -158,14 +159,15 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `fly`, `database`, `litestream`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `fly`, `database`, `litestream`, `ci`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
   Markdown); blocks nest, and `!feature:begin` / `!feature:end` marks a block kept when the
   feature is off;
 - single lines ending in `# feature:line` or holding `<!-- feature:line -->` (table rows carry it
-  inside their last cell, so the table still renders);
+  inside their last cell, so the table still renders); a line may carry several, and is kept
+  when all of them hold (`<!-- explore:line --><!-- !ci:line -->`);
 - dormant lines, `#| code` or `//| code`, inside a block or on a marked line: comments in the
   template, uncommented when kept. They are how `scripts/modules.py`, `MODULE.bazel` and the
   release workflow's deploy job carry server and Fly.io content without the template building or

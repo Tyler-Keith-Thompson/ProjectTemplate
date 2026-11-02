@@ -1,5 +1,6 @@
 # The Fly.io app. `fly launch --no-deploy --copy-config` creates it from this file once; after that
-# the Release workflow deploys every push to main (`just deploy` deploys a local checkout).
+# the Release workflow deploys every push to main (`just deploy` deploys a local checkout). # ci:line
+# `just deploy` deploys this checkout. # !ci:line
 # Reference: https://fly.io/docs/reference/configuration/
 
 app = 'projectname'

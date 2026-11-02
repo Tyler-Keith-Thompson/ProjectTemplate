@@ -14,13 +14,13 @@
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
   ./template.py stamp PROJECT [--type library|server] [--benchmarks] [--mutation] [--fuzz]
-                              [--differential] [--wasm]
-                              [--explore] [--fly] [--database] [--name NAME] [--commit REVISION]
+                              [--differential] [--wasm] [--explore] [--fly] [--database] [--no-ci]
+                              [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
   ./template.py add PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                            [--fly] [--database]
+                            [--fly] [--database] [--ci]
       Turn options on in a project made without them. The template is rendered at the stamped commit
       with the stamp's options and again with the new ones added, and every file that differs is
       merged three ways into the project, as `update` does; the stamp then records the options. It
@@ -68,13 +68,26 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "fly", "database")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "fly", "database", "ci")
+# Options on unless the stamp says otherwise: a stamp from before the option had it.
+ON_BY_DEFAULT = ("ci",)
+
+
+def enabled(stamp, feature):
+    return stamp.get(feature, feature in ON_BY_DEFAULT)
 
 
 def options(stamp):
-    """bootstrap.sh's flags for the stamp. Only the features it has are passed: an option off is
-    bootstrap's default, and a template commit older than the option doesn't know its flag."""
-    return ["--type", stamp["type"]] + [f"--{feature}" for feature in FEATURES if stamp.get(feature)]
+    """bootstrap.sh's flags for the stamp. Only the features that differ from bootstrap's defaults
+    are passed, so a template commit older than an option, which doesn't know its flag, renders
+    every stamp that keeps the default."""
+    flags = ["--type", stamp["type"]]
+    for feature in FEATURES:
+        if enabled(stamp, feature) and feature not in ON_BY_DEFAULT:
+            flags.append(f"--{feature}")
+        elif not enabled(stamp, feature) and feature in ON_BY_DEFAULT:
+            flags.append(f"--no-{feature}")
+    return flags
 
 
 def bootstrap_source(commit, scratch):
@@ -248,7 +261,7 @@ def add(arguments):
                   if feature in (SERVER_ONLY if stamp["type"] == "library" else LIBRARY_ONLY)]
     if wrong_type:
         sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {stamp['type']} type")
-    new_features = [feature for feature in wanted if not stamp.get(feature)]
+    new_features = [feature for feature in wanted if not enabled(stamp, feature)]
     if not new_features:
         print(f"{project.name} already has {', '.join('--' + feature for feature in wanted)}.")
         return 0
@@ -301,6 +314,7 @@ def stamp_command(arguments):
         "explore": arguments.explore,
         "fly": arguments.fly,
         "database": arguments.database,
+        "ci": arguments.ci,
     }
     write_stamp(project, stamp)
     print(f"Stamped {project / STAMP} at {stamp['commit'][:12]}.")
@@ -346,7 +360,10 @@ def main():
     stamp_parser.add_argument("project")
     stamp_parser.add_argument("--type", choices=["library", "server"], default="library")
     for feature in FEATURES:
-        stamp_parser.add_argument(f"--{feature}", action="store_true")
+        if feature in ON_BY_DEFAULT:
+            stamp_parser.add_argument(f"--no-{feature}", dest=feature, action="store_false")
+        else:
+            stamp_parser.add_argument(f"--{feature}", action="store_true")
     stamp_parser.add_argument("--name", help="the project's name (default the directory's)")
     stamp_parser.add_argument("--commit", default="HEAD", help="the template revision it matches (default HEAD)")
     stamp_parser.set_defaults(run=stamp_command)

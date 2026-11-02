@@ -70,7 +70,8 @@ xcodeproj(
     ],
 )
 
-# The combined DocC site the DocC workflow publishes (`just docs`): every module's archive
+# The combined DocC site the DocC workflow publishes (`just docs`): every module's archive # ci:line
+# The combined DocC site (`just docs`): every module's archive # !ci:line
 # (see scripts/modules.py) merged under one landing page. Derived from the directory layout, like
 # the test bundles above.
 docc_site(
