@@ -49,21 +49,23 @@ def targets():
 
 
 def build(products):
-    """Builds the chosen targets only, one product at a time when they are not all of them, so
-    a target another module has left broken does not stop the rest."""
+    """Builds the chosen targets (all of them by default) one product at a time, so a target
+    another module has left broken does not stop the rest. Building by product also leaves out
+    the dependencies' plugins, which swiftly's toolchain can fail to compile against a newer
+    Xcode's SDK."""
     swiftly = shutil.which("swiftly") or os.path.expanduser("~/.swiftly/bin/swiftly")
     # Resolve first: a package added to the library is otherwise missing from this package's
     # stale resolution ("no such module").
     subprocess.run([swiftly, "run", "swift", "package", "resolve", f"+{VERSION}"], cwd=FUZZ, capture_output=True)
     command = [swiftly, "run", "swift", "build", "-c", "release", "-Xswiftc", "-sanitize=fuzzer,address", f"+{VERSION}"]
-    for product in ([None] if products is None else products):
-        selected = command + (["--product", product] if product else [])
+    for product in (targets() if products is None else products):
+        selected = command + ["--product", product]
         result = subprocess.run(selected, cwd=FUZZ, capture_output=True, text=True)
         # The swift.org toolchain reads the newer SDK's interfaces with an argument it does not
         # know and falls back; the message is noise.
         lines = [l for l in (result.stdout + result.stderr).splitlines() if "-target-arch-variant" not in l]
         if result.returncode != 0:
-            sys.exit(f"The fuzz build{' of ' + product if product else ''} failed:\n"
+            sys.exit(f"The fuzz build of {product} failed:\n"
                      + "\n".join(l for l in lines if "error" in l or "warning" in l)[-4000:])
 
 

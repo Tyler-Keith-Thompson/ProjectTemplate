@@ -195,6 +195,24 @@ menuconfig:
 firmware-size:
     {{IDF}} size-components
 # embedded:end
+# mcp:begin
+#| [doc('Serve the MCP server over stdio, as Claude Code would launch it; it waits for a client on standard input')]
+#| run *args="":
+#|     {{BAZEL}} run //Sources/ProjectNameMCP -- {{args}}
+#|
+#| # Where `just install` puts the server; INSTALL_DIR=… just install for elsewhere.
+#| INSTALL_DIR := env("INSTALL_DIR", home_directory() / ".local" / "bin")
+#|
+#| [doc('Build the server optimized and install it as projectname-mcp in ~/.local/bin, where `claude mcp add` points; running sessions keep the old one until they restart')]
+#| install:
+#|     {{SWIFT}} build -c release --product ProjectNameMCP
+#|     mkdir -p {{INSTALL_DIR}}
+#|     install -m 755 "$({{SWIFT}} build -c release --show-bin-path)/ProjectNameMCP" {{INSTALL_DIR}}/.projectname-mcp.new
+#|     # A binary that can't start never replaces a working one.
+#|     {{INSTALL_DIR}}/.projectname-mcp.new --help >/dev/null
+#|     mv -f {{INSTALL_DIR}}/.projectname-mcp.new {{INSTALL_DIR}}/projectname-mcp
+#|     @echo "Installed {{INSTALL_DIR}}/projectname-mcp. Register it once: claude mcp add projectname -- {{INSTALL_DIR}}/projectname-mcp"
+# mcp:end
 # fly:begin
 #| [doc('Deploy this checkout to Fly.io')] # !ci:line
 [doc('Deploy this checkout to Fly.io (the Release workflow deploys every push to main)')] # ci:line

@@ -13,7 +13,7 @@
       generates are regenerated instead of merged. Nothing is committed. PROJECT must be a git
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
-  ./template.py stamp PROJECT [--type library|server|embedded] [--benchmarks] [--mutation] [--fuzz]
+  ./template.py stamp PROJECT [--type library|server|embedded|mcp] [--benchmarks] [--mutation] [--fuzz]
                               [--differential] [--wasm] [--explore] [--fly] [--database] [--no-ci]
                               [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
@@ -357,7 +357,7 @@ def main():
 
     stamp_parser = commands.add_parser("stamp", help="record which template commit and options a project matches")
     stamp_parser.add_argument("project")
-    stamp_parser.add_argument("--type", choices=["library", "server", "embedded"], default="library")
+    stamp_parser.add_argument("--type", choices=["library", "server", "embedded", "mcp"], default="library")
     for feature in FEATURES:
         if feature in ON_BY_DEFAULT:
             stamp_parser.add_argument(f"--no-{feature}", dest=feature, action="store_false")

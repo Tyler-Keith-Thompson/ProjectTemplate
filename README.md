@@ -111,6 +111,33 @@ just monitor                      # the log, without flashing
 The log prints "Good day, ProjectName! (1)", counting up once a second.
 
 <!-- embedded:end -->
+<!-- mcp:begin -->
+
+## Use it from Claude Code
+
+ProjectName is an [MCP](https://modelcontextprotocol.io) server over stdio, and requires Swift 6.3
+on macOS 15 or Linux. `just install` builds it optimized and installs it at
+`~/.local/bin/projectname-mcp`; run it again after pulling to update. Then register the binary:
+
+```sh
+just install
+claude mcp add projectname -- ~/.local/bin/projectname-mcp
+```
+
+Claude Code starts the server for each session; running sessions keep the old binary until they
+restart. Add `--scope user` after `claude mcp add` to use it in every project. `claude mcp list`
+shows whether it connected.
+
+### Tools
+
+| Tool | Does |
+|---|---|
+| `greet` | A greeting for a name, casual by default: `{"name": "Ada", "formal": true}` gives `{"text": "Good day, Ada!"}` |
+
+Every tool returns a JSON object, as structured content and again as text. A failure is an error
+result, `{"error": "<reason>"}`, that repeats no part of the request.
+
+<!-- mcp:end -->
 
 ## Modules
 
@@ -119,6 +146,8 @@ The log prints "Good day, ProjectName! (1)", counting up once a second.
 | `Greetings` | `Greeting`: a greeting composed from a name and modifiers |
 | `App` | The HTTP application: `configure(_:)` and its routes <!-- server:line --> |
 | `ProjectNameServer` | The executable: `ProjectNameServer serve` <!-- server:line --> |
+| `Tools` | The MCP server (`ToolServer`), its tools (`ToolHandler`) and their arguments and results <!-- mcp:line --> |
+| `ProjectNameMCP` | The executable, `projectname-mcp`: the server over stdio <!-- mcp:line --> |
 
 ## Development
 
@@ -138,6 +167,8 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just deploy` | This checkout, to Fly.io <!-- fly:line --> |
 | `just firmware` | The firmware image (needs ESP-IDF and swiftly's Swift 6.3.3) <!-- embedded:line --> |
 | `just flash`, `just monitor` | The image, flashed to the board; the board's log <!-- embedded:line --> |
+| `just install` | The server, optimized, into `~/.local/bin` for `claude mcp add` <!-- mcp:line --> |
+| `just run` | The server over stdio, waiting for a client <!-- mcp:line --> |
 | `just generate` | An Xcode project from the Bazel graph |
 
 `AGENTS.md` describes the layout, the workflow and the house rules in full.

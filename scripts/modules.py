@@ -35,6 +35,12 @@ PACKAGES = [
     #| ("fluent-sqlite-driver", "https://github.com/vapor/fluent-sqlite-driver", "4.9.0"),
     # database:end
     # server:end
+    # mcp:begin
+    #| # The Model Context Protocol: servers, transports and, for tests, an in-memory client.
+    #| ("swift-sdk", "https://github.com/modelcontextprotocol/swift-sdk", "0.12.1"),
+    #| # The executable's command line.
+    #| ("swift-argument-parser", "https://github.com/apple/swift-argument-parser", "1.8.2"),
+    # mcp:end
 ]
 
 # The product whose macro generates mocks. A module that depends on it is compiled with the
@@ -55,6 +61,9 @@ MODULES = [
     #| ("App", "Server", "The HTTP application: its routes, database and configuration.", ["Greetings", "vapor/Vapor", "fluent/Fluent", "fluent-sqlite-driver/FluentSQLiteDriver"]),
     # database:end
     # server:end
+    # mcp:begin
+    #| ("Tools", "MCP", "The MCP server: its tools, each with typed arguments and a typed result.", ["Greetings", "swift-sdk/MCP"]),
+    # mcp:end
 ]
 
 # Executables: (name, description, dependencies). Each is an `.executableTarget` and product in
@@ -64,6 +73,9 @@ EXECUTABLES = [
     # server:begin
     #| (f"{PROJECT}Server", "The server executable: `serve` starts it.", ["App"]),
     # server:end
+    # mcp:begin
+    #| (f"{PROJECT}MCP", "The MCP server over stdio, as Claude Code launches it.", ["Tools", "swift-sdk/MCP", "swift-argument-parser/ArgumentParser"]),
+    # mcp:end
 ]
 
 # Test targets. SwiftPM rejects a target with no sources, so list a target only once its directory
@@ -74,6 +86,9 @@ TEST_TARGETS = [
     # server:begin
     #| ("AppTests", ["App", "vapor/VaporTesting"]),
     # server:end
+    # mcp:begin
+    #| ("ToolsTests", ["Tools", "swift-sdk/MCP"]),
+    # mcp:end
 ]
 
 # The modules the test-support target depends on (fixtures are usually written against the
@@ -121,6 +136,7 @@ DIFFERENTIAL_DEPENDENCIES = ["Greetings"]
 PLATFORMS = '[.macOS(.v15), .iOS(.v18), .tvOS(.v18), .watchOS(.v11), .visionOS(.v2)]'  # library:line
 #| PLATFORMS = '[.macOS(.v15)]'  # server:line
 #| PLATFORMS = '[.macOS(.v15)]'  # embedded:line
+#| PLATFORMS = '[.macOS(.v15)]'  # mcp:line
 MACOS_MINIMUM = "15.0"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -1,9 +1,9 @@
 # ProjectTemplate
 
-A starting point for Swift projects. One command creates a Swift library, a Vapor server or ESP32
-firmware in Embedded Swift that already builds, tests, documents itself and releases on every push.
-Servers also ship a Docker image and can deploy to Fly.io; firmware builds and flashes through
-ESP-IDF. When the template improves, the projects made from it pull
+A starting point for Swift projects. One command creates a Swift library, a Vapor server, ESP32
+firmware in Embedded Swift or an MCP server that already builds, tests, documents itself and
+releases on every push. Servers also ship a Docker image and can deploy to Fly.io; firmware builds
+and flashes through ESP-IDF; an MCP server installs for Claude Code. When the template improves, the projects made from it pull
 the change in with `just template-update`.
 
 ```sh
@@ -60,6 +60,10 @@ Firmware adds an ESP-IDF project whose app is Embedded Swift. Its logic lives in
 tested on the Mac, and also compiled by Bazel as Embedded Swift for the chip, so `just test` catches
 code the chip can't run. `just firmware` builds the image and `just flash` flashes it.
 
+An MCP server adds a `Tools` module (a `ToolServer` and a typed `ToolHandler` per tool, tested
+through a real client over an in-memory transport), an executable serving them over stdio, and
+`just install`, which puts the optimized binary where `claude mcp add` points.
+
 ## Requirements
 
 macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. Benchmarks need
@@ -81,6 +85,7 @@ Swift 6.3.3 (`swiftly install 6.3.3`), since Xcode's toolchain has no Embedded S
 ./bootstrap.sh --server --fly --database MyService       # a server on Fly.io with SQLite
 ./bootstrap.sh --server --yes MyService                  # a server, nothing optional, no prompts
 ./bootstrap.sh --embedded --wasm MyGadget                # ESP32 firmware, its tests also on a 32-bit Int
+./bootstrap.sh --mcp MyTools                             # an MCP server for Claude Code
 ```
 
 The name must be an UpperCamelCase Swift module name. The destination defaults to
@@ -96,6 +101,7 @@ then prints what to fill in.
 |---|---|
 | `library` (default) | Nothing: the template as it stands. A Swift package published through SwiftPM, with README examples as tests (`Tests/ProjectNameTests`). |
 | `server` | `templates/server/` on top: a Vapor `App` module (`configure(_:)`, routes), a `ProjectNameServer` executable, `AppTests` (VaporTesting), a Dockerfile building with SwiftPM pinned by `swift/Package.resolved`, `just run`, `just docker`, and a k6 load test (`LoadTests/load.js`, `just load`) against a fresh production image. Platforms narrow to macOS; the README's installation section and README tests are dropped. |
+| `mcp` | `templates/mcp/` on top: a `Tools` module on the [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk) (`ToolServer`; `ToolHandler`, whose work takes `Decodable` arguments and returns or throws `Encodable` values, sent as structured content and as JSON text; an example `greet` tool), `ToolsTests` against a real client over `InMemoryTransport`, a `ProjectNameMCP` executable (swift-argument-parser) serving them on `StdioTransport`, `just run`, and `just install` into `~/.local/bin/projectname-mcp`. Platforms narrow to macOS; the README's installation section and README tests are dropped, and the README says how to register the server with `claude mcp add`. |
 | `embedded` | `templates/embedded/` on top: `Firmware/`, an ESP-IDF project for the ESP32-C6 whose app (`Firmware/main`) is Embedded Swift; `tools/embedded.bzl`, which compiles every module in `FIRMWARE_MODULES` (`scripts/modules.py`) as Embedded Swift for the chip beside its host library (`//Sources/X:XEmbedded`, built by `bazel build //...`) and gathers them as `//Firmware:Modules`; and `tools/embedded-swift`, the one swift.org toolchain both builds use. `just firmware`, `just flash`, `just monitor`, `just menuconfig`, `just firmware-size`. Platforms narrow to macOS; the README's installation section and README tests are dropped. |
 
 ### Options
@@ -169,7 +175,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `fly`, `database`, `litestream`, `ci`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `mcp`, `fly`, `database`, `litestream`, `ci`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -211,6 +217,7 @@ numbering intact.
 | Test support | `Tests/ProjectNameTestSupport` | Seeded RNG, tags; data only |
 | Executables | `EXECUTABLES` in `scripts/modules.py` | `.executableTarget` in SwiftPM, `swift_binary` in Bazel, a run scheme in Xcode; left out of the umbrella and the docs |
 | Server type | `templates/server/` | Vapor, Docker, a k6 load test, optionally Fly.io, SQLite and Litestream |
+| MCP type | `templates/mcp/` | `Tools` (`ToolServer`, `ToolHandler`), the stdio executable, `just install` |
 | Embedded type | `templates/embedded/`, `FIRMWARE_MODULES` in `scripts/modules.py` | `embedded_swift_module` per firmware module and `embedded_swift_firmware` (`tools/embedded.bzl`); the ESP-IDF build runs Bazel before compiling the app, checks the modules' architecture against the chip's, and keeps the GOT that Swift's position-independent code needs (`Firmware/main/swift.lf`) |
 | Example module | `Sources/Greetings`, `Tests/GreetingsTests` | The house style: composable value type, plain/checked spellings, hand-worked, edge, exit and property tests |
 | Agent instructions | `AGENTS.md` (`CLAUDE.md` includes it) | Layout, commands, building blocks, feature checklist, house rules, API conventions |
@@ -222,10 +229,11 @@ numbering intact.
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
 directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential`, `--wasm` and `--explore`; `--server`
-alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`. For a server change, also run `just spm`
+alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`; `--mcp`. For a server change, also run `just spm`
 and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30` and
 `just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`; for an explorer change, `just explore`; for an
-embedded change, `just firmware` in the bootstrapped project.
+embedded change, `just firmware` in the bootstrapped project; for an MCP change, `INSTALL_DIR=<scratch> just install`
+and an `initialize`, `tools/list` and `tools/call` piped into the installed binary.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.

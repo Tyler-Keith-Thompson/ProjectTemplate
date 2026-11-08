@@ -45,4 +45,8 @@ use_repo(
     #| "swiftpkg_fluent_sqlite_driver",
     # database:end
     # server:end
+    # mcp:begin
+    #| "swiftpkg_swift_argument_parser",
+    #| "swiftpkg_swift_sdk",
+    # mcp:end
 )

@@ -8,10 +8,11 @@
 #
 # Options (anything not given is asked for when run from a terminal, and defaults to "no"
 # otherwise; --yes takes the defaults without asking):
-#   --type library|server|embedded
-#                           A Swift package (default), a Vapor server with a Docker image, or
-#                           ESP32 firmware in Embedded Swift (ESP-IDF; needs swiftly).
-#   --library, --server, --embedded
+#   --type library|server|embedded|mcp
+#                           A Swift package (default), a Vapor server with a Docker image,
+#                           ESP32 firmware in Embedded Swift (ESP-IDF; needs swiftly), or an MCP
+#                           server over stdio, installed for Claude Code.
+#   --library, --server, --embedded, --mcp
 #                           Shorthands for --type.
 #   --benchmarks            Include the Benchmarks/ package.
 #   --mutation              Mutation testing: scripts/mutate.py and `just mutate <Module>`.
@@ -35,13 +36,13 @@
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
-# The template is the library type in place. The server and embedded types add templates/server/
-# or templates/embedded/ on top, and each optional piece keeps or drops the sections marked for it
+# The template is the library type in place. The server, embedded and mcp types add
+# templates/<type>/ on top, and each optional piece keeps or drops the sections marked for it
 # (.github/README.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
-    sed -n '3,37p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,38p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -65,6 +66,7 @@ while [ $# -gt 0 ]; do
         --library) TYPE=library ;;
         --server) TYPE=server ;;
         --embedded) TYPE=embedded ;;
+        --mcp) TYPE=mcp ;;
         --benchmarks) BENCHMARKS=true ;;
         --no-benchmarks) BENCHMARKS=false ;;
         --mutation) MUTATION=true ;;
@@ -133,6 +135,7 @@ if [ -z "$TYPE" ]; then
             echo "  1) library  A Swift package: Bazel for development, SwiftPM published"
             echo "  2) server   A Vapor server and its Docker image; optionally Fly.io and SQLite"
             echo "  3) embedded ESP32 firmware in Embedded Swift: modules tested on the Mac, built for the chip"
+            echo "  4) mcp      An MCP server over stdio: typed tools, installed for Claude Code"
         } > /dev/tty
         while [ -z "$TYPE" ]; do
             printf 'Choose [1]: ' > /dev/tty
@@ -141,6 +144,7 @@ if [ -z "$TYPE" ]; then
                 ""|1|library) TYPE=library ;;
                 2|server) TYPE=server ;;
                 3|embedded) TYPE=embedded ;;
+                4|mcp) TYPE=mcp ;;
             esac
         done
     else
@@ -148,14 +152,14 @@ if [ -z "$TYPE" ]; then
     fi
 fi
 case "$TYPE" in
-    library|server|embedded) ;;
-    *) echo "Unknown type: $TYPE (library, server or embedded)" >&2; exit 1 ;;
+    library|server|embedded|mcp) ;;
+    *) echo "Unknown type: $TYPE (library, server, embedded or mcp)" >&2; exit 1 ;;
 esac
 if [ "$TYPE" != server ] && { [ "$FLY" = true ] || [ "$DATABASE" = true ]; }; then
     echo "--fly and --database apply to the server type only" >&2
     exit 1
 fi
-if [ "$TYPE" = server ] && [ "$WASM" = true ]; then
+if { [ "$TYPE" = server ] || [ "$TYPE" = mcp ]; } && [ "$WASM" = true ]; then
     echo "--wasm applies to the library and embedded types only" >&2
     exit 1
 fi
@@ -198,6 +202,11 @@ elif [ "$TYPE" = embedded ]; then
     DATABASE=false
     EXPLORE=false
     WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi, a 32-bit Int like the chip's)?")"
+elif [ "$TYPE" = mcp ]; then
+    FLY=false
+    DATABASE=false
+    WASM=false
+    EXPLORE=false
 else
     FLY=false
     DATABASE=false
@@ -212,9 +221,11 @@ DIFFERENTIAL="$(ask_unset "$DIFFERENTIAL" "Differential testing?")"
 LIBRARY=false
 SERVER=false
 EMBEDDED=false
+MCP=false
 [ "$TYPE" = library ] && LIBRARY=true
 [ "$TYPE" = server ] && SERVER=true
 [ "$TYPE" = embedded ] && EMBEDDED=true
+[ "$TYPE" = mcp ] && MCP=true
 LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
@@ -241,6 +252,9 @@ fi
 if [ "$EMBEDDED" = true ]; then
     rsync -a "$TEMPLATE/templates/embedded/" "$DEST/" --exclude '.DS_Store' \
         --exclude '/Firmware/build' --exclude '/Firmware/managed_components' --exclude '/Firmware/sdkconfig' --exclude '/Firmware/sdkconfig.old'
+fi
+if [ "$MCP" = true ]; then
+    rsync -a "$TEMPLATE/templates/mcp/" "$DEST/" --exclude '.DS_Store'
 fi
 
 # Whole files and directories that belong to one optional piece.
@@ -285,7 +299,7 @@ done
 #                                                       uncommented when kept
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" <<'PY'
 import pathlib, re, sys
 
@@ -400,6 +414,9 @@ echo "     Sources/$NAME/$NAME.docc/$NAME.md."
 if [ "$SERVER" = true ]; then
     echo "  2. Replace the examples: the routes in Sources/App, and the Greetings module (add your"
     echo "     first module to MODULES in scripts/modules.py, remove the Greetings rows, \`just modules\`)."
+elif [ "$MCP" = true ]; then
+    echo "  2. Replace the examples: the greet tool in Sources/Tools, and the Greetings module (add your"
+    echo "     first module to MODULES in scripts/modules.py, remove the Greetings rows, \`just modules\`)."
 elif [ "$EMBEDDED" = true ]; then
     echo "  2. Replace the examples: Firmware/main/Main.swift, and the Greetings module (add your first"
     echo "     module to MODULES and FIRMWARE_MODULES in scripts/modules.py, remove the Greetings rows,"
@@ -410,6 +427,10 @@ else
     echo "     remove the Greetings rows and directories, run \`just modules\`."
 fi
 next "git add -A && git commit -m \"[main] - $NAME from the project template\""
+if [ "$MCP" = true ]; then
+    next "\`just install\` builds the server optimized into ~/.local/bin/$LOWER-mcp; then"
+    echo "     \`claude mcp add $LOWER -- ~/.local/bin/$LOWER-mcp\` registers it with Claude Code."
+fi
 if [ "$CI" = true ]; then
     next "On GitHub: set Pages to deploy from gh-pages. For the remote cache in CI, once the repository"
     echo "     exists: \`just ci-secrets\` (the BuildBuddy key, from the Keychain; \`just buildbuddy-key\` stores"

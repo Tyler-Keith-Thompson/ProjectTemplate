@@ -15,6 +15,8 @@ Sources/ProjectName/             Umbrella module (@_exported imports) and the la
 Tests/<Module>Tests/             One test target per module; Performance/ holds speed-reliant tests
 Sources/App/                     The Vapor application: configure(_:), routes, models <!-- server:line -->
 Sources/ProjectNameServer/       The executable (@main): builds an Application, configures, serves <!-- server:line -->
+Sources/Tools/                   The MCP server: ToolServer, and a ToolHandler per tool with its arguments and result <!-- mcp:line -->
+Sources/ProjectNameMCP/          The executable (@main), projectname-mcp: serves the tools over stdio <!-- mcp:line -->
 Tests/ProjectNameTests/          The README examples, verbatim <!-- library:line -->
 Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
@@ -96,6 +98,8 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just firmware` | Build the firmware image: Bazel compiles the modules, ESP-IDF the app and the image <!-- embedded:line --> |
 | `just flash [port]`, `just monitor [port]` | Flash the board on USB and show its log; the log alone (Ctrl-] quits either) <!-- embedded:line --> |
 | `just menuconfig`, `just firmware-size` | Change ESP-IDF settings (saved to `Firmware/sdkconfig.defaults`); the image's size by component <!-- embedded:line --> |
+| `just install` | Build the server optimized and install it as `~/.local/bin/projectname-mcp`, the binary `claude mcp add` registers <!-- mcp:line --> |
+| `just run [args]` | The server over stdio (`bazel run //Sources/ProjectNameMCP`), waiting for a client <!-- mcp:line --> |
 | `bazel query 'rdeps(//Tests/..., //Sources/X)'` | Test targets affected by a change to X |
 
 - Debug is the default configuration. Every test target except the `XPerformanceTests` ones is
@@ -210,6 +214,38 @@ modules from `//Firmware:Modules`, which the firmware build has Bazel build firs
   on that board. Never run it without the owner's go-ahead for that board.
 
 <!-- embedded:end -->
+<!-- mcp:begin -->
+## MCP server
+
+`Tools` is the server, a library so tests reach every tool; `ProjectNameMCP` only starts it on
+`StdioTransport`. Claude Code launches the installed binary (`just install`) for each session.
+
+- Standard output carries only MCP messages: any other byte there corrupts the stream and the
+  client drops the server. Never `print`; diagnostics go to standard error, and a logger to
+  `StreamLogHandler.standardError`. The SDK's own loggers write nothing unless given one.
+- A tool is a `ToolHandler`: a name, a description written for the calling model, a JSON schema
+  for its arguments and annotations, then work that takes a `Decodable` type and returns an
+  `Encodable` one or throws an `Encodable` error. Results and errors encode as JSON objects. Add
+  it to the `tools:` list in `Sources/ProjectNameMCP`, a row in the README's tool table, and tests.
+- The schema and the `Decodable` type describe the same arguments; a test calls the tool with
+  each argument wrong and expects `invalidArguments`.
+- Annotations are promises the client acts on: `readOnlyHint` only when the tool changes
+  nothing anywhere, `destructiveHint: false` only when no write can lose data, `idempotentHint`
+  only when repeating a call changes nothing more, `openWorldHint` whenever the tool reaches past
+  this machine. A test pins each tool's annotations.
+- The calling model has other tools (a shell, the network), so a result is a channel into it.
+  Text a tool didn't write itself (web pages, files, messages, other people's data) is untrusted:
+  return typed values (numbers, enums, identifiers, URLs the server builds) rather than that text,
+  and test that injection text in the input never reaches the output. A tool that must return
+  untrusted text says so in its description. Errors name a reason, never echo the request.
+- Secrets (API keys, tokens) come from the Keychain or the environment Claude Code passes
+  (`claude mcp add -e`), never arguments, files in the repo or results.
+- Tests run a real `Client` against the server over `InMemoryTransport.createConnectedPair()`, one
+  server per test, and disconnect and stop it at the end.
+- After a change to the executable or to what reaches standard output, `just install` and
+  `claude mcp list` (or a new session) to see it connect.
+
+<!-- mcp:end -->
 ## Building blocks
 
 The owner's own libraries, first in line under "Don't reinvent the wheel" (House rules). Reach
@@ -291,6 +327,7 @@ Watch for these:
 | A fuzzed module | `just fuzz-regress` <!-- fuzz:line --> |
 | A module in `DIFFERENTIAL_DEPENDENCIES` | `just diff --module <Module>` <!-- differential:line --> |
 | A module in `FIRMWARE_MODULES`, or `Firmware/` | `just firmware` (needs ESP-IDF; say so when it isn't installed) <!-- embedded:line --> |
+| `Sources/ProjectNameMCP`, or anything that writes to standard output | `just install`, then `claude mcp list` shows it connected <!-- mcp:line --> |
 | Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |
