@@ -130,6 +130,7 @@ just template-update                           # inside a project
 ./template.py update ~/workspace/MyProject     # the same, from the template
 ./template.py status                           # every project in ~/workspace and how far behind it is
 ./template.py add ~/workspace/MyProject --wasm # turn an option on in a project made without it
+./template.py retype ~/workspace/MyProject --type mcp  # change its type: a library that became an MCP server
 ```
 
 `update` renders the template at the stamped commit and at `HEAD` (`bootstrap.sh --render-only`,

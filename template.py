@@ -28,6 +28,13 @@
       that doesn't apply to the project's type. Nothing is committed; PROJECT must have no
       uncommitted changes.
 
+  ./template.py retype PROJECT --type library|server|embedded|mcp
+      Change a project's type, such as a library that grew into an MCP server. The template is
+      rendered at the stamped commit as the stamp's type and again as the new one, and every file
+      that differs is merged three ways into the project, as `add` does; the stamp then records the
+      type. It refuses a type the stamped commit doesn't know (run `update` first) and options the
+      new type doesn't take. Nothing is committed; PROJECT must have no uncommitted changes.
+
 The stamp is PROJECT/.template.json, written by bootstrap.sh. .github/README.md, "Keeping
 projects current", describes the workflow.
 """
@@ -120,7 +127,8 @@ def files(root):
 def is_generated(path):
     try:
         with open(path, encoding="utf-8") as file:
-            return any(GENERATED in file.readline() for _ in range(3))
+            # Package.swift has it on its fourth line, after the tools version and the import.
+            return any(GENERATED in file.readline() for _ in range(5))
     except (UnicodeDecodeError, OSError):
         return False
 
@@ -151,7 +159,15 @@ def merge(project, base, new, base_label, new_label):
         if old.is_file() and theirs.is_file() and old.read_bytes() == theirs.read_bytes():
             continue
         if is_generated(theirs if theirs.is_file() else old):
-            report["regenerated"].append(relative)
+            if not theirs.is_file() and current.is_file() and is_generated(current):
+                # Gone from the template: scripts/modules.py writes it again if the project still
+                # lists what it was generated for.
+                current.unlink()
+                if not any(current.parent.iterdir()):
+                    current.parent.rmdir()
+                report["removed"].append(relative)
+            else:
+                report["regenerated"].append(relative)
             continue
         if not theirs.is_file():
             if not current.is_file():
@@ -290,6 +306,40 @@ def add(arguments):
     return print_report(report, regenerate)
 
 
+def retype(arguments):
+    project = pathlib.Path(arguments.project).resolve()
+    stamp = read_stamp(project)
+    if stamp["type"] == arguments.type:
+        print(f"{project.name} is already the {arguments.type} type.")
+        return 0
+    wrong_type = [feature for feature in TYPE_ONLY
+                  if enabled(stamp, feature) and arguments.type not in TYPE_ONLY[feature]]
+    if wrong_type:
+        sys.exit(f"The {arguments.type} type doesn't take {', '.join('--' + feature for feature in wrong_type)}, "
+                 f"which {project.name} has; take it out by hand first")
+    if git("status", "--porcelain", cwd=project):
+        sys.exit(f"{project} has uncommitted changes; commit or stash them so the diff shows only the new type")
+    commit = resolve(stamp["commit"])
+    if stamp.get("modified"):
+        print("Note: the project was made from a template with uncommitted changes, so its stamp is approximate.",
+              file=sys.stderr)
+    with tempfile.TemporaryDirectory(prefix="template-retype-") as directory:
+        scratch = pathlib.Path(directory)
+        if f"--{arguments.type})" not in bootstrap_source(commit, scratch):
+            sys.exit(f"The template at {commit[:12]}, which {project.name} is stamped with, has no "
+                     f"{arguments.type} type; run ./template.py update first")
+        retyped = dict(stamp, type=arguments.type)
+        base = render(commit, stamp, scratch)
+        new = render(commit, retyped, scratch, variant=f"-{arguments.type}")
+        report = merge(project, base, new, f"template {commit[:12]} {stamp['type']}",
+                       f"template {commit[:12]} {arguments.type}")
+    regenerate = regenerate_modules(project)
+    write_stamp(project, retyped)
+
+    print(f"{project.name}: {stamp['type']} -> {arguments.type} at template {commit[:12]}\n")
+    return print_report(report, regenerate)
+
+
 def stamp_command(arguments):
     project = pathlib.Path(arguments.project).resolve()
     if not project.is_dir():
@@ -372,6 +422,11 @@ def main():
     for feature in FEATURES:
         add_parser.add_argument(f"--{feature}", action="store_true")
     add_parser.set_defaults(run=add)
+
+    retype_parser = commands.add_parser("retype", help="change a project's type")
+    retype_parser.add_argument("project")
+    retype_parser.add_argument("--type", choices=["library", "server", "embedded", "mcp"], required=True)
+    retype_parser.set_defaults(run=retype)
 
     arguments = parser.parse_args()
     return arguments.run(arguments)
