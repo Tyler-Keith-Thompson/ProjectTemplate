@@ -341,8 +341,11 @@ for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p
         out.append(line)
     assert not stack, f"{path}: {stack[-1][0]}:begin without an end"
     if changed:
-        # Where removed lines sat between two blank lines, keep one blank line.
-        text = re.sub(r"\n\n(?:\x00\n)+\n", "\n\n", "".join(out))
+        # Where removed lines sat between two blank lines, keep one blank line. Repeated, so that
+        # neighboring removed blocks, each with its own blank line after it, leave just one.
+        text, merged = "".join(out), None
+        while merged != text:
+            merged, text = text, re.sub(r"\n\n(?:\x00\n)+\n", "\n\n", text)
         path.write_text(text.replace(REMOVED, ""))
 PY
 
