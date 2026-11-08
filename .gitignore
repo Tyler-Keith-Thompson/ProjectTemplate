@@ -20,6 +20,15 @@
 /ProjectName.xcodeproj/
 xcuserdata/
 
+# embedded:begin
+# ESP-IDF: the build, downloaded components, and the full configuration it expands from
+# Firmware/sdkconfig.defaults (`just menuconfig` saves changes there).
+/Firmware/build/
+/Firmware/managed_components/
+/Firmware/sdkconfig
+/Firmware/sdkconfig.old
+# embedded:end
+
 # macOS
 .DS_Store
 

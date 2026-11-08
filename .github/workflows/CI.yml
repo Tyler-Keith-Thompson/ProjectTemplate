@@ -18,7 +18,9 @@ jobs:
     name: Bazel tests
     runs-on: ubuntu-26.04-arm
     # rules_swift's Linux toolchain is whatever swiftc is on the PATH.
-    container: swift:6.3
+    container: swift:6.3 # !embedded:line
+    # The swiftc tools/embedded-swift accepts for the Embedded Swift modules: exactly its VERSION. # embedded:line
+    #| container: swift:6.3.3 # embedded:line
     env:
       # The image has clang but no gcc, which is where rules_cc looks first.
       CC: clang

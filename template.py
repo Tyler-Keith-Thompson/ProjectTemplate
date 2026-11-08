@@ -13,7 +13,7 @@
       generates are regenerated instead of merged. Nothing is committed. PROJECT must be a git
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
-  ./template.py stamp PROJECT [--type library|server] [--benchmarks] [--mutation] [--fuzz]
+  ./template.py stamp PROJECT [--type library|server|embedded] [--benchmarks] [--mutation] [--fuzz]
                               [--differential] [--wasm] [--explore] [--fly] [--database] [--no-ci]
                               [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
@@ -247,8 +247,8 @@ def print_report(report, regenerate):
     return 1 if report["conflicted"] or (regenerate is not None and regenerate.returncode != 0) else 0
 
 
-LIBRARY_ONLY = ("wasm", "explore")
-SERVER_ONLY = ("fly", "database")
+# Options that apply to some types only: the types each applies to.
+TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "fly": ("server",), "database": ("server",)}
 
 
 def add(arguments):
@@ -258,7 +258,7 @@ def add(arguments):
     if not wanted:
         sys.exit("Name an option to add, such as --wasm")
     wrong_type = [feature for feature in wanted
-                  if feature in (SERVER_ONLY if stamp["type"] == "library" else LIBRARY_ONLY)]
+                  if feature in TYPE_ONLY and stamp["type"] not in TYPE_ONLY[feature]]
     if wrong_type:
         sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {stamp['type']} type")
     new_features = [feature for feature in wanted if not enabled(stamp, feature)]
@@ -294,10 +294,9 @@ def stamp_command(arguments):
     project = pathlib.Path(arguments.project).resolve()
     if not project.is_dir():
         sys.exit(f"No such directory: {project}")
-    if arguments.type == "library" and (arguments.fly or arguments.database):
-        sys.exit("--fly and --database apply to the server type only")
-    if arguments.type == "server" and (arguments.wasm or arguments.explore):
-        sys.exit("--wasm and --explore apply to the library type only")
+    wrong_type = [feature for feature in TYPE_ONLY if getattr(arguments, feature) and arguments.type not in TYPE_ONLY[feature]]
+    if wrong_type:
+        sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {arguments.type} type")
     name = arguments.name or project.name
     if not re.fullmatch(r"[A-Z][A-Za-z0-9]*", name):
         sys.exit(f"The name must be the UpperCamelCase name the project was made with (a Swift module name), "
@@ -358,7 +357,7 @@ def main():
 
     stamp_parser = commands.add_parser("stamp", help="record which template commit and options a project matches")
     stamp_parser.add_argument("project")
-    stamp_parser.add_argument("--type", choices=["library", "server"], default="library")
+    stamp_parser.add_argument("--type", choices=["library", "server", "embedded"], default="library")
     for feature in FEATURES:
         if feature in ON_BY_DEFAULT:
             stamp_parser.add_argument(f"--no-{feature}", dest=feature, action="store_false")

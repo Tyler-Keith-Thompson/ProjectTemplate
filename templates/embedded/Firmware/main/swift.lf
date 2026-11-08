@@ -1,0 +1,17 @@
+# Swift compiles position-independent code, so it reaches a C global declared elsewhere (such as the
+# standard library's Unicode tables) through the global offset table. ESP-IDF's linker script
+# discards .got and .got.plt, which fails the link; this keeps them, in flash with the read-only
+# data. The linker fills the table at link time, so nothing changes at run time.
+[sections:got]
+entries:
+    .got
+    .got.plt
+
+[scheme:got_in_flash_rodata]
+entries:
+    got -> flash_rodata
+
+[mapping:got]
+archive: *
+entries:
+    * (got_in_flash_rodata)

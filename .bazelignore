@@ -33,5 +33,11 @@ Differential/.build
 Explore
 # explore:end
 
-# Overlays the bootstrap script copies over the template (server type); not built in place.
+# Overlays the bootstrap script copies over the template (server and embedded types); not built in place.
 templates
+# embedded:begin
+
+# ESP-IDF's build directory and the components it downloads.
+Firmware/build
+Firmware/managed_components
+# embedded:end

@@ -1,8 +1,9 @@
 # ProjectTemplate
 
-A starting point for Swift projects. One command creates a Swift library or a Vapor server that
-already builds, tests, documents itself, releases on every push and, for servers, ships a Docker
-image and optionally deploys to Fly.io. When the template improves, the projects made from it pull
+A starting point for Swift projects. One command creates a Swift library, a Vapor server or ESP32
+firmware in Embedded Swift that already builds, tests, documents itself and releases on every push.
+Servers also ship a Docker image and can deploy to Fly.io; firmware builds and flashes through
+ESP-IDF. When the template improves, the projects made from it pull
 the change in with `just template-update`.
 
 ```sh
@@ -55,6 +56,10 @@ build time.
 A server adds a Vapor application, a production Docker image, a k6 load test against that image
 (`just load`) and, optionally, Fly.io deployment and a SQLite database replicated with Litestream.
 
+Firmware adds an ESP-IDF project whose app is Embedded Swift. Its logic lives in ordinary modules:
+tested on the Mac, and also compiled by Bazel as Embedded Swift for the chip, so `just test` catches
+code the chip can't run. `just firmware` builds the image and `just flash` flashes it.
+
 ## Requirements
 
 macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. Benchmarks need
@@ -62,7 +67,10 @@ macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. B
 `just ci-secrets` needs `gh`, signed in. Fuzzing needs `swiftly` with a swift.org toolchain
 (`swiftly install 6.3.3`), since Xcode's has no libFuzzer runtime. Differential testing needs
 `uv`. WebAssembly tests need swiftly's toolchain, its Swift SDK for WebAssembly and `wasmtime`; the
-explorer needs the same toolchain and SDK, and `binaryen` for `wasm-opt`.
+explorer needs the same toolchain and SDK, and `binaryen` for `wasm-opt`. Firmware needs swiftly's
+Swift 6.3.3 (`swiftly install 6.3.3`), since Xcode's toolchain has no Embedded Swift for RISC-V, and
+[ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/) 5.5 in
+`~/esp/esp-idf` or `IDF_PATH`, for building the image.
 
 ## Starting a project
 
@@ -72,6 +80,7 @@ explorer needs the same toolchain and SDK, and `binaryen` for `wasm-opt`.
 ./bootstrap.sh --library --benchmarks MyLibrary          # a library with benchmarks
 ./bootstrap.sh --server --fly --database MyService       # a server on Fly.io with SQLite
 ./bootstrap.sh --server --yes MyService                  # a server, nothing optional, no prompts
+./bootstrap.sh --embedded --wasm MyGadget                # ESP32 firmware, its tests also on a 32-bit Int
 ```
 
 The name must be an UpperCamelCase Swift module name. The destination defaults to
@@ -87,6 +96,7 @@ then prints what to fill in.
 |---|---|
 | `library` (default) | Nothing: the template as it stands. A Swift package published through SwiftPM, with README examples as tests (`Tests/ProjectNameTests`). |
 | `server` | `templates/server/` on top: a Vapor `App` module (`configure(_:)`, routes), a `ProjectNameServer` executable, `AppTests` (VaporTesting), a Dockerfile building with SwiftPM pinned by `swift/Package.resolved`, `just run`, `just docker`, and a k6 load test (`LoadTests/load.js`, `just load`) against a fresh production image. Platforms narrow to macOS; the README's installation section and README tests are dropped. |
+| `embedded` | `templates/embedded/` on top: `Firmware/`, an ESP-IDF project for the ESP32-C6 whose app (`Firmware/main`) is Embedded Swift; `tools/embedded.bzl`, which compiles every module in `FIRMWARE_MODULES` (`scripts/modules.py`) as Embedded Swift for the chip beside its host library (`//Sources/X:XEmbedded`, built by `bazel build //...`) and gathers them as `//Firmware:Modules`; and `tools/embedded-swift`, the one swift.org toolchain both builds use. `just firmware`, `just flash`, `just monitor`, `just menuconfig`, `just firmware-size`. Platforms narrow to macOS; the README's installation section and README tests are dropped. |
 
 ### Options
 
@@ -96,7 +106,7 @@ then prints what to fill in.
 | `--mutation` | `scripts/mutate.py` and `just mutate <Module>`: the planted bugs in `scripts/mutants/<Module>.py` (a `Greetings` example), compiled into one build of a scratch copy behind runtime switches; each must make a test fail. Results are stored by a hash of everything a mutant depends on, so a rerun tests only what changed; `--select` runs coverage-selected tests first. |
 | `--fuzz` | `Fuzz/`: a separate SwiftPM package of libFuzzer targets (a `FuzzGreetings` example checking `Greeting` against a model), `scripts/fuzz.py`, `just fuzz [Target] [-t secs]` (time-boxed, every target at once), `just fuzz-regress` (replays the local corpus) and `just fuzz-repro <target> <crash>`. Built with a swift.org toolchain through swiftly, in release with AddressSanitizer. The corpus and crashes stay local. |
 | `--differential` | `Differential/`: an executable answering JSON cases with the library (built through Bazel in release, or `--swiftpm`), `scripts/differential.py` (seeded cases, references pinned and run through `uv`, failures saved to `Differential/Failures/` with their seed) with one file per area (a `differential_greetings.py` example against the `regex` package's grapheme clusters), and `just diff [--module X] [--cases N] [--seed S]`. |
-| `--wasm` (library) | `scripts/wasi_test.py` and `just wasi-test [-c release] [--targets X,Y]`: the SwiftPM test targets built with swiftly's toolchain and Swift SDK for WebAssembly, run under wasmtime in groups (`Package.swift` declares only a group's targets when `<PROJECT>_WASI_TESTS` is set, and leaves out exit-test files). A 32-bit `Int` check. |
+| `--wasm` (library, embedded) | `scripts/wasi_test.py` and `just wasi-test [-c release] [--targets X,Y]`: the SwiftPM test targets built with swiftly's toolchain and Swift SDK for WebAssembly, run under wasmtime in groups (`Package.swift` declares only a group's targets when `<PROJECT>_WASI_TESTS` is set, and leaves out exit-test files). A 32-bit `Int` check. |
 | `--explore` (library) | `Explore/`: a SwiftPM package of ElementaryUI pages compiled with the library to WebAssembly (a `greetings` example page), each drawn into its HTML at build time and mounted live in the browser, with code panels taken from the page's own sources. `just explore` builds `Explore/dist`; an `explore` job in `docc.yml` (WebAssembly SDK and wasm-opt cached) publishes it at `<pages>/explore/`, and keeps the live copy when it fails to build. |
 | `--fly` (server) | `fly.toml` (suspend when idle, `/health` checks), a `deploy` job in `Release.yml` after CI (`FLY_API_TOKEN` secret), `just deploy`. Without it nothing deploys. |
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
@@ -159,7 +169,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `fly`, `database`, `litestream`, `ci`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `fly`, `database`, `litestream`, `ci`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -201,6 +211,7 @@ numbering intact.
 | Test support | `Tests/ProjectNameTestSupport` | Seeded RNG, tags; data only |
 | Executables | `EXECUTABLES` in `scripts/modules.py` | `.executableTarget` in SwiftPM, `swift_binary` in Bazel, a run scheme in Xcode; left out of the umbrella and the docs |
 | Server type | `templates/server/` | Vapor, Docker, a k6 load test, optionally Fly.io, SQLite and Litestream |
+| Embedded type | `templates/embedded/`, `FIRMWARE_MODULES` in `scripts/modules.py` | `embedded_swift_module` per firmware module and `embedded_swift_firmware` (`tools/embedded.bzl`); the ESP-IDF build runs Bazel before compiling the app, checks the modules' architecture against the chip's, and keeps the GOT that Swift's position-independent code needs (`Firmware/main/swift.lf`) |
 | Example module | `Sources/Greetings`, `Tests/GreetingsTests` | The house style: composable value type, plain/checked spellings, hand-worked, edge, exit and property tests |
 | Agent instructions | `AGENTS.md` (`CLAUDE.md` includes it) | Layout, commands, building blocks, feature checklist, house rules, API conventions |
 | Claude permissions | `.claude/settings.json` | `just`, `bazel build/test/query`, read-only git |
@@ -211,9 +222,10 @@ numbering intact.
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
 directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential`, `--wasm` and `--explore`; `--server`
-alone, with `--database`, and with `--fly --database`. For a server change, also run `just spm`
+alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`. For a server change, also run `just spm`
 and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30` and
-`just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`; for an explorer change, `just explore`.
+`just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`; for an explorer change, `just explore`; for an
+embedded change, `just firmware` in the bootstrapped project.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.

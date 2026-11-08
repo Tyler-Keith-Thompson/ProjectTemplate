@@ -1,0 +1,5 @@
+# Components from Espressif's registry, pinned in ../dependencies.lock.
+dependencies:
+  idf: ">=5.5"
+  # Compiles the app's Swift (idf_component_register_swift).
+  espressif/idf_swift: "^1.0.1"

@@ -7,3 +7,8 @@ config_setting(
     values = {"compilation_mode": "dbg"},
     visibility = ["//visibility:public"],
 )
+# embedded:begin
+
+# The toolchain wrapper Embedded Swift compiles through (tools/embedded.bzl).
+#| exports_files(["embedded-swift"])
+# embedded:end

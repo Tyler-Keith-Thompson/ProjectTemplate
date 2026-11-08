@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# The Swift toolchain that compiles Embedded Swift for the firmware's chip. Bazel
+# (tools/embedded.bzl) and the firmware's CMake build (Firmware/CMakeLists.txt) both go through
+# this script, so the modules and the app that imports them come from one compiler.
+#
+#   tools/embedded-swift toolchain          print the toolchain's usr directory
+#   tools/embedded-swift swiftc ARGUMENT…   run its swiftc
+#   tools/embedded-swift llvm-ar ARGUMENT…  run its llvm-ar
+#
+# Xcode's toolchain has no Embedded Swift standard library for RISC-V, so this is a swift.org
+# toolchain of exactly VERSION: swiftly's (`swiftly install 6.3.3`), else the swiftc on PATH (the
+# CI image). Bazel's cache keys include this file, so changing VERSION rebuilds every module.
+set -euo pipefail
+
+VERSION=6.3.3
+TRIPLE=riscv32-none-none-eabi
+
+usable() {  # usable <usr directory>: it has the Embedded Swift standard library for TRIPLE
+    [ -d "$1/lib/swift/embedded/$TRIPLE" ]
+}
+
+toolchain() {
+    # Bazel actions may run without HOME; tilde expansion falls back to the user's entry.
+    local home=~
+    local candidate
+    for candidate in \
+        "$home/Library/Developer/Toolchains/swift-$VERSION-RELEASE.xctoolchain/usr" \
+        "${SWIFTLY_HOME_DIR:-$home/.local/share/swiftly}/toolchains/$VERSION/usr"; do
+        if usable "$candidate"; then
+            echo "$candidate"
+            return
+        fi
+    done
+    local swiftc
+    if swiftc="$(command -v swiftc)"; then
+        candidate="$(cd "$(dirname "$(realpath "$swiftc")")/.." && pwd)"
+        if usable "$candidate" && "$candidate/bin/swiftc" --version 2>/dev/null | grep -q "Swift version $VERSION "; then
+            echo "$candidate"
+            return
+        fi
+    fi
+    echo "No Swift $VERSION toolchain with Embedded Swift for $TRIPLE. Install one: swiftly install $VERSION" >&2
+    exit 1
+}
+
+case "${1:-}" in
+    toolchain)
+        toolchain
+        ;;
+    swiftc)
+        shift
+        usr="$(toolchain)"
+        # A module cache of its own, so a sandboxed action writes nowhere outside its directory.
+        cache="$(mktemp -d)"
+        trap 'rm -rf "$cache"' EXIT
+        "$usr/bin/swiftc" -module-cache-path "$cache" "$@"
+        ;;
+    llvm-ar)
+        shift
+        "$(toolchain)/bin/llvm-ar" "$@"
+        ;;
+    *)
+        sed -n '6,8p' "$0" | sed 's/^# \{0,1\}//' >&2
+        exit 2
+        ;;
+esac

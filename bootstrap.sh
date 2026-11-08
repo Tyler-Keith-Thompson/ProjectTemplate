@@ -8,13 +8,17 @@
 #
 # Options (anything not given is asked for when run from a terminal, and defaults to "no"
 # otherwise; --yes takes the defaults without asking):
-#   --type library|server   A Swift package (default), or a Vapor server with a Docker image.
-#   --library, --server     Shorthands for --type.
+#   --type library|server|embedded
+#                           A Swift package (default), a Vapor server with a Docker image, or
+#                           ESP32 firmware in Embedded Swift (ESP-IDF; needs swiftly).
+#   --library, --server, --embedded
+#                           Shorthands for --type.
 #   --benchmarks            Include the Benchmarks/ package.
 #   --mutation              Mutation testing: scripts/mutate.py and `just mutate <Module>`.
 #   --fuzz                  libFuzzer targets in Fuzz/ and `just fuzz` (needs swiftly).
 #   --differential          Differential testing against references: `just diff` (needs uv).
-#   --wasm                  Library only: test on wasm32-wasi under wasmtime, `just wasi-test`.
+#   --wasm                  Library or embedded: test on wasm32-wasi under wasmtime (a 32-bit
+#                           `Int`), `just wasi-test`.
 #   --explore               Library only: a browser explorer (Explore/, `just explore`), published
 #                           with the docs.
 #   --fly                   Server only: deploy to Fly.io (fly.toml; with CI, a deploy job in
@@ -31,12 +35,13 @@
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
-# The template is the library type in place. The server type adds templates/server/ on top, and
-# each optional piece keeps or drops the sections marked for it (.github/README.md, "Optional pieces").
+# The template is the library type in place. The server and embedded types add templates/server/
+# or templates/embedded/ on top, and each optional piece keeps or drops the sections marked for it
+# (.github/README.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
-    sed -n '3,33p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,37p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -59,6 +64,7 @@ while [ $# -gt 0 ]; do
         --type=*) TYPE="${1#--type=}" ;;
         --library) TYPE=library ;;
         --server) TYPE=server ;;
+        --embedded) TYPE=embedded ;;
         --benchmarks) BENCHMARKS=true ;;
         --no-benchmarks) BENCHMARKS=false ;;
         --mutation) MUTATION=true ;;
@@ -126,6 +132,7 @@ if [ -z "$TYPE" ]; then
             echo "Project type:"
             echo "  1) library  A Swift package: Bazel for development, SwiftPM published"
             echo "  2) server   A Vapor server and its Docker image; optionally Fly.io and SQLite"
+            echo "  3) embedded ESP32 firmware in Embedded Swift: modules tested on the Mac, built for the chip"
         } > /dev/tty
         while [ -z "$TYPE" ]; do
             printf 'Choose [1]: ' > /dev/tty
@@ -133,6 +140,7 @@ if [ -z "$TYPE" ]; then
             case "$choice" in
                 ""|1|library) TYPE=library ;;
                 2|server) TYPE=server ;;
+                3|embedded) TYPE=embedded ;;
             esac
         done
     else
@@ -140,15 +148,19 @@ if [ -z "$TYPE" ]; then
     fi
 fi
 case "$TYPE" in
-    library|server) ;;
-    *) echo "Unknown type: $TYPE (library or server)" >&2; exit 1 ;;
+    library|server|embedded) ;;
+    *) echo "Unknown type: $TYPE (library, server or embedded)" >&2; exit 1 ;;
 esac
-if [ "$TYPE" = library ] && { [ "$FLY" = true ] || [ "$DATABASE" = true ]; }; then
+if [ "$TYPE" != server ] && { [ "$FLY" = true ] || [ "$DATABASE" = true ]; }; then
     echo "--fly and --database apply to the server type only" >&2
     exit 1
 fi
-if [ "$TYPE" = server ] && { [ "$WASM" = true ] || [ "$EXPLORE" = true ]; }; then
-    echo "--wasm and --explore apply to the library type only" >&2
+if [ "$TYPE" = server ] && [ "$WASM" = true ]; then
+    echo "--wasm applies to the library and embedded types only" >&2
+    exit 1
+fi
+if [ "$TYPE" != library ] && [ "$EXPLORE" = true ]; then
+    echo "--explore applies to the library type only" >&2
     exit 1
 fi
 
@@ -181,6 +193,11 @@ if [ "$TYPE" = server ]; then
     fi
     WASM=false
     EXPLORE=false
+elif [ "$TYPE" = embedded ]; then
+    FLY=false
+    DATABASE=false
+    EXPLORE=false
+    WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi, a 32-bit Int like the chip's)?")"
 else
     FLY=false
     DATABASE=false
@@ -194,8 +211,10 @@ DIFFERENTIAL="$(ask_unset "$DIFFERENTIAL" "Differential testing?")"
 
 LIBRARY=false
 SERVER=false
+EMBEDDED=false
 [ "$TYPE" = library ] && LIBRARY=true
 [ "$TYPE" = server ] && SERVER=true
+[ "$TYPE" = embedded ] && EMBEDDED=true
 LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
@@ -218,6 +237,10 @@ rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '/Explore/dist' --exclude '*.xcodeproj' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
+fi
+if [ "$EMBEDDED" = true ]; then
+    rsync -a "$TEMPLATE/templates/embedded/" "$DEST/" --exclude '.DS_Store' \
+        --exclude '/Firmware/build' --exclude '/Firmware/managed_components' --exclude '/Firmware/sdkconfig' --exclude '/Firmware/sdkconfig.old'
 fi
 
 # Whole files and directories that belong to one optional piece.
@@ -262,7 +285,7 @@ done
 #                                                       uncommented when kept
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" <<'PY'
 import pathlib, re, sys
 
@@ -374,6 +397,11 @@ echo "     Sources/$NAME/$NAME.docc/$NAME.md."
 if [ "$SERVER" = true ]; then
     echo "  2. Replace the examples: the routes in Sources/App, and the Greetings module (add your"
     echo "     first module to MODULES in scripts/modules.py, remove the Greetings rows, \`just modules\`)."
+elif [ "$EMBEDDED" = true ]; then
+    echo "  2. Replace the examples: Firmware/main/Main.swift, and the Greetings module (add your first"
+    echo "     module to MODULES and FIRMWARE_MODULES in scripts/modules.py, remove the Greetings rows,"
+    echo "     \`just modules\`). The chip is Firmware/sdkconfig.defaults' (ESP32-C6); \`just firmware\`"
+    echo "     builds the image and \`just flash\` flashes it (ESP-IDF 5.5 in ~/esp/esp-idf or IDF_PATH)."
 else
     echo "  2. Replace the Greetings example: add your first module to MODULES in scripts/modules.py,"
     echo "     remove the Greetings rows and directories, run \`just modules\`."

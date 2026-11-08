@@ -85,6 +85,32 @@ fly secrets set B2_KEY_ID=… B2_APPLICATION_KEY=… B2_BUCKET_NAME=… \
 <!-- litestream:end -->
 <!-- fly:end -->
 <!-- server:end -->
+<!-- embedded:begin -->
+
+## Firmware
+
+ProjectName is firmware for the ESP32-C6, written in
+[Embedded Swift](https://www.swift.org/documentation/embedded-swift/) on Espressif's ESP-IDF. Its
+logic lives in Swift modules that are tested on the Mac; the app in `Firmware/main` runs them on
+the board.
+
+Once per Mac:
+
+- [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/) 5.5 in
+  `~/esp/esp-idf` (or wherever `IDF_PATH` points), installed for the chip: `./install.sh esp32c6`.
+- Swift 6.3.3 from [swiftly](https://www.swift.org/install/): `swiftly install 6.3.3`. Xcode's
+  toolchain has no Embedded Swift for RISC-V.
+
+```sh
+just firmware                     # the image, in Firmware/build
+just flash                        # flash the board on USB, then show its log (Ctrl-] quits)
+just flash /dev/cu.usbmodem101    # the same, on a named port
+just monitor                      # the log, without flashing
+```
+
+The log prints "Good day, ProjectName! (1)", counting up once a second.
+
+<!-- embedded:end -->
 
 ## Modules
 
@@ -110,6 +136,8 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just docker` | The production image, built and run <!-- server:line --> |
 | `just load` | A k6 load test against the production image (`brew install k6`) <!-- server:line --> |
 | `just deploy` | This checkout, to Fly.io <!-- fly:line --> |
+| `just firmware` | The firmware image (needs ESP-IDF and swiftly's Swift 6.3.3) <!-- embedded:line --> |
+| `just flash`, `just monitor` | The image, flashed to the board; the board's log <!-- embedded:line --> |
 | `just generate` | An Xcode project from the Bazel graph |
 
 `AGENTS.md` describes the layout, the workflow and the house rules in full.

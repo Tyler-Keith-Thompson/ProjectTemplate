@@ -167,6 +167,34 @@ load *args="":
     k6 run {{args}} {{PROJECT_ROOT}}/LoadTests/load.js
 # server:end
 
+# embedded:begin
+# ESP-IDF: the checkout at IDF_PATH, else ~/esp/esp-idf, set up for each recipe by its export.sh.
+# ~/esp/bin goes first on PATH when it exists: the place for a python3 that ESP-IDF supports when
+# the system's is newer.
+ESP_IDF := env("IDF_PATH", home_directory() / "esp" / "esp-idf")
+IDF := "export PATH=\"$HOME/esp/bin:$PATH\" && . " + ESP_IDF + "/export.sh >/dev/null && cd " + PROJECT_ROOT / "Firmware" + " && idf.py"
+
+[doc('Build the firmware: Bazel compiles the modules as Embedded Swift, ESP-IDF the app and the image (Firmware/build)')]
+firmware:
+    {{IDF}} build
+
+[doc('Build and flash the board on USB, then show its log (Ctrl-] quits), e.g. just flash, or just flash /dev/cu.usbmodem101')]
+flash port="":
+    {{IDF}} {{ if port == "" { "" } else { "-p " + port } }} flash monitor
+
+[doc("Show the board's log without flashing (Ctrl-] quits), e.g. just monitor, or just monitor /dev/cu.usbmodem101")]
+monitor port="":
+    {{IDF}} {{ if port == "" { "" } else { "-p " + port } }} monitor
+
+[doc('Change ESP-IDF settings, saving what differs from its defaults to Firmware/sdkconfig.defaults')]
+menuconfig:
+    {{IDF}} menuconfig
+    {{IDF}} save-defconfig
+
+[doc("The firmware image's size, by component")]
+firmware-size:
+    {{IDF}} size-components
+# embedded:end
 # fly:begin
 #| [doc('Deploy this checkout to Fly.io')] # !ci:line
 [doc('Deploy this checkout to Fly.io (the Release workflow deploys every push to main)')] # ci:line
@@ -224,6 +252,7 @@ clean:
     rm -rf {{PROJECT_ROOT}}/Fuzz/.build # fuzz:line
     rm -rf {{PROJECT_ROOT}}/Differential/.build # differential:line
     rm -rf {{PROJECT_ROOT}}/Explore/.build {{PROJECT_ROOT}}/Explore/dist # explore:line
+    rm -rf {{PROJECT_ROOT}}/Firmware/build {{PROJECT_ROOT}}/Firmware/managed_components # embedded:line
 
 [doc('Print the dependency graph of a target')]
 deps target="//Sources/ProjectName":

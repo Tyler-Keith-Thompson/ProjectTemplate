@@ -22,8 +22,10 @@ scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (script
 Fuzz/Sources/Fuzz<Module>/       A libFuzzer target per module, in the separate Fuzz/ package <!-- fuzz:line -->
 Differential/                    The library side of `just diff`; scripts/differential_<area>.py the references <!-- differential:line -->
 Explore/                         The browser explorer: pages running the library as WebAssembly (`just explore`) <!-- explore:line -->
+Firmware/                        The ESP-IDF project: main/ is the app; BUILD.bazel gathers the modules it imports <!-- embedded:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
                                  tools/bazel turns BuildBuddy on when the Keychain holds its key
+tools/embedded.bzl               Modules compiled as Embedded Swift, through tools/embedded-swift's toolchain <!-- embedded:line -->
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
 LoadTests/load.js                The k6 load test that `just load` runs against the image <!-- server:line -->
 fly.toml                         The Fly.io app <!-- fly:line -->
@@ -91,6 +93,9 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just docker` | Build the production image and run it on port 8080 <!-- server:line --> |
 | `just load [k6 args]` | Load-test a fresh production image with k6; `BASE_URL=… just load` for a running server <!-- server:line --> |
 | `just deploy` | Deploy this checkout to Fly.io <!-- fly:line --> |
+| `just firmware` | Build the firmware image: Bazel compiles the modules, ESP-IDF the app and the image <!-- embedded:line --> |
+| `just flash [port]`, `just monitor [port]` | Flash the board on USB and show its log; the log alone (Ctrl-] quits either) <!-- embedded:line --> |
+| `just menuconfig`, `just firmware-size` | Change ESP-IDF settings (saved to `Firmware/sdkconfig.defaults`); the image's size by component <!-- embedded:line --> |
 | `bazel query 'rdeps(//Tests/..., //Sources/X)'` | Test targets affected by a change to X |
 
 - Debug is the default configuration. Every test target except the `XPerformanceTests` ones is
@@ -169,6 +174,42 @@ the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
 <!-- fly:end -->
 
 <!-- server:end -->
+<!-- embedded:begin -->
+## Firmware
+
+The firmware's logic lives in ordinary modules, listed in `FIRMWARE_MODULES` (`scripts/modules.py`):
+Bazel and SwiftPM build and test them on the Mac like any other, and Bazel also compiles each as
+Embedded Swift for the chip (`//Sources/X:XEmbedded`, `tools/embedded.bzl`). `Firmware/` is the
+ESP-IDF project. Its app, `Firmware/main`, is the only code that calls ESP-IDF; it imports the
+modules from `//Firmware:Modules`, which the firmware build has Bazel build first.
+
+- A firmware module must stay valid Embedded Swift: no Foundation, no `any` existentials (take
+  `some` or a generic parameter), no reflection. `bazel build //...` compiles every firmware
+  module for the chip, so `just test` fails on any of these.
+- Firmware modules depend only on other firmware modules (`check()` in `scripts/modules.py`
+  enforces it). External packages build for the host alone.
+- Hardware sits behind protocols in the modules (a pin, a motor, a sensor), taken as generic
+  parameters. The app implements them with ESP-IDF calls; tests drive the logic against a
+  simulation of the device, written in the test target or `ProjectNameTestSupport`. Mockable can't
+  build for the chip, so for hardware this replaces it: the one exception to the Mockable rule.
+- Logic takes time and readings as inputs (a state machine the app's loop steps with the elapsed
+  milliseconds), never a clock or a delay of its own, so tests run in simulated time.
+- `Int` is 32 bits on the chip, 64 on the Mac. Pick integer types for the device's real ranges
+  and guard arithmetic that could overflow.
+  `just wasi-test` runs the suites with a 32-bit `Int`. <!-- wasm:line -->
+- Keep `Firmware/main` thin: the protocols' ESP-IDF implementations and the loop. Each ESP-IDF
+  component it calls goes in `PRIV_REQUIRES` in `Firmware/main/CMakeLists.txt`, and its header
+  in `BridgingHeader.h`. Nothing tests it but `just firmware` and the board.
+- The chip is `CONFIG_IDF_TARGET` in `Firmware/sdkconfig.defaults` and must be RISC-V (an
+  ESP32-C or -H series, or the P4). Changing it means `MARCH` and `MABI` in `tools/embedded.bzl`
+  too; the firmware build stops and prints the right ones when they differ.
+- One Swift toolchain compiles the modules and the app: `VERSION` in `tools/embedded-swift`, a
+  swift.org toolchain from swiftly (Xcode's has no Embedded Swift for RISC-V). The CI <!-- ci:line -->
+  container in `.github/workflows/CI.yml` is pinned to the same version; change both together. <!-- ci:line -->
+- Anything that burns eFuses (secure boot, flash encryption, `idf.py efuse-*`) cannot be undone
+  on that board. Never run it without the owner's go-ahead for that board.
+
+<!-- embedded:end -->
 ## Building blocks
 
 The owner's own libraries, first in line under "Don't reinvent the wheel" (House rules). Reach
@@ -249,6 +290,7 @@ Watch for these:
 | `scripts/modules.py` | `just modules`, `just test` (which runs `//:package_swift_test`), `just spm` |
 | A fuzzed module | `just fuzz-regress` <!-- fuzz:line --> |
 | A module in `DIFFERENTIAL_DEPENDENCIES` | `just diff --module <Module>` <!-- differential:line --> |
+| A module in `FIRMWARE_MODULES`, or `Firmware/` | `just firmware` (needs ESP-IDF; say so when it isn't installed) <!-- embedded:line --> |
 | Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |
