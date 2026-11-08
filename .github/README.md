@@ -227,6 +227,7 @@ numbering intact.
 
 ### Checking a change
 
+The template repository runs no CI, so these local checks are all that stands behind a push.
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
 directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential`, `--wasm` and `--explore`; `--server`
