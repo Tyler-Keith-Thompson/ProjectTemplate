@@ -37,8 +37,9 @@
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
 # The template is the library type in place. The server, embedded and mcp types add
-# templates/<type>/ on top, and each optional piece keeps or drops the sections marked for it
-# (.github/README.md, "Optional pieces").
+# templates/<type>/ on top, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
+# the template repository runs none of them. Each optional piece keeps or drops the sections marked
+# for it (.github/README.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
@@ -255,6 +256,10 @@ if [ "$EMBEDDED" = true ]; then
 fi
 if [ "$MCP" = true ]; then
     rsync -a "$TEMPLATE/templates/mcp/" "$DEST/" --exclude '.DS_Store'
+fi
+# The workflows live outside .github/workflows here, so the template repository runs none itself.
+if [ "$CI" = true ]; then
+    rsync -a "$TEMPLATE/templates/ci/" "$DEST/" --exclude '.DS_Store'
 fi
 
 # Whole files and directories that belong to one optional piece.
