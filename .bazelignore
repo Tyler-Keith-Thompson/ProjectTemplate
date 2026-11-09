@@ -14,8 +14,10 @@ bazel-out
 bazel-testlogs
 
 # benchmarks:begin
-# The benchmark package is SwiftPM-only.
-Benchmarks
+# The benchmark package's SwiftPM build. Bazel loads only Benchmarks/BUILD.bazel, which caches
+# the simulated counts (tools/benchmarks.bzl).
+Benchmarks/.build
+Benchmarks/.swiftpm
 # benchmarks:end
 
 # fuzz:begin

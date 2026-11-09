@@ -283,6 +283,7 @@ remove_unless() {  # remove_unless <enabled> <path>...
     fi
 }
 remove_unless "$LIBRARY" Tests/ProjectNameTests
+remove_unless "$BENCHMARKS" tools/benchmarks.bzl scripts/bench_simulated.py
 remove_unless "$MUTATION" scripts/mutate.py scripts/mutants
 remove_unless "$FUZZ" Fuzz scripts/fuzz.py
 remove_unless "$WASM" scripts/wasi_test.py

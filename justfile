@@ -113,7 +113,7 @@ bench-baseline:
 bench-compare:
     cd {{PROJECT_ROOT}}/Benchmarks && {{SWIFT}} package --allow-writing-to-package-directory benchmark baseline compare main
 
-[doc("Record the benchmarks' simulated counts (Callgrind in a Linux VM; steady on a busy machine) as the simulated baseline, e.g. just bench-simulated, or just bench-simulated --target X")]
+[doc("Record the benchmarks' simulated counts (Callgrind in a Linux VM; steady on a busy machine) as the simulated baseline, measuring only targets whose code changed (Bazel caches the rest), e.g. just bench-simulated, or just bench-simulated --target X")]
 bench-simulated *args="": (_simulated-baseline "simulated" args)
 
 [doc("Record simulated counts as simulated-current and compare them against the simulated baseline, e.g. just bench-simulated-compare --target X")]
@@ -122,8 +122,7 @@ bench-simulated-compare *args="": (_simulated-baseline "simulated-current" args)
 
 [private]
 _simulated-baseline name args:
-    just --justfile {{BENCHMARK_HARNESS}}/justfile harness
-    {{BENCHMARK_HARNESS}}/Harness/.build/release/benchmark-harness baseline update {{name}} --package-path {{PROJECT_ROOT}}/Benchmarks {{args}}
+    BENCHMARK_HARNESS={{BENCHMARK_HARNESS}} python3 {{PROJECT_ROOT}}/scripts/bench_simulated.py {{name}} {{args}}
 # benchmarks:end
 
 # server:begin
