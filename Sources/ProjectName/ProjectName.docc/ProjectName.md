@@ -20,4 +20,4 @@ print(greeting.text)  // Good day, Ada!
 
 ### Modules
 
-- ``Greetings``
+- ``/Greetings``

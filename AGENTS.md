@@ -110,7 +110,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
   or copies of the repo, and shut down any extra Bazel server you start.
 - Run suites through Bazel, not `swift test --filter`.
 - First-party warnings are errors (`tools/swift_rules.bzl`); dependencies build quietly. Fix the
-  warning, never suppress it.
+  warning, never suppress it. DocC's are too: `just docs` fails on a link that doesn't resolve.
 - Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests:
   builds for platforms that cannot start a child process leave those files out.
 <!-- wasm:begin -->
@@ -271,7 +271,7 @@ have.
 
 1. **Code and docs.** The implementation, with doc comments per "Docs" below. A new module gets a
    row in `scripts/modules.py`, then `just modules`, the README's module table and the umbrella
-   DocC catalog's topic list.
+   DocC catalog's topic list (``` ``/Module`` ```: a link to another module needs the slash).
 2. **Tests** in `Tests/<Module>Tests`:
    - hand-worked cases;
    - edge cases: empty input, one element, the boundaries of every range;
