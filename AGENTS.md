@@ -325,7 +325,9 @@ have.
    whose instruction and malloc counts moved less than compare's 5% threshold keeps its recorded
    entry. So the file changes only where a benchmark did, and pull requests that change different
    benchmarks of one target merge without a conflict. Resolve a conflict by re-recording after
-   the merge, never by hand. To rewrite every entry (a change aimed at cache misses alone), delete
+   the merge, never by hand. A benchmark whose mallocs drop to zero counts as moved. Harness
+   options (`--iterations`, `--filter`) measure uncached and write the same format, keeping the
+   entries that didn't move. To rewrite every entry (a change aimed at cache misses alone), delete
    the file first.
 <!-- benchmarks:end -->
 
