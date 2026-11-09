@@ -20,12 +20,15 @@ push=false
 [ "${1:-}" = "--push" ] && push=true
 
 if [ "$push" = true ]; then
+    # Docker's default builder can't build for more than one platform; a docker-container one can.
+    docker buildx inspect swift-bazel >/dev/null 2>&1 \
+        || docker buildx create --name swift-bazel --driver docker-container >/dev/null
     gh auth token | docker login ghcr.io -u "$(gh api user --jq .login)" --password-stdin
 fi
 for swift in "${swift_versions[@]}"; do
     tag="$image:$swift-$bazel_version"
     if [ "$push" = true ]; then
-        docker buildx build --platform linux/arm64,linux/amd64 --push \
+        docker buildx build --builder swift-bazel --platform linux/arm64,linux/amd64 --push \
             --build-arg SWIFT_VERSION="$swift" --build-arg BAZEL_VERSION="$bazel_version" -t "$tag" "$here"
     else
         docker buildx build --load \
