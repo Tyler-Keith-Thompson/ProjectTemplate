@@ -118,6 +118,7 @@ then prints what to fill in.
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
 | `--fly --database` | Litestream: `litestream.yml` replicates to Backblaze B2 (the `B2_*` Fly secrets), and `scripts/docker-entrypoint.sh` restores the database onto an empty volume, then runs the server under `litestream replicate`. Without the secrets it serves unreplicated. With one machine and one volume, Litestream runs directly, without LiteFS. |
 | `--no-ci` | Leaves out `.github/workflows/` (CI, PR CI, Release, DocC; `templates/ci/` here) and everything that leans on it: `just ci-secrets`, the documentation link, the release and push rules in AGENTS.md. With `--fly`, `just deploy` is the only deploy; with `--explore`, `just explore` builds the site locally and nothing publishes it. CI is the one option on by default, and the only question asked as [Y/n]. |
+| `--trunk` (with CI) | `.trunk/trunk.yaml`: pull requests merge through [Trunk's merge queue](https://docs.trunk.io/merge-queue), which waits for the checks it names (`Bazel tests` and `SwiftPM tests`, which CI runs on Trunk's `trunk-merge/` branches as on every branch but `main`). AGENTS.md's push rules become: a branch, a pull request, a `/trunk merge` comment. Install Trunk's GitHub app and turn the queue on for `main`; branch protection should require `ci / Bazel tests` and `ci / SwiftPM tests`. |
 
 ## Keeping projects current
 
@@ -176,7 +177,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `mcp`, `fly`, `database`, `litestream`, `ci`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `mcp`, `fly`, `database`, `litestream`, `ci`, `trunk`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -204,7 +205,7 @@ numbering intact.
 | Swift 6 mode, one package name | `tools/swift_rules.bzl` | So `package` access and retroactive conformances agree with SwiftPM |
 | Debug default, release config | `.bazelrc`, `justfile` | Release uses its own output base; `debug-only` tags keep ordinary tests out of release |
 | Analysis-cache guardrail | `.bazelrc` | `--noallow_analysis_cache_discard` |
-| Remote cache | `tools/bazel`, `tools/buildbuddy.bazelrc`, `tools/buildbuddy-credentials`, CI | BuildBuddy, on when the login Keychain holds the key: Bazelisk runs `tools/bazel`, which adds the BuildBuddy rc file, and a credential helper hands Bazel the key per request. CI writes the same flags from the `BUILDBUDDY_API_KEY` secret (`just ci-secrets`). `user.bazelrc.example` is the manual setup for a machine without a Keychain. |
+| Remote cache | `tools/bazel`, `tools/buildbuddy.bazelrc`, `tools/buildbuddy-credentials`, CI | BuildBuddy, on when the login Keychain holds the key: Bazelisk runs `tools/bazel`, which adds the BuildBuddy rc file, and a credential helper hands Bazel the key per request. Large outputs move in content-defined chunks (`--experimental_remote_cache_chunking`). CI writes the same flags from the `BUILDBUDDY_API_KEY` secret (`just ci-secrets`). `user.bazelrc.example` is the manual setup for a machine without a Keychain. |
 | Xcode project from the graph | `just generate` | rules_xcodeproj; schemes derived from `Tests/*` |
 | DocC site | `tools/docc.bzl`, `just docs`, `docc.yml` | One archive per module, merged; published to gh-pages |
 | Benchmarks (opt-in) | `Benchmarks/` | Separate package, ordo-one/benchmark, `BASELINE` entries, committed `main` and `simulated` baselines |

@@ -13,12 +13,16 @@ catch-all modules ("Core", "Utilities").
 
 import os
 
-# The package, umbrella module and test-support module take the project's name.
+# The package, umbrella module and test-support module take the project's name. A package whose
+# main module takes the project's name (`import ProjectName` is that module, not an umbrella) lists
+# it in MODULES like any other, and then has no umbrella.
 PROJECT = "ProjectName"
 TEST_SUPPORT = f"{PROJECT}TestSupport"
 
 # External packages: (identity, url, minimum version). A dependency written "identity/Product"
-# in the tables below refers to a product of one of these. After adding one: `just modules`,
+# in the tables below refers to a product of one of these. A version written "exact:1.2.3" pins
+# that release, for a package whose later releases resolve differently on different toolchains
+# (Bazel resolves on each machine with its own swift). After adding one: `just modules`,
 # add `swiftpkg_<identity>` (hyphens as underscores) to use_repo in MODULE.bazel, `just resolve`.
 PACKAGES = [
     # Tests only: property checks with shrinking, for Swift Testing.
@@ -42,6 +46,12 @@ PACKAGES = [
     #| ("swift-argument-parser", "https://github.com/apple/swift-argument-parser", "1.8.2"),
     # mcp:end
 ]
+
+# Packages that only Apple platforms build (Objective-C, or wrappers of Apple frameworks), by
+# identity. SwiftPM links their products on Apple platforms only and Bazel on macOS only (a
+# `select`), so the same targets still build on Linux, where the code using them is left out by
+# `#if canImport`. //:package_swift_test leaves their products out of its comparison.
+APPLE_ONLY_PACKAGES = []
 
 # The product whose macro generates mocks. A module that depends on it is compiled with the
 # MOCKING condition in debug builds only (SwiftPM's debug configuration, Bazel's
@@ -150,7 +160,6 @@ def performance_target(name):
 def check():
     names = [m[0] for m in MODULES]
     assert len(names) == len(set(names)), "duplicate module"
-    assert PROJECT not in names, f"{PROJECT} is the umbrella; it is not listed in MODULES"
     packages = [p[0] for p in PACKAGES]
     for name, deps in [(m[0], m[3]) for m in MODULES] + [(e[0], e[2]) for e in EXECUTABLES]:
         for d in deps:
@@ -183,8 +192,43 @@ def check():
 def spm_dep(d):
     if "/" in d:
         package, product = d.split("/")
-        return f'.product(name: "{product}", package: "{package}")'
+        condition = ", condition: .when(platforms: applePlatforms)" if package in APPLE_ONLY_PACKAGES else ""
+        return f'.product(name: "{product}", package: "{package}"{condition})'
     return f'"{d}"'
+
+
+def requirement(version):
+    """A package's version requirement in a manifest: `from:` the minimum, or `exact:` a pinned release."""
+    if version.startswith("exact:"):
+        return f'exact: "{version.removeprefix("exact:")}"'
+    return f'from: "{version}"'
+
+
+def umbrella():
+    """Whether the package has a generated umbrella module: unless MODULES lists the project's name."""
+    return PROJECT not in [m[0] for m in MODULES]
+
+
+def apple_only(d):
+    return "/" in d and d.split("/")[0] in APPLE_ONLY_PACKAGES
+
+
+def bazel_deps(deps):
+    """A `deps` attribute, or nothing when there are none; Apple-only products sit in a macOS `select`."""
+    if not deps:
+        return ""
+    listed = "".join(f'        "{bazel_label(d)}",\n' for d in deps if not apple_only(d))
+    text = f"    deps = [\n{listed}    ]"
+    apple = "".join(f'            "{bazel_label(d)}",\n' for d in deps if apple_only(d))
+    if apple:
+        text += (
+            " + select({\n"
+            "        # Apple-only packages (APPLE_ONLY_PACKAGES in scripts/modules.py).\n"
+            f'        "@platforms//os:macos": [\n{apple}        ],\n'
+            '        "//conditions:default": [],\n'
+            "    })"
+        )
+    return text + ",\n"
 
 
 def bazel_label(d):
@@ -252,15 +296,24 @@ def package_swift():
         "}",
         "",
         # wasm:end
+    ]
+    if APPLE_ONLY_PACKAGES:
+        lines += [
+            "// Where the Apple-only packages' products are linked (APPLE_ONLY_PACKAGES in scripts/modules.py).",
+            "let applePlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS]",
+            "",
+        ]
+    lines += [
         "// Typed arrays of their own: as one `Package(...)` expression, a large manifest is too big for",
         "// the type checker.",
         "let products: [Product] = [",
-        f'    .library(name: "{PROJECT}", targets: ["{PROJECT}"]),',
     ]
+    if umbrella():
+        lines.append(f'    .library(name: "{PROJECT}", targets: ["{PROJECT}"]),')
     lines += [f'    .library(name: "{m[0]}", targets: ["{m[0]}"]),' for m in MODULES]
     lines += [f'    .executable(name: "{e[0]}", targets: ["{e[0]}"]),' for e in EXECUTABLES]
     lines += ["]", "", "let dependencies: [Package.Dependency] = ["]
-    lines += [f'    .package(url: "{url}", from: "{version}"),' for _, url, version in PACKAGES]
+    lines += [f'    .package(url: "{url}", {requirement(version)}),' for _, url, version in PACKAGES]
     lines += ["]", "", "let targets: [Target] = ["]
     group = None
     for name, g, _, deps in MODULES:
@@ -282,10 +335,13 @@ def package_swift():
     all_deps = ", ".join(f'"{m[0]}"' for m in MODULES)
     support_deps = ", ".join(spm_dep(d) for d in TEST_SUPPORT_DEPENDENCIES)
     support_deps_arg = f"dependencies: [{support_deps}], " if TEST_SUPPORT_DEPENDENCIES else ""
+    if umbrella():
+        lines += [
+            "",
+            f"    // Umbrella: `import {PROJECT}` imports every module.",
+            f'    .target(name: "{PROJECT}", dependencies: [{all_deps}], exclude: bazelFiles),',
+        ]
     lines += [
-        "",
-        f"    // Umbrella: `import {PROJECT}` imports every module.",
-        f'    .target(name: "{PROJECT}", dependencies: [{all_deps}], exclude: bazelFiles),',
         "",
         "    // Shared fixtures (data only) for every test target.",
         f'    .target(name: "{TEST_SUPPORT}", {support_deps_arg}path: "Tests/{TEST_SUPPORT}", exclude: bazelFiles),',
@@ -325,7 +381,7 @@ def package_swift():
 
 
 def dependency_manifest():
-    deps = "".join(f'        .package(url: "{url}", from: "{version}"),\n' for _, url, version in PACKAGES)
+    deps = "".join(f'        .package(url: "{url}", {requirement(version)}),\n' for _, url, version in PACKAGES)
     return (
         "// swift-tools-version: 6.0\n"
         "import PackageDescription\n\n"
@@ -359,8 +415,7 @@ def build_bazel(name, description, deps):
     #|         ")\n"
     #|     )
     # embedded:end
-    dl = "".join(f'        "{bazel_label(d)}",\n' for d in deps)
-    deps_attr = f"    deps = [\n{dl}    ],\n" if deps else ""
+    deps_attr = bazel_deps(deps)
     defines_attr = (
         "    # Mock<Protocol> types from @Mockable, in debug builds only (MOCKING in scripts/modules.py).\n"
         '    defines = select({"//tools:debug": ["MOCKING"], "//conditions:default": []}),\n'
@@ -396,8 +451,7 @@ def build_bazel(name, description, deps):
 
 
 def executable_build_bazel(name, description, deps):
-    dl = "".join(f'        "{bazel_label(d)}",\n' for d in deps)
-    deps_attr = f"    deps = [\n{dl}    ],\n" if deps else ""
+    deps_attr = bazel_deps(deps)
     return (
         "# GENERATED by scripts/modules.py — edit EXECUTABLES there, then run `just modules`.\n\n"
         'load("//tools:swift_rules.bzl", "swift_binary")\n\n'
@@ -473,8 +527,7 @@ def differential_build_bazel():
 
 # differential:end
 def test_support_build_bazel():
-    dl = "".join(f'        "{bazel_label(d)}",\n' for d in TEST_SUPPORT_DEPENDENCIES)
-    deps_attr = f"    deps = [\n{dl}    ],\n" if TEST_SUPPORT_DEPENDENCIES else ""
+    deps_attr = bazel_deps(TEST_SUPPORT_DEPENDENCIES)
     return (
         "# GENERATED by scripts/modules.py — edit TEST_SUPPORT_DEPENDENCIES there, then run `just modules`.\n\n"
         'load("//tools:swift_rules.bzl", "swift_library")\n\n'
@@ -492,7 +545,6 @@ def test_support_build_bazel():
 
 def test_targets_bazel(name, deps, size, srcs, tags):
     """One test module: its library, the swift_test that `bazel test` runs, and the Xcode bundle."""
-    dl = "".join(f'        "{bazel_label(d)}",\n' for d in deps)
     tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
     return (
         "swift_library(\n"
@@ -506,7 +558,7 @@ def test_targets_bazel(name, deps, size, srcs, tags):
         f"{tags_attr}"
         "    # Read by //:package_swift_test, which checks Package.swift against the Bazel graph.\n"
         '    visibility = ["//:__pkg__"],\n'
-        f"    deps = [\n{dl}    ],\n"
+        f"{bazel_deps(deps)}"
         ")\n\n"
         "# `bazel test` / `just test`: a standalone executable, fast to start and run in Bazel's sandbox.\n"
         "swift_test(\n"
@@ -607,11 +659,12 @@ def main():
     write(os.path.join(ROOT, "tools", "executables.bzl"), executables_bzl())
     write(os.path.join(ROOT, "tools", "performance_tests.bzl"), performance_tests_bzl())
     names = [m[0] for m in MODULES]
-    umbrella = os.path.join(ROOT, "Sources", PROJECT)
-    write(os.path.join(umbrella, "BUILD.bazel"), build_bazel(PROJECT, f"Umbrella: `import {PROJECT}` imports every module.", names))
-    write(os.path.join(umbrella, f"{PROJECT}.swift"),
-          f"// GENERATED by scripts/modules.py.\n//\n// Umbrella: `import {PROJECT}` imports every module.\n\n"
-          + "".join(f"@_exported import {n}\n" for n in names))
+    if umbrella():
+        directory = os.path.join(ROOT, "Sources", PROJECT)
+        write(os.path.join(directory, "BUILD.bazel"), build_bazel(PROJECT, f"Umbrella: `import {PROJECT}` imports every module.", names))
+        write(os.path.join(directory, f"{PROJECT}.swift"),
+              f"// GENERATED by scripts/modules.py.\n//\n// Umbrella: `import {PROJECT}` imports every module.\n\n"
+              + "".join(f"@_exported import {n}\n" for n in names))
     write(os.path.join(ROOT, "swift", "Package.swift"), dependency_manifest())
     #| write(os.path.join(ROOT, "Firmware", "BUILD.bazel"), firmware_build_bazel())  # embedded:line
     write(os.path.join(ROOT, "Differential", "BUILD.bazel"), differential_build_bazel())  # differential:line

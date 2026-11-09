@@ -31,6 +31,7 @@ tools/embedded.bzl               Modules compiled as Embedded Swift, through too
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
 LoadTests/load.js                The k6 load test that `just load` runs against the image <!-- server:line -->
 fly.toml                         The Fly.io app <!-- fly:line -->
+.trunk/trunk.yaml                The checks Trunk's merge queue waits for before it merges to main <!-- trunk:line -->
 litestream.yml                   SQLite replication to B2; scripts/docker-entrypoint.sh runs it <!-- litestream:line -->
 ```
 
@@ -61,6 +62,11 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
   module that declares the protocol and to its test target, add `swiftpkg_mockable` to
   `use_repo`, then `just modules` and `just resolve`. The generator defines `MOCKING` for that
   module in debug builds only, in both build systems.
+- A package whose main module takes the project's name (`import ProjectName` is the library
+  itself) lists it in `MODULES`; the generator then writes no umbrella.
+- A package only Apple platforms build (Objective-C, a wrapper of an Apple framework) goes in
+  `APPLE_ONLY_PACKAGES` too: its products are linked on Apple platforms only, so the targets still
+  build on Linux, and the code that uses them sits under `#if canImport(...)`.
 - A module name takes a `Module` suffix only when it would otherwise equal its main type's name
   (`GreetingModule` would hold `Greeting`). No catch-all modules ("Core", "Utilities").
 
@@ -334,8 +340,11 @@ Watch for these:
 
 ### Pushing
 
+<!-- !trunk:begin -->
 Push finished work to `main` yourself; don't wait to be asked, and never end a task with
+<!-- !trunk:end -->
 <!-- ci:begin -->
+<!-- !trunk:begin -->
 finished commits unpushed. Every push to `main` releases a patch version, and CI minutes are
 scarce, so push once per batch rather than once per commit: when the work the owner gave you is
 done (the whole request, or Ready is empty when working the backlog), push everything it
@@ -348,6 +357,27 @@ Every push also deploys to Fly.io.
    `--config=release`.
 2. Push, then watch the Release and DocC workflows to green, and fix anything that breaks.
 3. Don't add CI steps that rebuild without the owner's approval.
+<!-- !trunk:end -->
+<!-- trunk:begin -->
+Ship finished work yourself; don't wait to be asked, and never end a task with finished work
+unmerged. `main` takes changes only through Trunk's merge queue, and every merge releases a patch
+version, so ship once per batch: when the work the owner gave you is done (the whole request, or
+Ready is empty when working the backlog), put everything it produced on one branch.
+<!-- fly:begin -->
+Every merge also deploys to Fly.io.
+<!-- fly:end -->
+
+1. Verify the committed state in a clean worktree: `bazel test //...` in debug, then
+   `--config=release`.
+2. Push the branch, open a pull request (`gh pr create`) and queue it with a `/trunk merge`
+   comment (`gh pr comment --body "/trunk merge"`). Trunk tests it on a `trunk-merge/` branch
+   against the current `main` and merges it once the checks `.trunk/trunk.yaml` names pass.
+3. Watch it merge (`gh pr view --json state`), then the Release and DocC workflows to green, and
+   fix anything that breaks in a new pull request.
+4. Don't add CI steps that rebuild without the owner's approval. A job that must pass before a
+   merge goes in `.trunk/trunk.yaml`'s `required_statuses` by its name, and in branch
+   protection's required checks.
+<!-- trunk:end -->
 <!-- ci:end -->
 <!-- !ci:begin -->
 finished commits unpushed. Push once per batch: when the work the owner gave you is done (the

@@ -1,0 +1,9 @@
+# Trunk's merge queue (https://docs.trunk.io/merge-queue): a pull request queued with a
+# `/trunk merge` comment is tested on a trunk-merge/ branch together with the ones ahead of it,
+# and merged to main when every status below passes there. CI.yml runs on those branches, as on
+# every branch but main. A job added to CI that must pass before a merge goes here by its name.
+version: 0.1
+merge:
+  required_statuses:
+    - Bazel tests
+    - SwiftPM tests

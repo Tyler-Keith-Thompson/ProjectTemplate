@@ -15,12 +15,12 @@
 
   ./template.py stamp PROJECT [--type library|server|embedded|mcp] [--benchmarks] [--mutation] [--fuzz]
                               [--differential] [--wasm] [--explore] [--fly] [--database] [--no-ci]
-                              [--name NAME] [--commit REVISION]
+                              [--trunk] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
   ./template.py add PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                            [--fly] [--database] [--ci]
+                            [--fly] [--database] [--ci] [--trunk]
       Turn options on in a project made without them. The template is rendered at the stamped commit
       with the stamp's options and again with the new ones added, and every file that differs is
       merged three ways into the project, as `update` does; the stamp then records the options. It
@@ -75,7 +75,7 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "fly", "database", "ci")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "fly", "database", "ci", "trunk")
 # Options on unless the stamp says otherwise: a stamp from before the option had it.
 ON_BY_DEFAULT = ("ci",)
 
@@ -277,6 +277,8 @@ def add(arguments):
                   if feature in TYPE_ONLY and stamp["type"] not in TYPE_ONLY[feature]]
     if wrong_type:
         sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {stamp['type']} type")
+    if "trunk" in wanted and not (enabled(stamp, "ci") or "ci" in wanted):
+        sys.exit("--trunk needs CI: the merge queue waits for CI's checks; add --ci with it")
     new_features = [feature for feature in wanted if not enabled(stamp, feature)]
     if not new_features:
         print(f"{project.name} already has {', '.join('--' + feature for feature in wanted)}.")
@@ -347,6 +349,8 @@ def stamp_command(arguments):
     wrong_type = [feature for feature in TYPE_ONLY if getattr(arguments, feature) and arguments.type not in TYPE_ONLY[feature]]
     if wrong_type:
         sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {arguments.type} type")
+    if arguments.trunk and not arguments.ci:
+        sys.exit("--trunk needs CI: the merge queue waits for CI's checks")
     name = arguments.name or project.name
     if not re.fullmatch(r"[A-Z][A-Za-z0-9]*", name):
         sys.exit(f"The name must be the UpperCamelCase name the project was made with (a Swift module name), "
@@ -364,6 +368,7 @@ def stamp_command(arguments):
         "fly": arguments.fly,
         "database": arguments.database,
         "ci": arguments.ci,
+        "trunk": arguments.trunk,
     }
     write_stamp(project, stamp)
     print(f"Stamped {project / STAMP} at {stamp['commit'][:12]}.")

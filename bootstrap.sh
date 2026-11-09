@@ -26,12 +26,14 @@
 #                           Release deploys every push to main, else `just deploy` only).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
 #                           it to object storage and restores it on a new volume.
+#   --trunk                 With CI: pull requests merge through Trunk's merge queue
+#                           (.trunk/trunk.yaml names the checks it waits for), not pushes to main.
 #   --no-ci                 No GitHub Actions workflows (.github/workflows): no CI, releases,
 #                           published docs or explorer, or deploys on push. CI is on by default
 #                           (--ci), and the only option asked as [Y/n].
 #   --no-benchmarks, --no-mutation, --no-fuzz,
 #                           --no-differential, --no-wasm, --no-explore, --no-fly,
-#                           --no-database
+#                           --no-database, --no-trunk
 #   --yes, -y               Ask nothing.
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
@@ -43,7 +45,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '3,38p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,40p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -57,6 +59,7 @@ EXPLORE=""
 FLY=""
 DATABASE=""
 CI=""
+TRUNK=""
 ASK=true
 RENDER_ONLY=false
 POSITIONAL=()
@@ -84,6 +87,8 @@ while [ $# -gt 0 ]; do
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
         --no-database) DATABASE=false ;;
+        --trunk) TRUNK=true ;;
+        --no-trunk) TRUNK=false ;;
         --ci) CI=true ;;
         --no-ci) CI=false ;;
         -y|--yes) ASK=false ;;
@@ -189,6 +194,14 @@ ask_unset_yes() {  # ask_unset_yes <current value> <question>; like ask_unset, b
     done
 }
 CI="$(ask_unset_yes "$CI" "GitHub Actions (CI, releases, published docs)?")"
+if [ "$CI" = true ]; then
+    TRUNK="$(ask_unset "$TRUNK" "Merge pull requests through Trunk's merge queue?")"
+elif [ "$TRUNK" = true ]; then
+    echo "--trunk needs CI: the merge queue waits for CI's checks" >&2
+    exit 1
+else
+    TRUNK=false
+fi
 if [ "$TYPE" = server ]; then
     FLY="$(ask_unset "$FLY" "Deploy to Fly.io?")"
     if [ "$FLY" = true ]; then
@@ -231,7 +244,7 @@ LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, fly: $FLY, database: $DATABASE, ci: $CI) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -279,6 +292,7 @@ remove_unless "$FLY" fly.toml
 remove_unless "$DATABASE" Sources/App/Database
 remove_unless "$LITESTREAM" litestream.yml scripts/docker-entrypoint.sh
 remove_unless "$CI" .github
+remove_unless "$TRUNK" .trunk
 
 # Paths first, deepest first, so a renamed directory's children are already renamed.
 find "$DEST" -depth -name '*ProjectName*' -not -path "$DEST/.git/*" | while IFS= read -r path; do
@@ -305,7 +319,7 @@ done
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
 python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "fly=$FLY" \
-    "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" <<'PY'
+    "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" <<'PY'
 import pathlib, re, sys
 
 root = pathlib.Path(sys.argv[1])
@@ -380,15 +394,15 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$FLY" "$DATABASE" "$CI" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, fly, database, ci, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, fly, database, ci, trunk, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
          "mutation": mutation == "true", "fuzz": fuzz == "true",
          "differential": differential == "true", "wasm": wasm == "true",
          "explore": explore == "true", "fly": fly == "true", "database": database == "true",
-         "ci": ci == "true"}
+         "ci": ci == "true", "trunk": trunk == "true"}
 if modified == "true":
     stamp["modified"] = True
 with open(path, "w") as file:
@@ -440,6 +454,11 @@ if [ "$CI" = true ]; then
     next "On GitHub: set Pages to deploy from gh-pages. For the remote cache in CI, once the repository"
     echo "     exists: \`just ci-secrets\` (the BuildBuddy key, from the Keychain; \`just buildbuddy-key\` stores"
     echo "     it once per Mac, and local builds then use the cache too)."
+fi
+if [ "$TRUNK" = true ]; then
+    next "Trunk: install Trunk's GitHub app on the repository and turn on its merge queue for main"
+    echo "     (app.trunk.io). Branch protection on main should require \`ci / Bazel tests\` and"
+    echo "     \`ci / SwiftPM tests\`, so a pull request merges only through the queue."
 fi
 if [ "$FLY" = true ] && [ "$CI" = true ]; then
     next "Fly.io: \`fly launch --no-deploy --copy-config --name $LOWER\` (app names are global; if"
