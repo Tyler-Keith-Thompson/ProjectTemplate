@@ -17,6 +17,7 @@ BENCHMARK_HARNESS names the BenchmarkHarness checkout (default ~/workspace/Bench
 """
 
 import importlib.util
+import json
 import os
 import platform
 import subprocess
@@ -105,13 +106,14 @@ def main(argv):
         with open(os.path.join(bin_dir, "Benchmarks", f"{target}.json")) as f:
             results = f.read()
         # The measurement records the baseline under the name "bazel"; ordo-one reads the name
-        # from the file, so it is changed to the one asked for and nothing else.
+        # from the file, so it is changed to the one asked for and nothing else. Replacing the
+        # text keeps the harness's bytes and key order; the new name is encoded as a JSON string.
         marker = '"baselineName":"bazel"'
         assert results.count(marker) == 1, f"{target}: no baseline name in the harness's output"
         destination = os.path.join(BENCHMARKS_DIR, ".benchmarkBaselines", target, baseline)
         os.makedirs(destination, exist_ok=True)
         with open(os.path.join(destination, "results.json"), "w") as f:
-            f.write(results.replace(marker, f'"baselineName":"{baseline}"'))
+            f.write(results.replace(marker, f'"baselineName":{json.dumps(baseline)}'))
         print(f"Wrote baseline '{baseline}' for {target}")
 
 
