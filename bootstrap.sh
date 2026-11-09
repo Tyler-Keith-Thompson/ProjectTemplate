@@ -454,6 +454,9 @@ if [ "$CI" = true ]; then
     next "On GitHub: set Pages to deploy from gh-pages. For the remote cache in CI, once the repository"
     echo "     exists: \`just ci-secrets\` (the BuildBuddy key, from the Keychain; \`just buildbuddy-key\` stores"
     echo "     it once per Mac, and local builds then use the cache too)."
+    next "CI's Bazel jobs pull the private ghcr.io/tyler-keith-thompson/swift-bazel image: add the"
+    echo "     repository under Manage Actions access in the package's settings (Read), or CI can't start"
+    echo "     (github.com/users/Tyler-Keith-Thompson/packages/container/package/swift-bazel/settings)."
 fi
 if [ "$TRUNK" = true ]; then
     next "Trunk: install Trunk's GitHub app on the repository and turn on its merge queue for main"
