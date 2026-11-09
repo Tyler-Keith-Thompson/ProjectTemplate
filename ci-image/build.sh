@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Build the CI image for every Swift version the template's workflows use, for arm64 (the
-# runners) and amd64, tagged ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>.
+# Build the CI image for every Swift version projects use, for arm64 (the runners) and amd64,
+# tagged ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>.
 #
-#   ci-image/build.sh           build the images for this machine's architecture only
-#   ci-image/build.sh --push    build both architectures and push them (needs gh's
-#                               write:packages scope: gh auth refresh -s write:packages)
+#   ci-image/build.sh [<swift>...]          build the images for this machine's architecture only
+#   ci-image/build.sh --push [<swift>...]   build both architectures and push them (needs gh's
+#                                           write:packages scope: gh auth refresh -s write:packages)
+#
+# Naming Swift versions builds only those, which must be in the list below; none builds them all.
 #
 # Run it after changing .bazelversion or a workflow's Swift version, then point the workflows
 # at the new tag.
@@ -13,11 +15,21 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 bazel_version="$(cat "$here/../.bazelversion")"
 image=ghcr.io/tyler-keith-thompson/swift-bazel
-# swift:6.3 for CI.yml and docc.yml; swift:6.3.3 for the embedded type, which pins the patch.
-swift_versions=(6.3 6.3.3)
+# swift:6.3 for CI.yml and docc.yml; swift:6.3.3 for the embedded type, which pins the patch;
+# swift:6.4 for projects whose floor is above the template's.
+swift_versions=(6.3 6.3.3 6.4)
 
 push=false
-[ "${1:-}" = "--push" ] && push=true
+if [ "${1:-}" = "--push" ]; then
+    push=true
+    shift
+fi
+if [ "$#" -gt 0 ]; then
+    for swift in "$@"; do
+        [[ " ${swift_versions[*]} " == *" $swift "* ]] || { echo "Not a listed Swift version: $swift (${swift_versions[*]})" >&2; exit 1; }
+    done
+    swift_versions=("$@")
+fi
 
 if [ "$push" = true ]; then
     # Docker's default builder can't build for more than one platform; a docker-container one can.
