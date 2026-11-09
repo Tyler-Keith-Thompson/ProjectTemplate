@@ -117,6 +117,9 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 - Run suites through Bazel, not `swift test --filter`.
 - First-party warnings are errors (`tools/swift_rules.bzl`); dependencies build quietly. Fix the
   warning, never suppress it. DocC's are too: `just docs` fails on a link that doesn't resolve.
+- CI's Bazel jobs run in `ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>`, Swift with <!-- ci:line -->
+  the Bazel in `.bazelversion` already in it, built by the project template's `ci-image/build.sh`. <!-- ci:line -->
+  Changing `.bazelversion` or the workflows' Swift version means a new tag from there. <!-- ci:line -->
 - Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests:
   builds for platforms that cannot start a child process leave those files out.
 <!-- wasm:begin -->
@@ -215,7 +218,8 @@ modules from `//Firmware:Modules`, which the firmware build has Bazel build firs
   too; the firmware build stops and prints the right ones when they differ.
 - One Swift toolchain compiles the modules and the app: `VERSION` in `tools/embedded-swift`, a
   swift.org toolchain from swiftly (Xcode's has no Embedded Swift for RISC-V). The CI <!-- ci:line -->
-  container in `.github/workflows/CI.yml` is pinned to the same version; change both together. <!-- ci:line -->
+  container in `.github/workflows/CI.yml` (`swift-bazel:<swift>-<bazel>`) is pinned to the same version; <!-- ci:line -->
+  change both together. <!-- ci:line -->
 - Anything that burns eFuses (secure boot, flash encryption, `idf.py efuse-*`) cannot be undone
   on that board. Never run it without the owner's go-ahead for that board.
 

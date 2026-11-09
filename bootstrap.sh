@@ -258,7 +258,7 @@ fi
 rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
-    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' \
+    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' --exclude '/ci-image' \
     --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '/Explore/dist' --exclude '*.xcodeproj' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
