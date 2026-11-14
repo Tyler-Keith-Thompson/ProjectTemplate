@@ -27,6 +27,8 @@ TEST_SUPPORT = f"{PROJECT}TestSupport"
 PACKAGES = [
     # Tests only: property checks with shrinking, for Swift Testing.
     ("swift-property-based", "https://github.com/x-sheep/swift-property-based", "2.0.1"),
+    # Tests only: seeded generators and draws that reproduce on every platform.
+    ("swiftprng", "https://github.com/Tyler-Keith-Thompson/SwiftPRNG", "0.0.1"),
     # Mocks generated from protocols (`@Mockable`). Uncomment when a module first needs one; see
     # MOCKING below.
     # ("mockable", "https://github.com/Kolos65/Mockable", "0.6.4"),
@@ -122,7 +124,7 @@ EXECUTABLES = [
 # Test targets. SwiftPM rejects a target with no sources, so list a target only once its directory
 # holds tests. (name, dependencies)
 TEST_TARGETS = [
-    ("GreetingsTests", ["Greetings", TEST_SUPPORT, "swift-property-based/PropertyBased"]),
+    ("GreetingsTests", ["Greetings", TEST_SUPPORT, "swift-property-based/PropertyBased", "swiftprng/Generators", "swiftprng/Sampling"]),
     (f"{PROJECT}Tests", [PROJECT]),  # library:line
     # server:begin
     #| ("AppTests", ["App", "vapor/VaporTesting"]),

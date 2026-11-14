@@ -21,6 +21,8 @@ swift_library(
         "//Sources/Greetings",
         "//Tests/ProjectNameTestSupport",
         "@swiftpkg_swift_property_based//:PropertyBased",
+        "@swiftpkg_swiftprng//:Generators",
+        "@swiftpkg_swiftprng//:Sampling",
     ],
 )
 

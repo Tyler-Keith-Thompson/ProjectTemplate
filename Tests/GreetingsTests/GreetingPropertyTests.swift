@@ -1,9 +1,11 @@
 // Property tests against a naive reference: what the text must contain, whatever the inputs.
 // Each test is self-contained; see GreetingTests.swift.
 
+import Generators
 import Greetings
 import ProjectNameTestSupport
 import PropertyBased
+import Sampling
 import Testing
 
 @Suite("Greeting: properties")
@@ -37,11 +39,11 @@ struct GreetingPropertyTests {
 
     @Test("A seeded generator reproduces the same names", .tags(.randomized))
     func seededReproducibility() {
-        var first = SeededRandomNumberGenerator(seed: 42)
-        var second = SeededRandomNumberGenerator(seed: 42)
+        var first = Xoshiro256StarStar(seed: 42)
+        var second = Xoshiro256StarStar(seed: 42)
         let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
-        let firstNames = (0 ..< 20).map { _ in String(alphabet.randomElement(using: &first)!) }
-        let secondNames = (0 ..< 20).map { _ in String(alphabet.randomElement(using: &second)!) }
+        let firstNames = (0 ..< 20).map { _ in String(alphabet[first.integer(in: 0 ..< alphabet.count)]) }
+        let secondNames = (0 ..< 20).map { _ in String(alphabet[second.integer(in: 0 ..< alphabet.count)]) }
         #expect(firstNames == secondNames)
         #expect(firstNames.allSatisfy { Greeting(name: $0).text == "Hi, \($0)" })
     }

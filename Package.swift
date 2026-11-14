@@ -28,6 +28,7 @@ let products: [Product] = [
 
 let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/x-sheep/swift-property-based", from: "2.0.1"),
+    .package(url: "https://github.com/Tyler-Keith-Thompson/SwiftPRNG", from: "0.0.1"),
 ]
 
 let targets: [Target] = [
@@ -40,7 +41,7 @@ let targets: [Target] = [
     // Shared fixtures (data only) for every test target.
     .target(name: "ProjectNameTestSupport", path: "Tests/ProjectNameTestSupport", exclude: bazelFiles),
 
-    .testTarget(name: "GreetingsTests", dependencies: ["Greetings", "ProjectNameTestSupport", .product(name: "PropertyBased", package: "swift-property-based")], exclude: testExcludes(bazelFiles, wasi: ["GreetingExitTests.swift"])),
+    .testTarget(name: "GreetingsTests", dependencies: ["Greetings", "ProjectNameTestSupport", .product(name: "PropertyBased", package: "swift-property-based"), .product(name: "Generators", package: "swiftprng"), .product(name: "Sampling", package: "swiftprng")], exclude: testExcludes(bazelFiles, wasi: ["GreetingExitTests.swift"])),
     .testTarget(name: "ProjectNameTests", dependencies: ["ProjectName"], exclude: testExcludes(bazelFiles, wasi: [])),
 ]
 

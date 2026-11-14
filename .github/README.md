@@ -227,7 +227,7 @@ numbering intact.
 | Browser explorer (opt-in) | `Explore/`, `docc.yml` | ElementaryUI and JavaScriptKit (PackageToJS); the workflow job is dormant (`#|`) in the template, so only `--explore` projects run it |
 | Mocks (off until needed) | `scripts/modules.py` (`MOCKING`), `tools/BUILD.bazel` | Mockable row commented out in `PACKAGES`; a module depending on it gets `MOCKING` in debug only, in both build systems |
 | CI | `templates/ci/.github/workflows` (copied into projects with CI; the template repository runs no workflows) | Linux arm64 Bazel tests on branches and PRs; tag-and-release on main |
-| Test support | `Tests/ProjectNameTestSupport` | Seeded RNG, tags; data only |
+| Test support | `Tests/ProjectNameTestSupport` | Tags and shared fixtures; data only |
 | Executables | `EXECUTABLES` in `scripts/modules.py` | `.executableTarget` in SwiftPM, `swift_binary` in Bazel, a run scheme in Xcode; left out of the umbrella and the docs |
 | Server type | `templates/server/` | Vapor, Docker, a k6 load test, optionally Fly.io, SQLite and Litestream |
 | MCP type | `templates/mcp/` | `Tools` (`ToolServer`, `ToolHandler`), the stdio executable, `just install` |

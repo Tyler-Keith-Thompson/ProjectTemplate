@@ -38,6 +38,7 @@ use_repo(
     "swift_deps_info",
     "swift_package",
     "swiftpkg_swift_property_based",
+    "swiftpkg_swiftprng",
     # server:begin
     #| "swiftpkg_vapor",
     # database:begin
