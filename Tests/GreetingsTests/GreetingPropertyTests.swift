@@ -40,9 +40,9 @@ struct GreetingPropertyTests {
         var first = SeededRandomNumberGenerator(seed: 42)
         var second = SeededRandomNumberGenerator(seed: 42)
         let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
-        let a = (0 ..< 20).map { _ in String(alphabet.randomElement(using: &first)!) }
-        let b = (0 ..< 20).map { _ in String(alphabet.randomElement(using: &second)!) }
-        #expect(a == b)
-        #expect(a.allSatisfy { Greeting(name: $0).text == "Hi, \($0)" })
+        let firstNames = (0 ..< 20).map { _ in String(alphabet.randomElement(using: &first)!) }
+        let secondNames = (0 ..< 20).map { _ in String(alphabet.randomElement(using: &second)!) }
+        #expect(firstNames == secondNames)
+        #expect(firstNames.allSatisfy { Greeting(name: $0).text == "Hi, \($0)" })
     }
 }

@@ -1,0 +1,23 @@
+load("@rules_apple//apple:ios.bzl", "ios_application")
+load("//tools:swift_rules.bzl", "swift_library")
+
+swift_library(
+    name = "TestHostLibrary",
+    testonly = True,
+    srcs = glob(["**/*.swift"]),
+    module_name = "TestHost",
+    target_compatible_with = ["@platforms//os:ios"],
+)
+
+# The host every simulator test runs in (scripts/modules.py names it as each ios_unit_test's
+# test_host): without one, a test runs as a logic test, where UIKit traps tearing down a window.
+ios_application(
+    name = "test_host",
+    testonly = True,
+    bundle_id = "com.example.projectname.testhost",
+    families = ["iphone"],
+    infoplists = ["Info.plist"],
+    minimum_os_version = "18.0",
+    visibility = ["//visibility:public"],
+    deps = [":TestHostLibrary"],
+)

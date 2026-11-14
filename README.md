@@ -111,6 +111,22 @@ just monitor                      # the log, without flashing
 The log prints "Good day, ProjectName! (1)", counting up once a second.
 
 <!-- embedded:end -->
+<!-- app:begin -->
+
+## Running
+
+ProjectName is an iOS app in SwiftUI and requires Xcode with Swift 6.3 and an iOS 18 simulator.
+
+```sh
+just run          # the app, in the simulator .bazelrc names
+just test         # lint, then every test, the view and snapshot tests in the simulator
+just smoke        # the XCUITest smoke test against the built app
+just generate     # an Xcode project, for the debugger and previews
+```
+
+Type a name and, once typing pauses, the screen greets it: "Good day, Ada!".
+
+<!-- app:end -->
 <!-- mcp:begin -->
 
 ## Use it from Claude Code
@@ -148,6 +164,9 @@ result, `{"error": "<reason>"}`, that repeats no part of the request.
 | `ProjectNameServer` | The executable: `ProjectNameServer serve` <!-- server:line --> |
 | `Tools` | The MCP server (`ToolServer`), its tools (`ToolHandler`) and their arguments and results <!-- mcp:line --> |
 | `ProjectNameMCP` | The executable, `projectname-mcp`: the server over stdio <!-- mcp:line --> |
+| `GreetingService` | The service the greeting screen asks, behind a protocol its tests mock <!-- app:line --> |
+| `DesignSystem` | Colors and fonts for light and dark mode and Dynamic Type (iOS) <!-- app:line --> |
+| `GreetingFeature` | The greeting screen, `GreetingView` (iOS) <!-- app:line --> |
 
 ## Development
 
@@ -169,6 +188,10 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just flash`, `just monitor` | The image, flashed to the board; the board's log <!-- embedded:line --> |
 | `just install` | The server, optimized, into `~/.local/bin` for `claude mcp add` <!-- mcp:line --> |
 | `just run` | The server over stdio, waiting for a client <!-- mcp:line --> |
+| `just run` | The app in the simulator <!-- app:line --> |
+| `just lint` | SwiftLint and a11y-check over every first-party target <!-- app:line --> |
+| `just smoke` | The XCUITest smoke test against the built app <!-- app:line --> |
+| `just record-snapshots` | Every snapshot reference, re-recorded into the workspace <!-- app:line --> |
 | `just generate` | An Xcode project from the Bazel graph |
 
 `AGENTS.md` describes the layout, the workflow and the house rules in full.

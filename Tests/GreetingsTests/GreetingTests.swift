@@ -42,11 +42,11 @@ struct GreetingTests {
 
     @Test("Equal greetings hash equally", .tags(.conformance))
     func hashing() {
-        let a = Greeting(name: "Ada").formal().punctuated(with: "!")
-        let b = Greeting(name: "Ada").punctuated(with: "!").formal()
-        #expect(a == b)
-        #expect(a.hashValue == b.hashValue)
-        #expect(Set([a, b]).count == 1)
+        let formalFirst = Greeting(name: "Ada").formal().punctuated(with: "!")
+        let punctuatedFirst = Greeting(name: "Ada").punctuated(with: "!").formal()
+        #expect(formalFirst == punctuatedFirst)
+        #expect(formalFirst.hashValue == punctuatedFirst.hashValue)
+        #expect(Set([formalFirst, punctuatedFirst]).count == 1)
     }
 
     @Test("The checked spelling throws EmptyName for an empty name")

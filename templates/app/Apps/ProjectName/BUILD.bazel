@@ -1,0 +1,27 @@
+load("@rules_apple//apple:ios.bzl", "ios_application")
+load("//tools:swift_rules.bzl", "swift_library")
+
+# The app's own code: the composition root and nothing a test needs to reach.
+swift_library(
+    name = "ProjectNameAppLibrary",
+    srcs = glob(["**/*.swift"]),
+    module_name = "ProjectNameApp",
+    target_compatible_with = ["@platforms//os:ios"],
+    deps = [
+        "//Sources/GreetingFeature",
+    ],
+)
+
+# `just run` launches it in the simulator (.bazelrc picks the device).
+ios_application(
+    name = "ProjectName",
+    bundle_id = "com.example.projectname",
+    families = ["iphone"],
+    infoplists = ["Info.plist"],
+    minimum_os_version = "18.0",
+    visibility = [
+        "//Apps/ProjectNameSmokeTests:__pkg__",
+        "@rules_xcodeproj//xcodeproj:generated",
+    ],
+    deps = [":ProjectNameAppLibrary"],
+)

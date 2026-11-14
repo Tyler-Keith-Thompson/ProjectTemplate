@@ -1,0 +1,23 @@
+load("@rules_apple//apple:ios.bzl", "ios_ui_test")
+load("//tools:swift_rules.bzl", "swift_library")
+
+swift_library(
+    name = "ProjectNameSmokeTestsLibrary",
+    testonly = True,
+    srcs = glob(["**/*.swift"]),
+    module_name = "ProjectNameSmokeTests",
+    target_compatible_with = ["@platforms//os:ios"],
+)
+
+# The end-to-end check: the built app, driven through the simulator. `just smoke` runs it;
+# `manual` keeps it out of `bazel test //...`, and `external` keeps its result out of the cache.
+ios_ui_test(
+    name = "ProjectNameSmokeTests",
+    minimum_os_version = "18.0",
+    tags = [
+        "external",
+        "manual",
+    ],
+    test_host = "//Apps/ProjectName",
+    deps = [":ProjectNameSmokeTestsLibrary"],
+)

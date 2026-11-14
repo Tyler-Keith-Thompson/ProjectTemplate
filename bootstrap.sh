@@ -8,11 +8,12 @@
 #
 # Options (anything not given is asked for when run from a terminal, and defaults to "no"
 # otherwise; --yes takes the defaults without asking):
-#   --type library|server|embedded|mcp
+#   --type library|server|embedded|mcp|app
 #                           A Swift package (default), a Vapor server with a Docker image,
-#                           ESP32 firmware in Embedded Swift (ESP-IDF; needs swiftly), or an MCP
-#                           server over stdio, installed for Claude Code.
-#   --library, --server, --embedded, --mcp
+#                           ESP32 firmware in Embedded Swift (ESP-IDF; needs swiftly), an MCP
+#                           server over stdio, installed for Claude Code, or an iOS app in SwiftUI
+#                           (view, snapshot and smoke tests in the simulator; lint).
+#   --library, --server, --embedded, --mcp, --app
 #                           Shorthands for --type.
 #   --benchmarks            Include the Benchmarks/ package.
 #   --mutation              Mutation testing: scripts/mutate.py and `just mutate <Module>`.
@@ -30,7 +31,8 @@
 #                           (.trunk/trunk.yaml names the checks it waits for), not pushes to main.
 #   --no-ci                 No GitHub Actions workflows (.github/workflows): no CI, releases,
 #                           published docs or explorer, or deploys on push. CI is on by default
-#                           (--ci), and the only option asked as [Y/n].
+#                           (--ci), and the only option asked as [Y/n]. The app type has none: the
+#                           workflows run in Linux containers, and its tests need a Mac.
 #   --no-benchmarks, --no-mutation, --no-fuzz,
 #                           --no-differential, --no-wasm, --no-explore, --no-fly,
 #                           --no-database, --no-trunk
@@ -38,7 +40,7 @@
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
-# The template is the library type in place. The server, embedded and mcp types add
+# The template is the library type in place. The server, embedded, mcp and app types add
 # templates/<type>/ on top, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
 # the template repository runs none of them. Each optional piece keeps or drops the sections marked
 # for it (.github/README.md, "Optional pieces").
@@ -71,6 +73,7 @@ while [ $# -gt 0 ]; do
         --server) TYPE=server ;;
         --embedded) TYPE=embedded ;;
         --mcp) TYPE=mcp ;;
+        --app) TYPE=app ;;
         --benchmarks) BENCHMARKS=true ;;
         --no-benchmarks) BENCHMARKS=false ;;
         --mutation) MUTATION=true ;;
@@ -142,6 +145,7 @@ if [ -z "$TYPE" ]; then
             echo "  2) server   A Vapor server and its Docker image; optionally Fly.io and SQLite"
             echo "  3) embedded ESP32 firmware in Embedded Swift: modules tested on the Mac, built for the chip"
             echo "  4) mcp      An MCP server over stdio: typed tools, installed for Claude Code"
+            echo "  5) app      An iOS app in SwiftUI: view, snapshot and smoke tests in the simulator"
         } > /dev/tty
         while [ -z "$TYPE" ]; do
             printf 'Choose [1]: ' > /dev/tty
@@ -151,6 +155,7 @@ if [ -z "$TYPE" ]; then
                 2|server) TYPE=server ;;
                 3|embedded) TYPE=embedded ;;
                 4|mcp) TYPE=mcp ;;
+                5|app) TYPE=app ;;
             esac
         done
     else
@@ -158,20 +163,27 @@ if [ -z "$TYPE" ]; then
     fi
 fi
 case "$TYPE" in
-    library|server|embedded|mcp) ;;
-    *) echo "Unknown type: $TYPE (library, server, embedded or mcp)" >&2; exit 1 ;;
+    library|server|embedded|mcp|app) ;;
+    *) echo "Unknown type: $TYPE (library, server, embedded, mcp or app)" >&2; exit 1 ;;
 esac
 if [ "$TYPE" != server ] && { [ "$FLY" = true ] || [ "$DATABASE" = true ]; }; then
     echo "--fly and --database apply to the server type only" >&2
     exit 1
 fi
-if { [ "$TYPE" = server ] || [ "$TYPE" = mcp ]; } && [ "$WASM" = true ]; then
+if { [ "$TYPE" = server ] || [ "$TYPE" = mcp ] || [ "$TYPE" = app ]; } && [ "$WASM" = true ]; then
     echo "--wasm applies to the library and embedded types only" >&2
     exit 1
 fi
 if [ "$TYPE" != library ] && [ "$EXPLORE" = true ]; then
     echo "--explore applies to the library type only" >&2
     exit 1
+fi
+if [ "$TYPE" = app ]; then
+    if [ "$CI" = true ] || [ "$TRUNK" = true ]; then
+        echo "The app type has no CI (--ci, --trunk): the workflows run in Linux containers, and its tests need a Mac" >&2
+        exit 1
+    fi
+    CI=false
 fi
 
 ask_unset() {  # ask_unset <current value> <question>; prints the value, asking when unset
@@ -216,7 +228,7 @@ elif [ "$TYPE" = embedded ]; then
     DATABASE=false
     EXPLORE=false
     WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi, a 32-bit Int like the chip's)?")"
-elif [ "$TYPE" = mcp ]; then
+elif [ "$TYPE" = mcp ] || [ "$TYPE" = app ]; then
     FLY=false
     DATABASE=false
     WASM=false
@@ -236,10 +248,12 @@ LIBRARY=false
 SERVER=false
 EMBEDDED=false
 MCP=false
+APP=false
 [ "$TYPE" = library ] && LIBRARY=true
 [ "$TYPE" = server ] && SERVER=true
 [ "$TYPE" = embedded ] && EMBEDDED=true
 [ "$TYPE" = mcp ] && MCP=true
+[ "$TYPE" = app ] && APP=true
 LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
 
@@ -269,6 +283,9 @@ if [ "$EMBEDDED" = true ]; then
 fi
 if [ "$MCP" = true ]; then
     rsync -a "$TEMPLATE/templates/mcp/" "$DEST/" --exclude '.DS_Store'
+fi
+if [ "$APP" = true ]; then
+    rsync -a "$TEMPLATE/templates/app/" "$DEST/" --exclude '.DS_Store'
 fi
 # The workflows live outside .github/workflows here, so the template repository runs none itself.
 if [ "$CI" = true ]; then
@@ -319,7 +336,7 @@ done
 #                                                       uncommented when kept
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" <<'PY'
 import pathlib, re, sys
 
@@ -437,6 +454,11 @@ if [ "$SERVER" = true ]; then
 elif [ "$MCP" = true ]; then
     echo "  2. Replace the examples: the greet tool in Sources/Tools, and the Greetings module (add your"
     echo "     first module to MODULES in scripts/modules.py, remove the Greetings rows, \`just modules\`)."
+elif [ "$APP" = true ]; then
+    echo "  2. Replace the examples: the greeting screen (GreetingFeature), its service (GreetingService) and"
+    echo "     the Greetings module (rows in MODULES, IOS_MODULES and TEST_TARGETS in scripts/modules.py,"
+    echo "     then \`just modules\`). \`just run\` launches the app in the simulator; \`just record-snapshots\`"
+    echo "     re-records the snapshots after a change to how a screen looks."
 elif [ "$EMBEDDED" = true ]; then
     echo "  2. Replace the examples: Firmware/main/Main.swift, and the Greetings module (add your first"
     echo "     module to MODULES and FIRMWARE_MODULES in scripts/modules.py, remove the Greetings rows,"

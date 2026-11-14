@@ -21,10 +21,10 @@ public struct SeededRandomNumberGenerator: RandomNumberGenerator, Sendable {
         var splitMix = UInt64(seed)
         func nextSplitMix() -> UInt64 {
             splitMix &+= 0x9E37_79B9_7F4A_7C15
-            var z = splitMix
-            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-            return z ^ (z >> 31)
+            var mixed = splitMix
+            mixed = (mixed ^ (mixed >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            mixed = (mixed ^ (mixed >> 27)) &* 0x94D0_49BB_1331_11EB
+            return mixed ^ (mixed >> 31)
         }
         state = (nextSplitMix(), nextSplitMix())
     }

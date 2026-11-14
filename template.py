@@ -13,7 +13,7 @@
       generates are regenerated instead of merged. Nothing is committed. PROJECT must be a git
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
-  ./template.py stamp PROJECT [--type library|server|embedded|mcp] [--benchmarks] [--mutation] [--fuzz]
+  ./template.py stamp PROJECT [--type library|server|embedded|mcp|app] [--benchmarks] [--mutation] [--fuzz]
                               [--differential] [--wasm] [--explore] [--fly] [--database] [--no-ci]
                               [--trunk] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
@@ -28,7 +28,7 @@
       that doesn't apply to the project's type. Nothing is committed; PROJECT must have no
       uncommitted changes.
 
-  ./template.py retype PROJECT --type library|server|embedded|mcp
+  ./template.py retype PROJECT --type library|server|embedded|mcp|app
       Change a project's type, such as a library that grew into an MCP server. The template is
       rendered at the stamped commit as the stamp's type and again as the new one, and every file
       that differs is merged three ways into the project, as `add` does; the stamp then records the
@@ -264,7 +264,9 @@ def print_report(report, regenerate):
 
 
 # Options that apply to some types only: the types each applies to.
-TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "fly": ("server",), "database": ("server",)}
+TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "fly": ("server",), "database": ("server",),
+             # The workflows run in Linux containers; an iOS app's tests need a Mac.
+             "ci": ("library", "server", "embedded", "mcp"), "trunk": ("library", "server", "embedded", "mcp")}
 
 
 def add(arguments):
@@ -412,7 +414,7 @@ def main():
 
     stamp_parser = commands.add_parser("stamp", help="record which template commit and options a project matches")
     stamp_parser.add_argument("project")
-    stamp_parser.add_argument("--type", choices=["library", "server", "embedded", "mcp"], default="library")
+    stamp_parser.add_argument("--type", choices=["library", "server", "embedded", "mcp", "app"], default="library")
     for feature in FEATURES:
         if feature in ON_BY_DEFAULT:
             stamp_parser.add_argument(f"--no-{feature}", dest=feature, action="store_false")
@@ -430,7 +432,7 @@ def main():
 
     retype_parser = commands.add_parser("retype", help="change a project's type")
     retype_parser.add_argument("project")
-    retype_parser.add_argument("--type", choices=["library", "server", "embedded", "mcp"], required=True)
+    retype_parser.add_argument("--type", choices=["library", "server", "embedded", "mcp", "app"], required=True)
     retype_parser.set_defaults(run=retype)
 
     arguments = parser.parse_args()

@@ -8,6 +8,23 @@ build --host_macos_minimum_os=15.0
 # two different defaults would discard the analysis cache every time you switched between them.
 build --compilation_mode=dbg
 
+# app:begin
+#| # The iOS app and the simulator tests (IOS_MODULES in scripts/modules.py): Apple silicon simulators,
+#| # on the device and runtime `just run` and `bazel test` boot. Keep --ios_minimum_os in step with
+#| # IOS_MINIMUM there.
+#| build --ios_minimum_os=18.0
+#| build --ios_multi_cpus=sim_arm64
+#| build --ios_simulator_device="iPhone 16 Pro"
+#| build --ios_simulator_version=26.2
+#| run --run_env=BAZEL_APPLE_PREFER_PERSISTENT_SIMS=1
+#|
+#| # `just lint`: SwiftLint and a11y-check over every first-party target (tools/lint.bzl), as a build
+#| # of their reports alone. The aspect follows the app's and the simulator tests' dependencies into
+#| # the iOS modules, and changes no build option, so it keeps the analysis cache.
+#| build:lint --aspects=//tools:lint.bzl%lint_aspect
+#| build:lint --output_groups=lint
+#|
+# app:end
 # Optimized builds, for benchmarks and for checking that tests pass under -O, where
 # copy-on-write and inlining bugs tend to show up.
 build:release --compilation_mode=opt

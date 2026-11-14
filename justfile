@@ -17,9 +17,34 @@ all: build
 build:
     {{BAZEL}} build //...
 
+# !app:begin
 [doc('Run every test')]
 test:
     {{BAZEL}} test //...
+# !app:end
+# app:begin
+#| [doc('Lint, then run every test: the simulator tests boot the simulator .bazelrc names')]
+#| test: lint
+#|     {{BAZEL}} test //...
+#|
+#| [doc('SwiftLint and a11y-check over every first-party target (tools/lint.bzl)')]
+#| lint:
+#|     {{BAZEL}} build //... --config=lint
+#|
+#| [doc('Launch the app in the simulator')]
+#| run:
+#|     {{BAZEL}} run //Apps/ProjectName
+#|
+#| [doc('The XCUITest smoke test: the built app, driven in the simulator (never cached)')]
+#| smoke:
+#|     {{BAZEL}} test //Apps/ProjectNameSmokeTests
+#|
+#| # Recording sets test environment variables, which changes the configuration, so this one command
+#| # lets Bazel discard its analysis cache.
+#| [doc('Re-record every snapshot reference into the workspace, after a change to how a screen looks')]
+#| record-snapshots:
+#|     {{BAZEL}} test //... --allow_analysis_cache_discard --nocache_test_results --test_env=SNAPSHOT_TESTING_RECORD=all --test_env=SNAPSHOT_REFERENCE_ROOT="$PWD"
+# app:end
 
 [doc('Run one test target, e.g. just test-one //Tests/GreetingsTests')]
 test-one target:

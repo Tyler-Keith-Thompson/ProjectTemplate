@@ -1,0 +1,19 @@
+load("//tools:swift_rules.bzl", "swift_library")
+
+# Snapshot assertions that find their references under Bazel: in the test bundle's
+# Snapshots.bundle, or in the workspace while recording (`just record-snapshots`). A simulator test
+# target lists it as "//tools/snapshots:BazelSnapshotTesting" (TEST_TARGETS in scripts/modules.py).
+swift_library(
+    name = "BazelSnapshotTesting",
+    testonly = True,
+    srcs = glob(["**/*.swift"]),
+    module_name = "BazelSnapshotTesting",
+    target_compatible_with = ["@platforms//os:ios"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@swiftpkg_swift_snapshot_testing//:SnapshotTesting",
+        "@swiftpkg_xctest_dynamic_overlay//:IssueReporting",
+        # Routes reportIssue to Swift Testing; without it, an issue stops the test process.
+        "@swiftpkg_xctest_dynamic_overlay//:IssueReportingTestSupport",
+    ],
+)

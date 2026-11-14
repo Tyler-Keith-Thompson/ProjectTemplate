@@ -17,6 +17,14 @@ Sources/App/                     The Vapor application: configure(_:), routes, m
 Sources/ProjectNameServer/       The executable (@main): builds an Application, configures, serves <!-- server:line -->
 Sources/Tools/                   The MCP server: ToolServer, and a ToolHandler per tool with its arguments and result <!-- mcp:line -->
 Sources/ProjectNameMCP/          The executable (@main), projectname-mcp: serves the tools over stdio <!-- mcp:line -->
+Sources/GreetingService/         The service the screen asks: a @Mockable protocol, its _GreetingService, a Factory <!-- app:line -->
+Sources/DesignSystem/            Color and font tokens for light and dark mode and Dynamic Type (iOS) <!-- app:line -->
+Sources/GreetingFeature/         The greeting screen, GreetingView (iOS) <!-- app:line -->
+Apps/ProjectName/                The iOS app: the composition root, Info.plist, the ios_application <!-- app:line -->
+Apps/ProjectNameSmokeTests/      The one XCUITest, against the built app (`just smoke`) <!-- app:line -->
+tools/snapshots/                 assertBazelSnapshot: snapshot references read from the test bundle under Bazel <!-- app:line -->
+tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- app:line -->
+tools/lint.bzl                   `just lint`: SwiftLint (.swiftlint.yml) and a11y-check over first-party targets <!-- app:line -->
 Tests/ProjectNameTests/          The README examples, verbatim <!-- library:line -->
 Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
@@ -107,6 +115,10 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just menuconfig`, `just firmware-size` | Change ESP-IDF settings (saved to `Firmware/sdkconfig.defaults`); the image's size by component <!-- embedded:line --> |
 | `just install` | Build the server optimized and install it as `~/.local/bin/projectname-mcp`, the binary `claude mcp add` registers <!-- mcp:line --> |
 | `just run [args]` | The server over stdio (`bazel run //Sources/ProjectNameMCP`), waiting for a client <!-- mcp:line --> |
+| `just run` | The app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- app:line --> |
+| `just lint` | SwiftLint and a11y-check over every first-party target; `just test` runs it first <!-- app:line --> |
+| `just smoke` | The XCUITest smoke test, launching the built app in the simulator <!-- app:line --> |
+| `just record-snapshots` | Re-record every snapshot reference after a change to how a screen looks <!-- app:line --> |
 | `bazel query 'rdeps(//Tests/..., //Sources/X)'` | Test targets affected by a change to X |
 
 - Debug is the default configuration. Every test target except the `XPerformanceTests` ones is
@@ -258,6 +270,47 @@ modules from `//Firmware:Modules`, which the firmware build has Bazel build firs
   `claude mcp list` (or a new session) to see it connect.
 
 <!-- mcp:end -->
+<!-- app:begin -->
+## App
+
+The app is `Apps/ProjectName`: the composition root and nothing else. Screens live in feature
+modules, which build on services, which hold no UI (Seams and composition, below).
+
+- A module that imports SwiftUI or UIKit for its views goes in `IOS_MODULES` (`scripts/modules.py`)
+  as well as `MODULES`. Bazel builds it for the simulator only; Package.swift, the umbrella and the
+  docs leave it out, and anything that depends on it must be iOS too. A service stays out of
+  `IOS_MODULES`, so its tests run on the Mac, fast, as `swift_test`.
+- A test target that depends on an iOS module (or on a label such as
+  `//tools/snapshots:BazelSnapshotTesting`) runs in the simulator as an `ios_unit_test` hosted by
+  `tools/test_host`, with `__Snapshots__` packaged into its bundle. Package.swift leaves it out.
+- **A view is a function of its state.** The state is one enum (`ViewState`) with a case per
+  screen the view can show, set in one place from what the service returned. The view resolves its
+  service and clock with `@ConstructorInjected`. Work starts in `.task` (`.task(id:)` restarts it
+  when its input changes) and checks `Task.isCancelled` before writing state.
+- **View tests** use ViewInspector: host the view (`ViewHosting.host`), act through
+  `sut.inspection.inspect` (`setInput`, `tap`), advance the `TestClock`, then inspect what it shows.
+  They run `@MainActor`, `.serialized`, under `withMainSerialExecutor`, each with its own
+  `withTestContainer`. The view's `let inspection = Inspection<Self>()` and its `.onReceive` are the
+  one hook production code carries for tests.
+- **Snapshot tests** pin how each state renders: light and dark, and Dynamic Type at `.xSmall` and
+  `.accessibility5`, through `assertBazelSnapshot`. A snapshot is worth only what a person reads in
+  it, so look at every recorded image before committing it. After a change to how a screen looks,
+  `just record-snapshots`, then review the changed images in `git diff`.
+- **The smoke test** (`Apps/ProjectNameSmokeTests`) is the one XCUITest, and the one use of
+  XCTest: launch the app, do the main thing, see the result. Everything else is proved by view and
+  snapshot tests, which are fast and deterministic. `just smoke` after a change to the app target or
+  to how screens connect.
+- **Accessibility**: every control has an `accessibilityLabel`; an image that only decorates is
+  `accessibilityHidden(true)`; rows that read as one item combine (`.accessibilityElement(children:
+  .combine)`); animations respect `accessibilityReduceMotion`; sizes that should grow with text use
+  `@ScaledMetric`. `just lint` runs a11y-check over the views.
+- **Design tokens**: colors and fonts come from `DesignSystem` (`Color.textPrimary`,
+  `Font.titleBold`), each with light and dark values and a Dynamic Type text style, never a literal
+  in a view.
+- `just lint` (SwiftLint, `--strict`, `.swiftlint.yml` plus `.swiftlint-tests.yml` for tests) must
+  pass; fix the code rather than disable a rule inline.
+
+<!-- app:end -->
 ## Building blocks
 
 The owner's own libraries, first in line under "Don't reinvent the wheel" (House rules). Reach
@@ -348,6 +401,8 @@ Watch for these:
 | A module in `DIFFERENTIAL_DEPENDENCIES` | `just diff --module <Module>` <!-- differential:line --> |
 | A module in `FIRMWARE_MODULES`, or `Firmware/` | `just firmware` (needs ESP-IDF; say so when it isn't installed) <!-- embedded:line --> |
 | `Sources/ProjectNameMCP`, or anything that writes to standard output | `just install`, then `claude mcp list` shows it connected <!-- mcp:line --> |
+| A view, or anything a view draws with | `just test` (lint, view and snapshot tests); `just record-snapshots` if it should look different, then review the images <!-- app:line --> |
+| `Apps/`, or how screens connect | `just smoke` <!-- app:line --> |
 | Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |

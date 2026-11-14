@@ -64,6 +64,13 @@ An MCP server adds a `Tools` module (a `ToolServer` and a typed `ToolHandler` pe
 through a real client over an in-memory transport), an executable serving them over stdio, and
 `just install`, which puts the optimized binary where `claude mcp add` points.
 
+An app adds an iOS app in SwiftUI built in layers: a `GreetingService` behind a `@Mockable`
+protocol, a `DesignSystem` of light and dark tokens, and a `GreetingFeature` screen whose state is
+one enum. Its view tests run in the simulator under ViewInspector with an injected `TestClock`;
+snapshot tests pin each state in light, dark and two Dynamic Type sizes; one XCUITest smoke-tests
+the built app (`just smoke`); and `just lint` runs SwiftLint and a11y-check. It has no CI: the
+workflows run in Linux containers, and an iOS app's tests need a Mac.
+
 ## Requirements
 
 macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. Benchmarks need
@@ -74,7 +81,8 @@ macOS with Xcode's Swift 6.3 toolchain, and from Homebrew: `bazelisk`, `just`. B
 explorer needs the same toolchain and SDK, and `binaryen` for `wasm-opt`. Firmware needs swiftly's
 Swift 6.3.3 (`swiftly install 6.3.3`), since Xcode's toolchain has no Embedded Swift for RISC-V, and
 [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/) 5.5 in
-`~/esp/esp-idf` or `IDF_PATH`, for building the image.
+`~/esp/esp-idf` or `IDF_PATH`, for building the image. An app needs an iOS 18 simulator runtime in
+Xcode (the device and runtime `.bazelrc` names).
 
 ## Starting a project
 
@@ -86,6 +94,7 @@ Swift 6.3.3 (`swiftly install 6.3.3`), since Xcode's toolchain has no Embedded S
 ./bootstrap.sh --server --yes MyService                  # a server, nothing optional, no prompts
 ./bootstrap.sh --embedded --wasm MyGadget                # ESP32 firmware, its tests also on a 32-bit Int
 ./bootstrap.sh --mcp MyTools                             # an MCP server for Claude Code
+./bootstrap.sh --app MyApp                               # an iOS app in SwiftUI
 ```
 
 The name must be an UpperCamelCase Swift module name. The destination defaults to
@@ -102,6 +111,7 @@ then prints what to fill in.
 | `library` (default) | Nothing: the template as it stands. A Swift package published through SwiftPM, with README examples as tests (`Tests/ProjectNameTests`). |
 | `server` | `templates/server/` on top: a Vapor `App` module (`configure(_:)`, routes), a `ProjectNameServer` executable, `AppTests` (VaporTesting), a Dockerfile building with SwiftPM pinned by `swift/Package.resolved`, `just run`, `just docker`, and a k6 load test (`LoadTests/load.js`, `just load`) against a fresh production image. Platforms narrow to macOS; the README's installation section and README tests are dropped. |
 | `mcp` | `templates/mcp/` on top: a `Tools` module on the [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk) (`ToolServer`; `ToolHandler`, whose work takes `Decodable` arguments and returns or throws `Encodable` values, sent as structured content and as JSON text; an example `greet` tool), `ToolsTests` against a real client over `InMemoryTransport`, a `ProjectNameMCP` executable (swift-argument-parser) serving them on `StdioTransport`, `just run`, and `just install` into `~/.local/bin/projectname-mcp`. Platforms narrow to macOS; the README's installation section and README tests are dropped, and the README says how to register the server with `claude mcp add`. |
+| `app` | `templates/app/` on top: an iOS app in SwiftUI (`Apps/ProjectName`, an `ios_application` holding only the composition root), a `GreetingService` module (a `@Mockable` protocol, `_GreetingService`, a `Container` factory) tested on the Mac, and two iOS modules (`IOS_MODULES` in `scripts/modules.py`), `DesignSystem` and `GreetingFeature`, which Bazel builds for the simulator and Package.swift leaves out. `GreetingFeatureTests` runs in the simulator: ViewInspector tests with a `TestClock` under `withMainSerialExecutor`, and snapshot tests through `tools/snapshots` (references in `__Snapshots__`, packaged into the bundle; `just record-snapshots`). An XCUITest smoke test (`just smoke`), `just run`, and `just lint` (`tools/lint.bzl`: SwiftLint with `.swiftlint.yml`, and a11y-check), which `just test` runs first. No CI (`--ci` and `--trunk` are refused); the README's installation section and README tests are dropped. |
 | `embedded` | `templates/embedded/` on top: `Firmware/`, an ESP-IDF project for the ESP32-C6 whose app (`Firmware/main`) is Embedded Swift; `tools/embedded.bzl`, which compiles every module in `FIRMWARE_MODULES` (`scripts/modules.py`) as Embedded Swift for the chip beside its host library (`//Sources/X:XEmbedded`, built by `bazel build //...`) and gathers them as `//Firmware:Modules`; and `tools/embedded-swift`, the one swift.org toolchain both builds use. `just firmware`, `just flash`, `just monitor`, `just menuconfig`, `just firmware-size`. Platforms narrow to macOS; the README's installation section and README tests are dropped. |
 
 ### Options
@@ -177,7 +187,7 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `mcp`, `fly`, `database`, `litestream`, `ci`, `trunk`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `ci`, `trunk`) keeps
 or drops the sections marked for it, in any text file:
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
@@ -221,6 +231,7 @@ numbering intact.
 | Executables | `EXECUTABLES` in `scripts/modules.py` | `.executableTarget` in SwiftPM, `swift_binary` in Bazel, a run scheme in Xcode; left out of the umbrella and the docs |
 | Server type | `templates/server/` | Vapor, Docker, a k6 load test, optionally Fly.io, SQLite and Litestream |
 | MCP type | `templates/mcp/` | `Tools` (`ToolServer`, `ToolHandler`), the stdio executable, `just install` |
+| App type | `templates/app/`, `IOS_MODULES` in `scripts/modules.py` | iOS modules get `target_compatible_with` iOS and no docs; Package.swift declares only the packages its own targets use; a test target depending on one becomes an `ios_unit_test` hosted by `tools/test_host` (a logic test can't give a window a scene) on rules_apple's xcodebuild runner (the default one fails a run of Swift Testing tests alone), with a `Snapshots` resource bundle; `tools/ios.bzl` (generated) tells the root BUILD which packages to leave out of the docs and `//:package_swift_test`. Lint is an aspect (`tools/lint.bzl`) over `swift_library` targets with no external workspace |
 | Embedded type | `templates/embedded/`, `FIRMWARE_MODULES` in `scripts/modules.py` | `embedded_swift_module` per firmware module and `embedded_swift_firmware` (`tools/embedded.bzl`); the ESP-IDF build runs Bazel before compiling the app, checks the modules' architecture against the chip's, and keeps the GOT that Swift's position-independent code needs (`Firmware/main/swift.lf`) |
 | Example module | `Sources/Greetings`, `Tests/GreetingsTests` | The house style: composable value type, plain/checked spellings, hand-worked, edge, exit and property tests |
 | Agent instructions | `AGENTS.md` (`CLAUDE.md` includes it) | Layout, commands, building blocks, feature checklist, house rules, API conventions |
@@ -233,11 +244,12 @@ The template repository runs no CI, so these local checks are all that stands be
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
 directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential`, `--wasm` and `--explore`; `--server`
-alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`; `--mcp`. For a server change, also run `just spm`
+alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`; `--mcp`; `--app` alone and with `--benchmarks --mutation`. For a server change, also run `just spm`
 and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30` and
 `just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`; for an explorer change, `just explore`; for an
 embedded change, `just firmware` in the bootstrapped project; for an MCP change, `INSTALL_DIR=<scratch> just install`
-and an `initialize`, `tools/list` and `tools/call` piped into the installed binary.
+and an `initialize`, `tools/list` and `tools/call` piped into the installed binary; for an app change,
+`just lint`, `just smoke` and, after a change to how a screen looks, `just record-snapshots` with the images reviewed.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.
