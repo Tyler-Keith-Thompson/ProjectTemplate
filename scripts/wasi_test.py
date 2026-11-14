@@ -49,6 +49,21 @@ def run(cmd, env, log, timeout):
             return -1
 
 
+def group_failed(lines):
+    """Whether a group's test log shows a failure.
+
+    Every time limit is reported exceeded on WASI (see `main`), so the binary's exit status says
+    nothing on its own. A group fails when an issue besides a time limit was recorded, or when the
+    log has no summary line: the binary trapped or was killed before the run finished.
+    """
+    summary = any(re.search(r"Test run with \d+ tests", line) for line in lines)
+    return bool(issues_besides_time_limits(lines)) or not summary
+
+
+def issues_besides_time_limits(lines):
+    return [line for line in lines if "recorded an issue" in line and "Time limit was exceeded" not in line]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("-c", "--configuration", default="debug", choices=["debug", "release"])
@@ -90,7 +105,7 @@ def main():
         lines = open(log, errors="replace").read().splitlines()
         summary = [line.strip() for line in lines if re.search(r"Test run with \d+ tests", line)]
         # Every time limit is reported exceeded (see above); the rest are the issues that matter.
-        issues = [line for line in lines if "recorded an issue" in line and "Time limit was exceeded" not in line]
+        issues = issues_besides_time_limits(lines)
         print(f"{tag} exit {status}: {summary[-1] if summary else 'no summary'}; {len(issues)} issues besides time"
               f" limits ({', '.join(group)})")
         for line in issues[:20]:
@@ -99,7 +114,7 @@ def main():
         frames = [line.strip() for line in lines if re.search(r"xctest!\S*Tests", line)]
         for line in frames[:3]:
             print("    trap: " + line[:300])
-        if status != 0:
+        if group_failed(lines):
             failed.append(tag)
     print("FAILED: " + ", ".join(failed) if failed else "All groups passed.")
     return 1 if failed else 0
