@@ -34,7 +34,9 @@ Differential/                    The library side of `just diff`; scripts/differ
 Explore/                         The browser explorer: pages running the library as WebAssembly (`just explore`) <!-- explore:line -->
 Firmware/                        The ESP-IDF project: main/ is the app; BUILD.bazel gathers the modules it imports <!-- embedded:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
-                                 tools/bazel turns BuildBuddy on when the Keychain holds its key
+                                 tools/bazel turns BuildBuddy on when the Keychain holds its key, and
+                                 on macOS sweeps stale output bases once a day (tools/sweep-output-bases):
+                                 a deleted workspace's, or one idle 7 days
 tools/embedded.bzl               Modules compiled as Embedded Swift, through tools/embedded-swift's toolchain <!-- embedded:line -->
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
 LoadTests/load.js                The k6 load test that `just load` runs against the image <!-- server:line -->
