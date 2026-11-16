@@ -319,14 +319,19 @@ modules, which build on services, which hold no UI (Seams and composition, below
 <!-- views:begin -->
 ## Views
 
-Some modules hold SwiftUI views (`GreetingsUI`). They are ordinary library modules: in `MODULES`,
-in Package.swift and the umbrella, built for macOS by Bazel and for every platform by SwiftPM.
+Some modules hold SwiftUI views. The template's example is `GreetingsUI` (`GreetingCard`, a view
+of a `Greeting`), to be replaced by the project's first real view module. View modules are ordinary
+library modules: in `MODULES` and Package.swift, and in the umbrella module when the package has
+one, built for macOS by Bazel and for every platform by SwiftPM.
 
-- **Linux builds them empty.** SwiftUI is on Apple platforms alone, and CI builds on
-  Linux, so a view module's sources sit under `#if canImport(SwiftUI)` and its tests under
-  `#if os(macOS)`. The view-test packages (ViewInspector, SnapshotTesting, IssueReporting) are in
-  `APPLE_ONLY_PACKAGES`, so Linux links none of them, and a test target of views alone is in
-  `APPLE_ONLY_TESTS`, so Bazel skips it off macOS rather than fail a run of no tests.
+- **Linux builds them empty.** SwiftUI is on Apple platforms alone, and CI builds on Linux, as can <!-- ci:line -->
+  anyone who depends on the package, so a view module's sources sit under <!-- ci:line -->
+- **Linux builds them empty.** SwiftUI is on Apple platforms alone, and anyone who depends on the <!-- !ci:line -->
+  package can build it on Linux, so a view module's sources sit under <!-- !ci:line -->
+  `#if canImport(SwiftUI)` and its tests under `#if os(macOS)`. The view-test packages
+  (ViewInspector, SnapshotTesting, IssueReporting) are in `APPLE_ONLY_PACKAGES`, so Linux links
+  none of them, and a test target of views alone is in `APPLE_ONLY_TESTS`, so Bazel skips it off
+  macOS rather than fail a run of no tests.
   The DocC workflow runs on macOS, so the published site documents the views; the rest of CI <!-- ci:line -->
   stays on Linux. <!-- ci:line -->
 - **A view is a function of its input.** It takes values (`GreetingCard(greeting:)`), keeps what
