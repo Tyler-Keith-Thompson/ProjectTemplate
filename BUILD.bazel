@@ -111,8 +111,8 @@ docc_site(
     tags = ["manual"],
 )
 
-# SwiftLint's configurations, which `just lint` reads (tools/lint.bzl). # app:line
-#| exports_files([".swiftlint.yml", ".swiftlint-tests.yml"])  # app:line
+# SwiftLint's configurations, which `just lint` reads (tools/lint.bzl). # swiftui:line
+#| exports_files([".swiftlint.yml", ".swiftlint-tests.yml"])  # swiftui:line
 
 # The root manifest, which each benchmark's measurement stages (Benchmarks/BUILD.bazel). # benchmarks:line
 exports_files(["Package.swift"])  # benchmarks:line

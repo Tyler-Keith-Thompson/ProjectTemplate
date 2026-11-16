@@ -23,6 +23,9 @@
 #                           `Int`), `just wasi-test`.
 #   --explore               Library only: a browser explorer (Explore/, `just explore`), published
 #                           with the docs.
+#   --views                 Library only: a SwiftUI view module for macOS and iOS, with ViewInspector
+#                           view tests and snapshot tests on the Mac (`just record-snapshots`), and
+#                           `just lint` (SwiftLint and a11y-check).
 #   --fly                   Server only: deploy to Fly.io (fly.toml; with CI, a deploy job in
 #                           Release deploys every push to main, else `just deploy` only).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
@@ -34,20 +37,20 @@
 #                           (--ci), and the only option asked as [Y/n]. The app type has none: the
 #                           workflows run in Linux containers, and its tests need a Mac.
 #   --no-benchmarks, --no-mutation, --no-fuzz,
-#                           --no-differential, --no-wasm, --no-explore, --no-fly,
+#                           --no-differential, --no-wasm, --no-explore, --no-views, --no-fly,
 #                           --no-database, --no-trunk
 #   --yes, -y               Ask nothing.
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
 # The template is the library type in place. The server, embedded, mcp and app types add
-# templates/<type>/ on top, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
+# templates/<type>/ on top, --views adds templates/views/, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
 # the template repository runs none of them. Each optional piece keeps or drops the sections marked
 # for it (.github/README.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
-    sed -n '3,40p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,44p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -58,6 +61,7 @@ FUZZ=""
 DIFFERENTIAL=""
 WASM=""
 EXPLORE=""
+VIEWS=""
 FLY=""
 DATABASE=""
 CI=""
@@ -86,6 +90,8 @@ while [ $# -gt 0 ]; do
         --no-wasm) WASM=false ;;
         --explore) EXPLORE=true ;;
         --no-explore) EXPLORE=false ;;
+        --views) VIEWS=true ;;
+        --no-views) VIEWS=false ;;
         --fly) FLY=true ;;
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
@@ -178,6 +184,10 @@ if [ "$TYPE" != library ] && [ "$EXPLORE" = true ]; then
     echo "--explore applies to the library type only" >&2
     exit 1
 fi
+if [ "$TYPE" != library ] && [ "$VIEWS" = true ]; then
+    echo "--views applies to the library type only (the app type has its own views and tests)" >&2
+    exit 1
+fi
 if [ "$TYPE" = app ]; then
     if [ "$CI" = true ] || [ "$TRUNK" = true ]; then
         echo "The app type has no CI (--ci, --trunk): the workflows run in Linux containers, and its tests need a Mac" >&2
@@ -223,21 +233,25 @@ if [ "$TYPE" = server ]; then
     fi
     WASM=false
     EXPLORE=false
+    VIEWS=false
 elif [ "$TYPE" = embedded ]; then
     FLY=false
     DATABASE=false
     EXPLORE=false
+    VIEWS=false
     WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi, a 32-bit Int like the chip's)?")"
 elif [ "$TYPE" = mcp ] || [ "$TYPE" = app ]; then
     FLY=false
     DATABASE=false
     WASM=false
     EXPLORE=false
+    VIEWS=false
 else
     FLY=false
     DATABASE=false
     WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi)?")"
     EXPLORE="$(ask_unset "$EXPLORE" "A browser explorer?")"
+    VIEWS="$(ask_unset "$VIEWS" "SwiftUI views (view and snapshot tests, lint)?")"
 fi
 BENCHMARKS="$(ask_unset "$BENCHMARKS" "Benchmarks package?")"
 MUTATION="$(ask_unset "$MUTATION" "Mutation testing?")"
@@ -256,9 +270,13 @@ APP=false
 [ "$TYPE" = app ] && APP=true
 LITESTREAM=false
 [ "$FLY" = true ] && [ "$DATABASE" = true ] && LITESTREAM=true
+# What the app type and --views share: SwiftLint and a11y-check (`just lint`), and the packages
+# view and snapshot tests use.
+SWIFTUI=false
+{ [ "$APP" = true ] || [ "$VIEWS" = true ]; } && SWIFTUI=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, views: $VIEWS, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -287,6 +305,9 @@ fi
 if [ "$APP" = true ]; then
     rsync -a "$TEMPLATE/templates/app/" "$DEST/" --exclude '.DS_Store'
 fi
+if [ "$VIEWS" = true ]; then
+    rsync -a "$TEMPLATE/templates/views/" "$DEST/" --exclude '.DS_Store'
+fi
 # The workflows live outside .github/workflows here, so the template repository runs none itself.
 if [ "$CI" = true ]; then
     rsync -a "$TEMPLATE/templates/ci/" "$DEST/" --exclude '.DS_Store'
@@ -305,6 +326,7 @@ remove_unless "$MUTATION" scripts/mutate.py scripts/mutants
 remove_unless "$FUZZ" Fuzz scripts/fuzz.py
 remove_unless "$WASM" scripts/wasi_test.py
 remove_unless "$EXPLORE" Explore
+remove_unless "$SWIFTUI" tools/lint.bzl third_party .swiftlint.yml .swiftlint-tests.yml
 remove_unless "$DIFFERENTIAL" Differential scripts/differential.py scripts/differential_greetings.py
 remove_unless "$FLY" fly.toml
 remove_unless "$DATABASE" Sources/App/Database
@@ -336,7 +358,7 @@ done
 #                                                       uncommented when kept
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "swiftui=$SWIFTUI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" <<'PY'
 import pathlib, re, sys
 
@@ -412,14 +434,14 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$VIEWS" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, fly, database, ci, trunk, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, views, fly, database, ci, trunk, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
          "mutation": mutation == "true", "fuzz": fuzz == "true",
          "differential": differential == "true", "wasm": wasm == "true",
-         "explore": explore == "true", "fly": fly == "true", "database": database == "true",
+         "explore": explore == "true", "views": views == "true", "fly": fly == "true", "database": database == "true",
          "ci": ci == "true", "trunk": trunk == "true"}
 if modified == "true":
     stamp["modified"] = True
@@ -464,6 +486,10 @@ elif [ "$EMBEDDED" = true ]; then
     echo "     module to MODULES and FIRMWARE_MODULES in scripts/modules.py, remove the Greetings rows,"
     echo "     \`just modules\`). The chip is Firmware/sdkconfig.defaults' (ESP32-C6); \`just firmware\`"
     echo "     builds the image and \`just flash\` flashes it (ESP-IDF 5.5 in ~/esp/esp-idf or IDF_PATH)."
+elif [ "$VIEWS" = true ]; then
+    echo "  2. Replace the examples: the Greetings module and its view module, GreetingsUI (rows in"
+    echo "     MODULES and TEST_TARGETS in scripts/modules.py, then \`just modules\`). \`just record-snapshots\`"
+    echo "     re-records the snapshots after a change to how a view looks."
 else
     echo "  2. Replace the Greetings example: add your first module to MODULES in scripts/modules.py,"
     echo "     remove the Greetings rows and directories, run \`just modules\`."

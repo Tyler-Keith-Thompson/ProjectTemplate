@@ -17,19 +17,36 @@ all: build
 build:
     {{BAZEL}} build //...
 
-# !app:begin
+# !swiftui:begin
 [doc('Run every test')]
 test:
     {{BAZEL}} test //...
-# !app:end
+# !swiftui:end
+# views:begin
+#| [doc('Lint, then run every test')]
+#| test: lint
+#|     {{BAZEL}} test //...
+#|
+#| # SwiftPM compiles #filePath as an absolute path, so SnapshotTesting writes each reference beside
+#| # its test; under Bazel it would land in the test's runfiles. Recording reports every snapshot it
+#| # wrote as an issue, so the tests fail; run `just test` afterwards to check against them. Then the
+#| # generator runs, since a target's first __Snapshots__ needs excluding from Package.swift.
+#| [doc('Re-record every snapshot reference into the workspace, after a change to how a view looks')]
+#| record-snapshots:
+#|     -SNAPSHOT_TESTING_RECORD=all {{SWIFT}} test
+#|     python3 {{PROJECT_ROOT}}/scripts/modules.py
+#|
+# views:end
+# swiftui:begin
+#| [doc('SwiftLint and a11y-check over every first-party target (tools/lint.bzl)')]
+#| lint:
+#|     {{BAZEL}} build //... --config=lint
+#|
+# swiftui:end
 # app:begin
 #| [doc('Lint, then run every test: the simulator tests boot the simulator .bazelrc names')]
 #| test: lint
 #|     {{BAZEL}} test //...
-#|
-#| [doc('SwiftLint and a11y-check over every first-party target (tools/lint.bzl)')]
-#| lint:
-#|     {{BAZEL}} build //... --config=lint
 #|
 #| [doc('Launch the app in the simulator')]
 #| run:

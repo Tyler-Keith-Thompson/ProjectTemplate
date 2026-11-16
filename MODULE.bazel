@@ -57,12 +57,14 @@ use_repo(
     #| "swiftpkg_swift_async_algorithms",
     #| "swiftpkg_swift_clocks",
     #| "swiftpkg_swift_concurrency_extras",
+    # app:end
+    # swiftui:begin
     #| "swiftpkg_swift_snapshot_testing",
     #| "swiftpkg_viewinspector",
     #| "swiftpkg_xctest_dynamic_overlay",
-    # app:end
+    # swiftui:end
 )
-# app:begin
+# swiftui:begin
 #|
 #| # ── Lint ─────────────────────────────────────────────────────────────
 #| # `just lint` (tools/lint.bzl): SwiftLint on every first-party target, and a11y-check, which reads
@@ -81,4 +83,4 @@ use_repo(
 #|     strip_prefix = "ios-swiftui-accessibility-techniques-0.7.0/a11y-check",
 #|     urls = ["https://github.com/cvs-health/ios-swiftui-accessibility-techniques/archive/refs/tags/0.7.0.tar.gz"],
 #| )
-# app:end
+# swiftui:end

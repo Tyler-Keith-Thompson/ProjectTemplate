@@ -24,7 +24,9 @@ Apps/ProjectName/                The iOS app: the composition root, Info.plist, 
 Apps/ProjectNameSmokeTests/      The one XCUITest, against the built app (`just smoke`) <!-- app:line -->
 tools/snapshots/                 assertBazelSnapshot: snapshot references read from the test bundle under Bazel <!-- app:line -->
 tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- app:line -->
-tools/lint.bzl                   `just lint`: SwiftLint (.swiftlint.yml) and a11y-check over first-party targets <!-- app:line -->
+Sources/GreetingsUI/             GreetingCard, a SwiftUI view of a Greeting for macOS and iOS <!-- views:line -->
+Tests/GreetingsUITests/          Its ViewInspector and snapshot tests, run on the Mac; __Snapshots__ the references <!-- views:line -->
+tools/lint.bzl                   `just lint`: SwiftLint (.swiftlint.yml) and a11y-check over first-party targets <!-- swiftui:line -->
 Tests/ProjectNameTests/          The README examples, verbatim <!-- library:line -->
 Tests/ProjectNameTestSupport/    Shared test fixtures (data only)
 scripts/modules.py               The module graph
@@ -118,9 +120,10 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just install` | Build the server optimized and install it as `~/.local/bin/projectname-mcp`, the binary `claude mcp add` registers <!-- mcp:line --> |
 | `just run [args]` | The server over stdio (`bazel run //Sources/ProjectNameMCP`), waiting for a client <!-- mcp:line --> |
 | `just run` | The app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- app:line --> |
-| `just lint` | SwiftLint and a11y-check over every first-party target; `just test` runs it first <!-- app:line --> |
+| `just lint` | SwiftLint and a11y-check over every first-party target; `just test` runs it first <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test, launching the built app in the simulator <!-- app:line --> |
-| `just record-snapshots` | Re-record every snapshot reference after a change to how a screen looks <!-- app:line --> |
+| `just record-snapshots` | Re-record every snapshot reference after a change to how a screen looks <!-- app:line -->
+| `just record-snapshots` | Re-record every snapshot reference (through SwiftPM) after a change to how a view looks <!-- views:line --> |
 | `bazel query 'rdeps(//Tests/..., //Sources/X)'` | Test targets affected by a change to X |
 
 - Debug is the default configuration. Every test target except the `XPerformanceTests` ones is
@@ -313,6 +316,44 @@ modules, which build on services, which hold no UI (Seams and composition, below
   pass; fix the code rather than disable a rule inline.
 
 <!-- app:end -->
+<!-- views:begin -->
+## Views
+
+Some modules hold SwiftUI views (`GreetingsUI`). They are ordinary library modules: in `MODULES`,
+in Package.swift and the umbrella, built for macOS by Bazel and for every platform by SwiftPM.
+
+- **Linux builds them empty.** SwiftUI is on Apple platforms alone, and CI and the docs build on
+  Linux, so a view module's sources sit under `#if canImport(SwiftUI)` and its tests under
+  `#if os(macOS)`. The view-test packages (ViewInspector, SnapshotTesting, IssueReporting) are in
+  `APPLE_ONLY_PACKAGES`, so Linux links none of them, and a test target of views alone is in
+  `APPLE_ONLY_TESTS`, so Bazel skips it off macOS rather than fail a run of no tests.
+- **A view is a function of its input.** It takes values (`GreetingCard(greeting:)`), keeps what
+  it changes itself in `@State`, and holds no services: a view that needs one takes a closure or a
+  value from the caller. When a screen can show several things, its state is one enum with a case
+  per thing (Seams and composition). A module that grows a seam (network, disk, clock) puts it behind
+  a protocol as that section says, in a module of its own below the views.
+- **View tests** use ViewInspector on the Mac: host the view (`ViewHosting.host`), act through
+  `sut.inspection.inspect` (`tap`, `setInput`), then inspect what it shows. They run `@MainActor`
+  and `.serialized`. The view's `let inspection = Inspection<Self>()` and its `.onReceive` are the
+  one hook production code carries for tests; the test target makes `Inspection` an
+  `InspectionEmissary`.
+- **Snapshot tests** pin how each state renders, in light and dark: `ImageRenderer` draws the view
+  in the color scheme the test sets, and `assertSnapshot` compares it with the reference in
+  `__Snapshots__` beside the test (Bazel puts them in the test's runfiles). macOS doesn't scale
+  text with Dynamic Type, so the Mac pins no Dynamic Type sizes. `ImageRenderer` draws SwiftUI's
+  own views; one that wraps AppKit (`NSViewRepresentable`) renders as a placeholder, so host that
+  one in an `NSWindow` and snapshot the `NSHostingView`. A snapshot is worth only what a person
+  reads in it, so look at every recorded image before committing it. After a change to how a view
+  looks, `just record-snapshots`, then review the changed images in `git diff`.
+- **Accessibility**: every control has an `accessibilityLabel`; an image that only decorates is
+  `accessibilityHidden(true)`; rows that read as one item combine (`.accessibilityElement(children:
+  .combine)`); animations respect `accessibilityReduceMotion`; sizes that should grow with text use
+  `@ScaledMetric`, and fonts are text styles (`.title`), never fixed sizes. `just lint` runs
+  a11y-check over the views.
+- `just lint` (SwiftLint, `--strict`, `.swiftlint.yml` plus `.swiftlint-tests.yml` for tests) must
+  pass; fix the code rather than disable a rule inline.
+
+<!-- views:end -->
 ## Building blocks
 
 The owner's own libraries, first in line under "Don't reinvent the wheel" (House rules). Reach
@@ -405,7 +446,8 @@ Watch for these:
 | A module in `FIRMWARE_MODULES`, or `Firmware/` | `just firmware` (needs ESP-IDF; say so when it isn't installed) <!-- embedded:line --> |
 | `Sources/ProjectNameMCP`, or anything that writes to standard output | `just install`, then `claude mcp list` shows it connected <!-- mcp:line --> |
 | A view, or anything a view draws with | `just test` (lint, view and snapshot tests); `just record-snapshots` if it should look different, then review the images <!-- app:line --> |
-| `Apps/`, or how screens connect | `just smoke` <!-- app:line --> |
+| `Apps/`, or how screens connect | `just smoke` <!-- app:line -->
+| A view module, or anything a view draws with | `just test` (lint, view and snapshot tests); `just record-snapshots` if it should look different, then review the images; `just spm-test` <!-- views:line --> |
 | Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |

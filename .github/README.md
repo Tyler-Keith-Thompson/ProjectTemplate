@@ -48,6 +48,8 @@ build time.
   wasmtime, where `Int` is 32 bits.
 - **A browser explorer** (optional, libraries): pages that run the library as WebAssembly, with
   the code each runs beside it, published next to the docs.
+- **SwiftUI views** (optional, libraries): a view module for macOS and iOS with ViewInspector view
+  tests, snapshot tests on the Mac, and SwiftLint and a11y-check (`just lint`).
 - **Benchmarks** (optional): a separate package on
   [ordo-one/benchmark](https://github.com/ordo-one/benchmark), with wall-clock baselines and,
   with BenchmarkHarness (a separate tool, checked out alongside), simulated instruction and cache
@@ -90,6 +92,7 @@ Xcode (the device and runtime `.bazelrc` names).
 ./bootstrap.sh MyThing                                   # asks for the type and options
 ./bootstrap.sh MyThing ~/somewhere/MyThing               # another destination
 ./bootstrap.sh --library --benchmarks MyLibrary          # a library with benchmarks
+./bootstrap.sh --library --views MyViews                 # a library of SwiftUI views
 ./bootstrap.sh --server --fly --database MyService       # a server on Fly.io with SQLite
 ./bootstrap.sh --server --yes MyService                  # a server, nothing optional, no prompts
 ./bootstrap.sh --embedded --wasm MyGadget                # ESP32 firmware, its tests also on a 32-bit Int
@@ -124,6 +127,7 @@ then prints what to fill in.
 | `--differential` | `Differential/`: an executable answering JSON cases with the library (built through Bazel in release, or `--swiftpm`), `scripts/differential.py` (seeded cases, references pinned and run through `uv`, failures saved to `Differential/Failures/` with their seed) with one file per area (a `differential_greetings.py` example against the `regex` package's grapheme clusters), and `just diff [--module X] [--cases N] [--seed S]`. |
 | `--wasm` (library, embedded) | `scripts/wasi_test.py` and `just wasi-test [-c release] [--targets X,Y]`: the SwiftPM test targets built with swiftly's toolchain and Swift SDK for WebAssembly, run under wasmtime in groups (`Package.swift` declares only a group's targets when `<PROJECT>_WASI_TESTS` is set, and leaves out exit-test files). A 32-bit `Int` check. |
 | `--explore` (library) | `Explore/`: a SwiftPM package of ElementaryUI pages compiled with the library to WebAssembly (a `greetings` example page), each drawn into its HTML at build time and mounted live in the browser, with code panels taken from the page's own sources. `just explore` builds `Explore/dist`; an `explore` job in `docc.yml` (WebAssembly SDK and wasm-opt cached) publishes it at `<pages>/explore/`, and keeps the live copy when it fails to build. |
+| `--views` (library) | `templates/views/` on top: `GreetingsUI`, a SwiftUI view module (`GreetingCard`) in `MODULES`, Package.swift and the umbrella like any other, with its sources under `#if canImport(SwiftUI)` so Linux (CI, the docs) builds it empty; `GreetingsUITests` on the Mac: ViewInspector view tests and snapshot tests drawn by `ImageRenderer` in light and dark, their references in `__Snapshots__` beside the tests (in the test's runfiles under Bazel, which the generator adds for any test target on SnapshotTesting) and recorded through SwiftPM (`just record-snapshots`). The view-test packages are `APPLE_ONLY_PACKAGES`, and `GreetingsUITests` is in `APPLE_ONLY_TESTS`, which Bazel skips off macOS. `just lint` (`tools/lint.bzl`: SwiftLint and a11y-check, shared with the app type), which `just test` runs first. No DependencyInjection or Mockable: a view takes values. |
 | `--fly` (server) | `fly.toml` (suspend when idle, `/health` checks), a `deploy` job in `Release.yml` after CI (`FLY_API_TOKEN` secret), `just deploy`. Without it nothing deploys. |
 | `--database` (server) | Fluent with SQLite in WAL mode: the file at `DATABASE_PATH`, memory when unset (production refuses to start without it); an example model and migration; a volume mount in `fly.toml`. |
 | `--fly --database` | Litestream: `litestream.yml` replicates to Backblaze B2 (the `B2_*` Fly secrets), and `scripts/docker-entrypoint.sh` restores the database onto an empty volume, then runs the server under `litestream replicate`. Without the secrets it serves unreplicated. With one machine and one volume, Litestream runs directly, without LiteFS. |
@@ -187,8 +191,9 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `ci`, `trunk`) keeps
-or drops the sections marked for it, in any text file:
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `views`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `swiftui`, `ci`, `trunk`) keeps
+or drops the sections marked for it, in any text file. `litestream` is on with `fly` and `database`
+together, and `swiftui` with `app` or `views`: the lint stack and view-test packages they share.
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
   Markdown); blocks nest, and `!feature:begin` / `!feature:end` marks a block kept when the
@@ -232,6 +237,7 @@ numbering intact.
 | Server type | `templates/server/` | Vapor, Docker, a k6 load test, optionally Fly.io, SQLite and Litestream |
 | MCP type | `templates/mcp/` | `Tools` (`ToolServer`, `ToolHandler`), the stdio executable, `just install` |
 | App type | `templates/app/`, `IOS_MODULES` in `scripts/modules.py` | iOS modules get `target_compatible_with` iOS and no docs; Package.swift declares only the packages its own targets use; a test target depending on one becomes an `ios_unit_test` hosted by `tools/test_host` (a logic test can't give a window a scene) on rules_apple's xcodebuild runner (the default one fails a run of Swift Testing tests alone), with a `Snapshots` resource bundle; `tools/ios.bzl` (generated) tells the root BUILD which packages to leave out of the docs and `//:package_swift_test`. Lint is an aspect (`tools/lint.bzl`) over `swift_library` targets with no external workspace |
+| Views option | `templates/views/`, `APPLE_ONLY_PACKAGES` and `APPLE_ONLY_TESTS` in `scripts/modules.py` | A library's SwiftUI modules: `#if canImport(SwiftUI)` sources, tests on the Mac under `#if os(macOS)`; a test target on SnapshotTesting gets `__Snapshots__` as `data` (Bazel) and excluded (SwiftPM). Lint (`tools/lint.bzl`, `third_party/`, `.swiftlint*.yml`) is shared with the app type, marked `swiftui` |
 | Embedded type | `templates/embedded/`, `FIRMWARE_MODULES` in `scripts/modules.py` | `embedded_swift_module` per firmware module and `embedded_swift_firmware` (`tools/embedded.bzl`); the ESP-IDF build runs Bazel before compiling the app, checks the modules' architecture against the chip's, and keeps the GOT that Swift's position-independent code needs (`Firmware/main/swift.lf`) |
 | Example module | `Sources/Greetings`, `Tests/GreetingsTests` | The house style: composable value type, plain/checked spellings, hand-worked, edge, exit and property tests |
 | Agent instructions | `AGENTS.md` (`CLAUDE.md` includes it) | Layout, commands, building blocks, feature checklist, house rules, API conventions |
@@ -244,12 +250,12 @@ The template repository runs no CI, so these local checks are all that stands be
 Validate the template in place after editing: `just modules && just test && just spm-test &&
 just docs`. After touching a marked section, bootstrap each variant it affects into a scratch
 directory with `--yes` and check them: `--library` with and without `--benchmarks`, `--mutation`, `--fuzz`, `--differential`, `--wasm` and `--explore`; `--server`
-alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`; `--mcp`; `--app` alone and with `--benchmarks --mutation`. For a server change, also run `just spm`
+alone, with `--database`, and with `--fly --database`; `--embedded` alone and with `--wasm`; `--mcp`; `--app` alone and with `--benchmarks --mutation`; `--library --views`. For a server change, also run `just spm`
 and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30` and
 `just fuzz-regress`; for a differential change, `just diff`; for a WebAssembly change, `just wasi-test`; for an explorer change, `just explore`; for an
 embedded change, `just firmware` in the bootstrapped project; for an MCP change, `INSTALL_DIR=<scratch> just install`
 and an `initialize`, `tools/list` and `tools/call` piped into the installed binary; for an app change,
-`just lint`, `just smoke` and, after a change to how a screen looks, `just record-snapshots` with the images reviewed.
+`just lint`, `just smoke` and, after a change to how a screen looks, `just record-snapshots` with the images reviewed; for a views change, `just spm-test` and, after a change to how a view looks, `just record-snapshots` with the images reviewed, then the references copied back into `templates/views`.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.

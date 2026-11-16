@@ -57,21 +57,33 @@ PACKAGES = [
     #| ("swift-async-algorithms", "https://github.com/apple/swift-async-algorithms", "1.1.7"),
     #| # Clocks a test advances by hand (`TestClock`); pinned, as later releases resolve differently.
     #| ("swift-clocks", "https://github.com/pointfreeco/swift-clocks", "exact:1.1.0"),
-    #| # The simulator tests only: main-actor work on one serial executor, view inspection, snapshots,
-    #| # and the issue reporting the snapshot harness fails through.
+    #| # The simulator tests only: main-actor work on one serial executor.
     #| ("swift-concurrency-extras", "https://github.com/pointfreeco/swift-concurrency-extras", "1.4.3"),
+    # app:end
+    # swiftui:begin
+    #| # View tests only: view inspection, snapshots, and the issue reporting snapshot failures go
+    #| # through (IssueReportingTestSupport routes it to Swift Testing).
     #| ("viewinspector", "https://github.com/nalexn/ViewInspector", "0.10.5"),
     #| ("swift-snapshot-testing", "https://github.com/pointfreeco/swift-snapshot-testing", "1.19.7"),
     #| ("swift-custom-dump", "https://github.com/pointfreeco/swift-custom-dump", "exact:1.7.0"),
     #| ("xctest-dynamic-overlay", "https://github.com/pointfreeco/xctest-dynamic-overlay", "1.9.0"),
-    # app:end
+    # swiftui:end
 ]
 
 # Packages that only Apple platforms build (Objective-C, or wrappers of Apple frameworks), by
 # identity. SwiftPM links their products on Apple platforms only and Bazel on macOS only (a
 # `select`), so the same targets still build on Linux, where the code using them is left out by
 # `#if canImport`. //:package_swift_test leaves their products out of its comparison.
-APPLE_ONLY_PACKAGES = []
+APPLE_ONLY_PACKAGES = []  # !views:line
+#| # The view tests' packages, which need SwiftUI: Linux builds the view tests without them (empty, as
+#| # their sources sit under `#if os(macOS)`).
+#| APPLE_ONLY_PACKAGES = ["viewinspector", "swift-snapshot-testing", "xctest-dynamic-overlay"]  # views:line
+
+# Test targets with nothing to run off Apple platforms (all their tests under `#if os(macOS)`), by
+# name. Bazel runs them on macOS alone: elsewhere they are incompatible, so `bazel test //...` skips
+# them, where a test binary that ran no tests would fail. SwiftPM still builds them, empty, on Linux.
+APPLE_ONLY_TESTS = []  # !views:line
+#| APPLE_ONLY_TESTS = ["GreetingsUITests"]  # views:line
 
 # The product whose macro generates mocks. A module that depends on it is compiled with the
 # MOCKING condition in debug builds only (SwiftPM's debug configuration, Bazel's
@@ -94,6 +106,9 @@ MODULES = [
     # mcp:begin
     #| ("Tools", "MCP", "The MCP server: its tools, each with typed arguments and a typed result.", ["Greetings", "swift-sdk/MCP"]),
     # mcp:end
+    # views:begin
+    #| ("GreetingsUI", "Example", "GreetingCard: a SwiftUI view of a greeting, on macOS and iOS. Replace with the first real view module.", ["Greetings"]),
+    # views:end
     # app:begin
     #| ("GreetingService", "App", "The service the greeting screen asks: a mocked seam in its tests.", ["Greetings", "afluent/Afluent", "dependencyinjection/DependencyInjection", "mockable/Mockable"]),
     #| ("DesignSystem", "App", "Colors and fonts every screen draws with, for light and dark mode and Dynamic Type.", []),
@@ -132,6 +147,9 @@ TEST_TARGETS = [
     # mcp:begin
     #| ("ToolsTests", ["Tools", "swift-sdk/MCP"]),
     # mcp:end
+    # views:begin
+    #| ("GreetingsUITests", ["GreetingsUI", "Greetings", "viewinspector/ViewInspector", "swift-snapshot-testing/SnapshotTesting", "xctest-dynamic-overlay/IssueReportingTestSupport"]),
+    # views:end
     # app:begin
     #| ("GreetingServiceTests", ["GreetingService", "Greetings", "afluent/Afluent", "dependencyinjection/DependencyInjection"]),
     #| ("GreetingFeatureTests", ["GreetingFeature", "GreetingService", "Greetings", "afluent/Afluent", "dependencyinjection/DependencyInjection", "mockable/Mockable", "swift-clocks/Clocks", "swift-concurrency-extras/ConcurrencyExtras", "viewinspector/ViewInspector", "swift-snapshot-testing/SnapshotTesting", "xctest-dynamic-overlay/IssueReportingTestSupport", "//tools/snapshots:BazelSnapshotTesting"]),
@@ -209,6 +227,8 @@ def performance_target(name):
 def check():
     names = [m[0] for m in MODULES]
     assert len(names) == len(set(names)), "duplicate module"
+    for name in APPLE_ONLY_TESTS:
+        assert name in dict(TEST_TARGETS), f"APPLE_ONLY_TESTS names unknown test target {name}"
     packages = [p[0] for p in PACKAGES]
     for name, deps in [(m[0], m[3]) for m in MODULES] + [(e[0], e[2]) for e in EXECUTABLES]:
         for d in deps:
@@ -334,7 +354,7 @@ def bazel_label(d):
 
 def excluded(path):
     """Non-source files SwiftPM would otherwise warn about, for the target at `path`."""
-    return [f for f in ("BUILD.bazel", "README.md", "Performance") if os.path.exists(os.path.join(ROOT, path, f))]
+    return [f for f in ("BUILD.bazel", "README.md", "Performance", "__Snapshots__") if os.path.exists(os.path.join(ROOT, path, f))]
 
 
 def exclude_arg(path):
@@ -655,6 +675,16 @@ def test_support_build_bazel():
 def test_targets_bazel(name, deps, size, srcs, tags):
     """One test module: its library, the swift_test that `bazel test` runs, and the Xcode bundle."""
     tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
+    # SnapshotTesting finds a reference beside the test file through #filePath, which Bazel makes
+    # relative to the workspace, and a test runs from its runfiles: so the references go in them.
+    data_attr = ('    data = glob(["__Snapshots__/**"], allow_empty = True),\n'
+                 if "swift-snapshot-testing/SnapshotTesting" in deps else "")
+    compatible_attr = ('    target_compatible_with = select({\n'
+                       '        # APPLE_ONLY_TESTS in scripts/modules.py: nothing to run elsewhere.\n'
+                       '        "@platforms//os:macos": [],\n'
+                       '        "//conditions:default": ["@platforms//:incompatible"],\n'
+                       '    }),\n'
+                       if name in APPLE_ONLY_TESTS else "")
     return (
         "swift_library(\n"
         f'    name = "{name}Library",\n'
@@ -663,6 +693,7 @@ def test_targets_bazel(name, deps, size, srcs, tags):
         "    # references them by name.\n"
         "    alwayslink = True,\n"
         f"    srcs = {srcs},\n"
+        f"{data_attr}"
         f'    module_name = "{name}",\n'
         f"{tags_attr}"
         "    # Read by //:package_swift_test, which checks Package.swift against the Bazel graph.\n"
@@ -674,6 +705,7 @@ def test_targets_bazel(name, deps, size, srcs, tags):
         f'    name = "{name}",\n'
         f'    size = "{size}",\n'
         f"{tags_attr}"
+        f"{compatible_attr}"
         f'    deps = [":{name}Library"],\n'
         ")\n\n"
         "# The generated Xcode project: a real .xctest bundle (an MH_BUNDLE), which is what Xcode's test\n"

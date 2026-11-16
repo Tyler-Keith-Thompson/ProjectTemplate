@@ -166,7 +166,8 @@ result, `{"error": "<reason>"}`, that repeats no part of the request.
 | `ProjectNameMCP` | The executable, `projectname-mcp`: the server over stdio <!-- mcp:line --> |
 | `GreetingService` | The service the greeting screen asks, behind a protocol its tests mock <!-- app:line --> |
 | `DesignSystem` | Colors and fonts for light and dark mode and Dynamic Type (iOS) <!-- app:line --> |
-| `GreetingFeature` | The greeting screen, `GreetingView` (iOS) <!-- app:line --> |
+| `GreetingFeature` | The greeting screen, `GreetingView` (iOS) <!-- app:line -->
+| `GreetingsUI` | `GreetingCard`: a SwiftUI view of a greeting, on macOS and iOS <!-- views:line --> |
 
 ## Development
 
@@ -189,9 +190,9 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just install` | The server, optimized, into `~/.local/bin` for `claude mcp add` <!-- mcp:line --> |
 | `just run` | The server over stdio, waiting for a client <!-- mcp:line --> |
 | `just run` | The app in the simulator <!-- app:line --> |
-| `just lint` | SwiftLint and a11y-check over every first-party target <!-- app:line --> |
+| `just lint` | SwiftLint and a11y-check over every first-party target <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test against the built app <!-- app:line --> |
-| `just record-snapshots` | Every snapshot reference, re-recorded into the workspace <!-- app:line --> |
+| `just record-snapshots` | Every snapshot reference, re-recorded into the workspace <!-- swiftui:line --> |
 | `just generate` | An Xcode project from the Bazel graph |
 
 `AGENTS.md` describes the layout, the workflow and the house rules in full.
