@@ -355,7 +355,8 @@ done
 #                                                       anywhere in the line)
 #   #| code, //| code                                 a dormant line inside a block or on a
 #                                                       marked line: commented out in the template,
-#                                                       uncommented when kept
+#                                                       uncommented when kept; anywhere else
+#                                                       it stops the render, naming file and line
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
 python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "swiftui=$SWIFTUI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
@@ -381,9 +382,12 @@ for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p
         text = path.read_text()
     except (UnicodeDecodeError, OSError):
         continue
-    if not anywhere.search(text):
-        continue
     out, stack, changed = [], [], False
+    if not anywhere.search(text):
+        stray = next((n for n, l in enumerate(text.splitlines(), 1) if dormant.match(l)), None)
+        if stray:
+            sys.exit(f"{path.relative_to(root)}:{stray}: a dormant '#|' or '//|' line outside any block and without a line marker")
+        continue
     for number, line in enumerate(text.splitlines(keepends=True), 1):
         match = block.match(line)
         if match:
@@ -406,6 +410,9 @@ for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p
                 keep = keep and on(negated, name)
             ending = "\n" if line.endswith("\n") else ""
             line = line_marker.sub("", line.rstrip("\n")) + ending
+        # A dormant line nothing switches on would ship with its marker in every variant.
+        if not stack and not marked and dormant.match(line):
+            sys.exit(f"{path.relative_to(root)}:{number}: a dormant '#|' or '//|' line outside any block and without a line marker")
         if not keep:
             out.append(REMOVED)
             continue

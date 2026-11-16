@@ -75,9 +75,11 @@ PACKAGES = [
 # `select`), so the same targets still build on Linux, where the code using them is left out by
 # `#if canImport`. //:package_swift_test leaves their products out of its comparison.
 APPLE_ONLY_PACKAGES = []  # !views:line
+# views:begin
 #| # The view tests' packages, which need SwiftUI: Linux builds the view tests without them (empty, as
 #| # their sources sit under `#if os(macOS)`).
-#| APPLE_ONLY_PACKAGES = ["viewinspector", "swift-snapshot-testing", "xctest-dynamic-overlay"]  # views:line
+#| APPLE_ONLY_PACKAGES = ["viewinspector", "swift-snapshot-testing", "xctest-dynamic-overlay"]
+# views:end
 
 # Test targets with nothing to run off Apple platforms (all their tests under `#if os(macOS)`), by
 # name. Bazel runs them on macOS alone: elsewhere they are incompatible, so `bazel test //...` skips
