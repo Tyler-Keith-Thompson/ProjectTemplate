@@ -9,6 +9,13 @@ swift_library(
     target_compatible_with = ["@platforms//os:ios"],
     deps = [
         "//Sources/GreetingFeature",
+        # The debug drawer and the plugins the app installs (ProjectNameApp.swift). Add a plugin's
+        # product here and its install call there; release builds compile all of it to no-ops.
+        "@swiftpkg_debugdrawer//:DebugDrawer",
+        "@swiftpkg_debugdrawer//:DebugDrawerAppInfoPlugin",
+        "@swiftpkg_debugdrawer//:DebugDrawerConsolePlugin",
+        "@swiftpkg_debugdrawer//:DebugDrawerPerformancePlugin",
+        "@swiftpkg_debugdrawer//:DebugDrawerUserDefaultsPlugin",
     ],
 )
 

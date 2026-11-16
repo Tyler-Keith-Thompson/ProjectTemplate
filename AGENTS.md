@@ -20,7 +20,7 @@ Sources/ProjectNameMCP/          The executable (@main), projectname-mcp: serves
 Sources/GreetingService/         The service the screen asks: a @Mockable protocol, its _GreetingService, a Factory <!-- app:line -->
 Sources/DesignSystem/            Color and font tokens for light and dark mode and Dynamic Type (iOS) <!-- app:line -->
 Sources/GreetingFeature/         The greeting screen, GreetingView (iOS) <!-- app:line -->
-Apps/ProjectName/                The iOS app: the composition root, Info.plist, the ios_application <!-- app:line -->
+Apps/ProjectName/                The iOS app: the composition root, Info.plist, the ios_application, and the debug drawer's trigger <!-- app:line -->
 Apps/ProjectNameSmokeTests/      The one XCUITest, against the built app (`just smoke`) <!-- app:line -->
 tools/snapshots/                 assertBazelSnapshot: snapshot references read from the test bundle under Bazel <!-- app:line -->
 tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- app:line -->
@@ -281,6 +281,10 @@ modules from `//Firmware:Modules`, which the firmware build has Bazel build firs
 The app is `Apps/ProjectName`: the composition root and nothing else. Screens live in feature
 modules, which build on services, which hold no UI (Seams and composition, below).
 
+- **The debug drawer** (DebugDrawer, Building blocks) is attached at the root view and opens on
+  Control-D or a shake, in debug builds only. Debug-only tools are plugins installed from the
+  composition root's `init()` (a plugin's product in the app's `BUILD.bazel`, its `install…()` call
+  under `#if DEBUG`), never a screen or gesture of their own. Release builds compile it to no-ops.
 - A module that imports SwiftUI or UIKit for its views goes in `IOS_MODULES` (`scripts/modules.py`)
   as well as `MODULES`. Bazel builds it for the simulator only; Package.swift, the umbrella and the
   docs leave it out, and anything that depends on it must be iOS too. A service stays out of
@@ -374,6 +378,7 @@ third-party package for the same job. Add one as a row in `PACKAGES` (`scripts/m
 | [SwiftPRNG](https://github.com/Tyler-Keith-Thompson/SwiftPRNG) | Seeded random numbers that reproduce bit for bit on every platform and Swift release: generators as values (`Xoshiro256StarStar`, `Xoroshiro128Plus`, `SplitMix64`, with `jump()` for streams that never overlap), platform-stable draws (`uniform(in:)`, `integer(in:)`, `bernoulli(_:)`, with `checked` spellings), `SeedTree` (a seed per named decision, so adding a draw shifts nothing elsewhere, with overrides and `fitting` to search one subtree for a seed that meets a predicate) and `SeedSearch` (the smallest matching seed, concurrently) | Every seeded test, and any program whose randomness must replay: simulations, procedural generation, games, sampling. Never hand-write a generator. `Xoroshiro128Plus(seed:)` gives the same numbers as a hand-written `SeededRandomNumberGenerator` (xoroshiro128+ seeded by SplitMix64), so replacing one changes no pinned value. Products are per module (`.product(name: "Generators", package: "SwiftPRNG")`: `Generators`, `Sampling`, `SeedTrees`, `SeedDiscovery`); the umbrella is `SwiftPRNG`. |
 | [DependencyInjection](https://github.com/Tyler-Keith-Thompson/DependencyInjection) | Swift 6 dependency injection: `Factory` values on `Container`, `@Injected` / `@LazyInjected` / `@ConstructorInjected`, unique, cached and shared scopes, hierarchical containers, and `withTestContainer` so concurrent tests never share state | Any seam a test needs to replace (clocks, network, storage). Tests wrap their body in `withTestContainer { }` and register doubles there. Product `DependencyInjection`. |
 | [Afluent](https://github.com/Tyler-Keith-Thompson/Afluent) | Reactive operators over async/await: `DeferredTask` (a unit of work that yields one value) and `AsyncSequence` extensions with Combine's names (`map`, `flatMap`, `catch`, `retry`, `debounce`, `share`, …), plus `AfluentTesting` | Pipelines over async work where Combine would once have been used; a Combine replacement in new code. Products `Afluent` and, for test targets, `AfluentTesting`. |
+| [DebugDrawer](https://github.com/Tyler-Keith-Thompson/DebugDrawer) | A plugin-based debug drawer for SwiftUI apps on iOS and macOS: a slide-in panel attached at the root view (`.debugDrawer()`), opened by `DebugDrawer.shared.toggle()`, with a library per plugin (console, performance, network, UserDefaults, app info, …) and local plugins tied to a view's lifetime (`.debugLocalPlugin(_:)`). It compiles to no-ops in release builds | Any debug-only tool an app needs (a switch, a fake response, a state dump): write a DebugDrawer plugin, installed from the composition root, instead of a one-off debug screen or gesture. Products are per plugin (`DebugDrawerConsolePlugin`, …); the core is `DebugDrawer`. | <!-- swiftui:line -->
 
 Their conventions carry over: value types, typed errors, `checked:` spellings that throw where
 the plain spelling traps, tests with Swift Testing.

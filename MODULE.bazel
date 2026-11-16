@@ -52,6 +52,7 @@ use_repo(
     # mcp:end
     # app:begin
     #| "swiftpkg_afluent",
+    #| "swiftpkg_debugdrawer",
     #| "swiftpkg_dependencyinjection",
     #| "swiftpkg_mockable",
     #| "swiftpkg_swift_async_algorithms",

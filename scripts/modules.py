@@ -59,6 +59,8 @@ PACKAGES = [
     #| ("swift-clocks", "https://github.com/pointfreeco/swift-clocks", "exact:1.1.0"),
     #| # The simulator tests only: main-actor work on one serial executor.
     #| ("swift-concurrency-extras", "https://github.com/pointfreeco/swift-concurrency-extras", "1.4.3"),
+    #| # The debug drawer the app opens in debug builds; release builds get its no-op stand-ins.
+    #| ("debugdrawer", "https://github.com/Tyler-Keith-Thompson/DebugDrawer", "0.0.4"),
     # app:end
     # swiftui:begin
     #| # View tests only: view inspection, snapshots, and the issue reporting snapshot failures go
