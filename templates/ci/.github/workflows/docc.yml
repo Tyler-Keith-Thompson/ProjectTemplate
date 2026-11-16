@@ -3,7 +3,9 @@ name: DocC
 # Builds one combined DocC site for every library module and publishes it to GitHub Pages
 # (the gh-pages branch) at https://tyler-keith-thompson.github.io/ProjectName/documentation/.
 # The browser explorer (Explore/, Swift compiled to WebAssembly) goes beside it at /ProjectName/explore/. # explore:line
-# Linux, not macOS: Linux runners cost less. Needs Pages set to deploy from gh-pages.
+# Linux, not macOS: Linux runners cost less. Needs Pages set to deploy from gh-pages. # !views:line
+#| # macOS, not Linux: the view modules' sources need SwiftUI, so Linux would document them empty. # views:line
+#| # Needs Pages set to deploy from gh-pages. # views:line
 #
 # The site is Bazel's //:docs (see tools/docc.bzl), built against the BuildBuddy remote cache, so
 # a push rebuilds only the modules it changed and the modules that depend on them.
@@ -87,6 +89,7 @@ jobs:
     #| needs: explore  # explore:line
     # Run whether or not the explorer built; not when the run was cancelled. # explore:line
     #| if: ${{ !cancelled() }}  # explore:line
+    # !views:begin
     runs-on: ubuntu-26.04-arm
     # Swift with Bazel already in it (ci-image/ in the project template): rules_swift's Linux
     # toolchain is whatever swiftc is on the PATH, docc comes from beside it, and Bazelisk runs
@@ -98,8 +101,21 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    # !views:end
+    # views:begin
+    #| # The runner image has Bazelisk, which runs the Bazel in .bazelversion, and Xcode, whose
+    #| # toolchain and docc rules_swift uses. The rest of CI stays on Linux.
+    #| runs-on: macos-26
+    # views:end
     steps:
       - uses: actions/checkout@v7
+      # views:begin
+      #| - name: Select Xcode
+        #| # The newest stable Xcode on the runner: the project needs Swift 6.3 or later.
+        #| uses: maxim-lobanov/setup-xcode@v1
+        #| with:
+          #| xcode-version: latest-stable
+      # views:end
       - name: Restore Bazel's downloads
         # The repository cache: rules, toolchains and packages Bazel fetched, by content hash.
         uses: actions/cache@v6

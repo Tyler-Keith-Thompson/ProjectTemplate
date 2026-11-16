@@ -122,7 +122,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just run` | The app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- app:line --> |
 | `just lint` | SwiftLint and a11y-check over every first-party target; `just test` runs it first <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test, launching the built app in the simulator <!-- app:line --> |
-| `just record-snapshots` | Re-record every snapshot reference after a change to how a screen looks <!-- app:line -->
+| `just record-snapshots` | Re-record every snapshot reference after a change to how a screen looks <!-- app:line --> |
 | `just record-snapshots` | Re-record every snapshot reference (through SwiftPM) after a change to how a view looks <!-- views:line --> |
 | `bazel query 'rdeps(//Tests/..., //Sources/X)'` | Test targets affected by a change to X |
 
@@ -322,11 +322,13 @@ modules, which build on services, which hold no UI (Seams and composition, below
 Some modules hold SwiftUI views (`GreetingsUI`). They are ordinary library modules: in `MODULES`,
 in Package.swift and the umbrella, built for macOS by Bazel and for every platform by SwiftPM.
 
-- **Linux builds them empty.** SwiftUI is on Apple platforms alone, and CI and the docs build on
+- **Linux builds them empty.** SwiftUI is on Apple platforms alone, and CI builds on
   Linux, so a view module's sources sit under `#if canImport(SwiftUI)` and its tests under
   `#if os(macOS)`. The view-test packages (ViewInspector, SnapshotTesting, IssueReporting) are in
   `APPLE_ONLY_PACKAGES`, so Linux links none of them, and a test target of views alone is in
   `APPLE_ONLY_TESTS`, so Bazel skips it off macOS rather than fail a run of no tests.
+  The DocC workflow runs on macOS, so the published site documents the views; the rest of CI <!-- ci:line -->
+  stays on Linux. <!-- ci:line -->
 - **A view is a function of its input.** It takes values (`GreetingCard(greeting:)`), keeps what
   it changes itself in `@State`, and holds no services: a view that needs one takes a closure or a
   value from the caller. When a screen can show several things, its state is one enum with a case
