@@ -121,7 +121,7 @@ ProjectName is an iOS app in SwiftUI and requires Xcode with Swift 6.3 and an iO
 just run          # the app, in the simulator .bazelrc names
 just test         # lint, then every test, the view and snapshot tests in the simulator
 just smoke        # the XCUITest smoke test against the built app
-just generate     # an Xcode project, for the debugger and previews
+just generate     # an Xcode project in xcode/, for the debugger and previews
 ```
 
 Type a name and, once typing pauses, the screen greets it: "Good day, Ada!".
@@ -193,7 +193,7 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just lint` | SwiftLint and a11y-check over every first-party target <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test against the built app <!-- app:line --> |
 | `just record-snapshots` | Every snapshot reference, re-recorded into the workspace <!-- swiftui:line --> |
-| `just generate` | An Xcode project from the Bazel graph |
+| `just generate` | An Xcode project from the Bazel graph, in `xcode/` |
 
 `AGENTS.md` describes the layout, the workflow and the house rules in full.
 

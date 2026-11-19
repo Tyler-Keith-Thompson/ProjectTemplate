@@ -106,7 +106,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just bench [--target X]` | Benchmarks; `just bench-compare` against the `main` baseline <!-- benchmarks:line --> |
 | `just bench-simulated-compare [--target X]` | Simulated counts (Callgrind in a Linux VM, from `~/workspace/BenchmarkHarness`) against the committed `simulated` baseline; `just bench-simulated [--target X]` re-records it. Both measure only targets whose code changed <!-- benchmarks:line --> |
 | `just docs` | Combined DocC site into `.build/docs` |
-| `just generate` | Xcode project from the Bazel graph |
+| `just generate` | Xcode project from the Bazel graph, in `xcode/` (out of the root, where `xcodebuild` would pick it over `Package.swift`) |
 | `just buildbuddy-key`, `just ci-secrets` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache); set it as this repository's Actions secret with `gh` <!-- ci:line --> |
 | `just buildbuddy-key` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache) <!-- !ci:line --> |
 | `just template-update` | Merge the project template's changes since `.template.json`'s commit; resolve conflicts, then `just modules`, `just test` |

@@ -61,6 +61,8 @@ EXECUTABLE_TARGETS = ["//" + package for package in EXECUTABLE_PACKAGES]
 # project as a dependency of one of them.
 xcodeproj(
     name = "xcodeproj",
+    # Out of the root, where xcodebuild would pick the project over Package.swift.
+    install_directory = "xcode",
     project_name = "ProjectName",
     scheme_autogeneration_mode = "none",
     top_level_targets = TEST_TARGETS + EXECUTABLE_TARGETS + APP_TARGETS,

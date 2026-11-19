@@ -14,7 +14,15 @@ for arg in "$@"; do
     esac
 done
 
-PROJECT="ProjectName.xcodeproj"
+# Out of the root, where xcodebuild without -project would pick it over Package.swift.
+PROJECT="xcode/ProjectName.xcodeproj"
+
+if [ -e "ProjectName.xcodeproj" ]; then
+    echo "warning: ProjectName.xcodeproj at the root is stale (the project is now ${PROJECT}) and makes xcodebuild ignore Package.swift; delete it." >&2
+fi
+
+# rules_xcodeproj's installer fails when the install directory is missing.
+mkdir -p xcode
 
 echo "Generating ${PROJECT} from the Bazel graph..."
 bazel run //:xcodeproj

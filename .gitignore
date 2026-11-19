@@ -17,7 +17,7 @@
 /Package.resolved
 
 # Xcode (generated from the Bazel graph by `just generate`)
-/ProjectName.xcodeproj/
+/xcode/
 xcuserdata/
 
 # embedded:begin
