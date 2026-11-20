@@ -17,7 +17,7 @@ struct ProjectNameApp: App {
             DebugDrawer.shared.installAppInfo()
             DebugDrawer.shared.installConsole()
             DebugDrawer.shared.installPerformance()
-            DebugDrawer.shared.installUserDefaults()
+            UserDefaultsBrowser.install()
         #endif
     }
 

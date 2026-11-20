@@ -22,8 +22,10 @@ TEST_SUPPORT = f"{PROJECT}TestSupport"
 # External packages: (identity, url, minimum version). A dependency written "identity/Product"
 # in the tables below refers to a product of one of these. A version written "exact:1.2.3" pins
 # that release, for a package whose later releases resolve differently on different toolchains
-# (Bazel resolves on each machine with its own swift). After adding one: `just modules`,
-# add `swiftpkg_<identity>` (hyphens as underscores) to use_repo in MODULE.bazel, `just resolve`.
+# (Bazel resolves on each machine with its own swift). One written "minor:0.1.3" takes patch
+# releases only, for a 0.x package whose minor releases break its API. After adding one:
+# `just modules`, add `swiftpkg_<identity>` (hyphens as underscores) to use_repo in MODULE.bazel,
+# `just resolve`.
 PACKAGES = [
     # Tests only: property checks with shrinking, for Swift Testing.
     ("swift-property-based", "https://github.com/x-sheep/swift-property-based", "2.0.1"),
@@ -60,7 +62,8 @@ PACKAGES = [
     #| # The simulator tests only: main-actor work on one serial executor.
     #| ("swift-concurrency-extras", "https://github.com/pointfreeco/swift-concurrency-extras", "1.4.3"),
     #| # The debug drawer the app opens in debug builds; release builds get its no-op stand-ins.
-    #| ("debugdrawer", "https://github.com/Tyler-Keith-Thompson/DebugDrawer", "0.0.4"),
+    #| # Patch releases only: its 0.x minor releases change the install API.
+    #| ("debugdrawer", "https://github.com/Tyler-Keith-Thompson/DebugDrawer", "minor:0.1.3"),
     # app:end
     # swiftui:begin
     #| # View tests only: view inspection, snapshots, and the issue reporting snapshot failures go
@@ -298,9 +301,12 @@ def spm_dep(d):
 
 
 def requirement(version):
-    """A package's version requirement in a manifest: `from:` the minimum, or `exact:` a pinned release."""
+    """A package's version requirement in a manifest: `from:` the minimum, `exact:` a pinned release,
+    or `.upToNextMinor(from:)` for `minor:`, patch releases only."""
     if version.startswith("exact:"):
         return f'exact: "{version.removeprefix("exact:")}"'
+    if version.startswith("minor:"):
+        return f'.upToNextMinor(from: "{version.removeprefix("minor:")}")'
     return f'from: "{version}"'
 
 
