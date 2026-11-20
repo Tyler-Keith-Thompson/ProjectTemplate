@@ -17,6 +17,9 @@ build --compilation_mode=dbg
 #| build --ios_simulator_device="iPhone 16 Pro"
 #| build --ios_simulator_version=26.2
 #| run --run_env=BAZEL_APPLE_PREFER_PERSISTENT_SIMS=1
+#| # One simulator test at a time: each carries SIMULATOR_TEST_TAG (scripts/modules.py) and boots a
+#| # simulator of its own. An execution option, so it keeps the analysis cache.
+#| build --local_resources=simulator=1
 #|
 # app:end
 # swiftui:begin

@@ -187,6 +187,13 @@ PERFORMANCE_TEST_SIZE = "medium"
 # The tag .bazelrc's release config filters out of builds and tests (see PERFORMANCE_TESTS).
 RELEASE_EXCLUDED_TAG = "debug-only"
 
+# The tag every simulator test carries: one unit of the `simulator` resource, of which .bazelrc
+# declares one (--local_resources=simulator=1), so simulator tests run one at a time while compiles
+# and Mac tests run beside them. Each boots a simulator of its own, and run all at once they swamp
+# the machine. Rejected: `exclusive`, which also runs each alone but after every other action, so
+# the run turns serial.
+SIMULATOR_TEST_TAG = "resources:simulator:1"
+
 # embedded:begin
 # The modules the firmware imports (Firmware/main). Each is also compiled as Embedded Swift for the
 # chip (tools/embedded.bzl), so `bazel build //...` fails when one uses something Embedded Swift
@@ -758,11 +765,12 @@ def simulator_test_build_bazel(name, deps, size):
         "# `bazel test` and the generated Xcode project both run this bundle in the simulator, inside the\n"
         "# test host (tools/test_host), which gives windows a scene. The runner drives xcodebuild\n"
         "# directly; the default one fails a run that holds only Swift Testing tests.\n"
+        f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
         "ios_unit_test(\n"
         f'    name = "{name}",\n'
         f'    size = "{size}",\n'
         f'    minimum_os_version = "{IOS_MINIMUM}",\n'
-        f'    tags = ["{RELEASE_EXCLUDED_TAG}"],\n'
+        f'    tags = [\n        "{RELEASE_EXCLUDED_TAG}",\n        "{SIMULATOR_TEST_TAG}",\n    ],\n'
         '    runner = "@rules_apple//apple/testing/default_runner:ios_xctestrun_ordered_runner",\n'
         '    test_host = "//tools/test_host",\n'
         '    visibility = ["//visibility:public"],\n'
