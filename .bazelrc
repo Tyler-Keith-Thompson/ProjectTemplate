@@ -9,17 +9,22 @@ build --host_macos_minimum_os=15.0
 build --compilation_mode=dbg
 
 # app:begin
-#| # The iOS app and the simulator tests (IOS_MODULES in scripts/modules.py): Apple silicon simulators,
-#| # on the device and runtime `just run` and `bazel test` boot. Keep --ios_minimum_os in step with
-#| # IOS_MINIMUM there.
+#| # The iOS app and the simulator tests (IOS_MODULES in scripts/modules.py), on the device and runtime
+#| # `just run` and `bazel test` boot: Apple silicon simulators, the default on an Apple silicon Mac.
+#| # Naming sim_arm64 here would keep it in a device build too, since --ios_multi_cpus adds to the
+#| # list rather than replacing it. Keep --ios_minimum_os in step with IOS_MINIMUM there.
 #| build --ios_minimum_os=18.0
-#| build --ios_multi_cpus=sim_arm64
 #| build --ios_simulator_device="iPhone 16 Pro"
 #| build --ios_simulator_version=26.2
 #| run --run_env=BAZEL_APPLE_PREFER_PERSISTENT_SIMS=1
 #| # One simulator test at a time: each carries SIMULATOR_TEST_TAG (scripts/modules.py) and boots a
 #| # simulator of its own. An execution option, so it keeps the analysis cache.
 #| build --local_resources=simulator=1
+#| # An iPhone build (`just phone-install`, `just phone-install-release`), signed with the profile
+#| # `just phone-provision` makes. Switching to it changes the configuration, so it lets Bazel
+#| # discard the analysis cache; the recipes analyse the ordinary configuration again afterwards.
+#| build:device --ios_multi_cpus=arm64
+#| build:device --allow_analysis_cache_discard
 #|
 # app:end
 # swiftui:begin

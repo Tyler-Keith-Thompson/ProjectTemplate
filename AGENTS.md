@@ -24,6 +24,7 @@ Apps/ProjectName/                The iOS app: the composition root, Info.plist, 
 Apps/ProjectNameSmokeTests/      The one XCUITest, against the built app (`just smoke`) <!-- app:line -->
 tools/snapshots/                 assertBazelSnapshot: snapshot references read from the test bundle under Bazel <!-- app:line -->
 tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- app:line -->
+tools/iphone/                    The scripts `just phone-install` and `just phone-provision` run, and their test <!-- app:line -->
 Sources/GreetingsUI/             GreetingCard, a SwiftUI view of a Greeting for macOS and iOS <!-- views:line -->
 Tests/GreetingsUITests/          Its ViewInspector and snapshot tests, run on the Mac; __Snapshots__ the references <!-- views:line -->
 tools/lint.bzl                   `just lint`: SwiftLint (.swiftlint.yml) and a11y-check over first-party targets <!-- swiftui:line -->
@@ -122,6 +123,8 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just run` | The app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- app:line --> |
 | `just lint` | SwiftLint and a11y-check over every first-party target; `just test` runs it first <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test, launching the built app in the simulator <!-- app:line --> |
+| `just phone-provision [udid]` | Once per new iPhone: Xcode's automatic signing registers it and makes the app's provisioning profile <!-- app:line --> |
+| `just phone-install [udid]`, `just phone-install-release [udid]` | Install and launch a debug (or optimized) build on the connected iPhone, waiting up to `PHONE_UNLOCK_WAIT` seconds for it to be unlocked <!-- app:line --> |
 | `just record-snapshots` | Re-record every snapshot reference after a change to how a screen looks <!-- app:line --> |
 | `just record-snapshots` | Re-record every snapshot reference (through SwiftPM) after a change to how a view looks <!-- views:line --> |
 | `bazel query 'rdeps(//Tests/..., //Sources/X)'` | Test targets affected by a change to X |
@@ -309,6 +312,15 @@ modules, which build on services, which hold no UI (Seams and composition, below
   XCTest: launch the app, do the main thing, see the result. Everything else is proved by view and
   snapshot tests, which are fast and deterministic. `just smoke` after a change to the app target or
   to how screens connect.
+- **On an iPhone**: `just phone-provision` once per new iPhone (Developer Mode on, the Mac trusted),
+  then `just phone-install` (debug, with the debug drawer) or `just phone-install-release`. A device
+  build (`--config=device`) signs with the development profile Xcode's automatic signing makes,
+  found by its name, "iOS Team Provisioning Profile: <bundle id>"; keep `bundle_id` in
+  `Apps/ProjectName/BUILD.bazel` and `PHONE_BUNDLE_ID` in the justfile in step. The team comes from
+  `DEVELOPMENT_TEAM` in the environment, else from the Apple Development certificate Xcode puts in
+  the Keychain once you sign in (Settings > Accounts). No team ID, certificate or profile is
+  committed. A locked iPhone is waited for (`PHONE_UNLOCK_WAIT`, 1800 seconds), and a newer install
+  ends an earlier one's wait; `tools/iphone/iphone_test.py` pins this against stand-in tools.
 - **Accessibility**: every control has an `accessibilityLabel`; an image that only decorates is
   `accessibilityHidden(true)`; rows that read as one item combine (`.accessibilityElement(children:
   .combine)`); animations respect `accessibilityReduceMotion`; sizes that should grow with text use
@@ -458,6 +470,7 @@ Watch for these:
 | A module in `FIRMWARE_MODULES`, or `Firmware/` | `just firmware` (needs ESP-IDF; say so when it isn't installed) <!-- embedded:line --> |
 | `Sources/ProjectNameMCP`, or anything that writes to standard output | `just install`, then `claude mcp list` shows it connected <!-- mcp:line --> |
 | A view, or anything a view draws with | `just test` (lint, view and snapshot tests); `just record-snapshots` if it should look different, then review the images <!-- app:line --> |
+| `tools/iphone/`, signing, or the phone recipes | `bazel test //tools/iphone:iphone_test`, then `just phone-install` on a connected iPhone <!-- app:line --> |
 | `Apps/`, or how screens connect | `just smoke` <!-- app:line -->
 | A view module, or anything a view draws with | `just test` (lint, view and snapshot tests); `just record-snapshots` if it should look different, then review the images; `just spm-test` <!-- views:line --> |
 | Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |

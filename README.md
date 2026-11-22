@@ -122,6 +122,8 @@ just run          # the app, in the simulator .bazelrc names
 just test         # lint, then every test, the view and snapshot tests in the simulator
 just smoke        # the XCUITest smoke test against the built app
 just generate     # an Xcode project in xcode/, for the debugger and previews
+just phone-provision   # once per new iPhone: Xcode registers it and makes the signing profile
+just phone-install     # a debug build on the connected iPhone, waiting for it to be unlocked
 ```
 
 Type a name and, once typing pauses, the screen greets it: "Good day, Ada!".
@@ -192,6 +194,7 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just run` | The app in the simulator <!-- app:line --> |
 | `just lint` | SwiftLint and a11y-check over every first-party target <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test against the built app <!-- app:line --> |
+| `just phone-provision`, `just phone-install`, `just phone-install-release` | The connected iPhone, registered for signing; a debug or optimized build, installed on it once it is unlocked <!-- app:line --> |
 | `just record-snapshots` | Every snapshot reference, re-recorded into the workspace <!-- swiftui:line --> |
 | `just generate` | An Xcode project from the Bazel graph, in `xcode/` |
 

@@ -64,6 +64,42 @@ test:
 #| [doc('Re-record every snapshot reference into the workspace, after a change to how a screen looks')]
 #| record-snapshots:
 #|     {{BAZEL}} test //... --allow_analysis_cache_discard --nocache_test_results --test_env=SNAPSHOT_TESTING_RECORD=all --test_env=SNAPSHOT_REFERENCE_ROOT="$PWD"
+#|
+#| # The app's bundle identifier, which names its provisioning profile: bundle_id in
+#| # Apps/ProjectName/BUILD.bazel.
+#| PHONE_BUNDLE_ID := "com.example.projectname"
+#|
+#| [doc("Have Xcode's automatic signing register the connected iPhone (or the one with this UDID) and make the app's provisioning profile: once, and again for each new iPhone")]
+#| phone-provision udid="":
+#|     bash {{PROJECT_ROOT}}/scripts/generate-xcodeproj.sh --no-open
+#|     bash {{PROJECT_ROOT}}/tools/iphone/provision-iphone.sh {{PROJECT_ROOT}}/xcode/ProjectName.xcodeproj ProjectName {{PHONE_BUNDLE_ID}} "{{udid}}"
+#|
+#| # The device build changes the configuration; analysing the ordinary one again afterwards keeps the
+#| # next build from refusing to discard the analysis cache. The .ipa is copied out before any wait
+#| # for an unlock, so restoring first is safe.
+#| [doc('Install and launch a debug build, with its debug drawer, on the connected iPhone or the one with this UDID, waiting up to PHONE_UNLOCK_WAIT seconds (1800) for it to be unlocked; a newer install ends the wait')]
+#| phone-install udid="":
+#|     #!/usr/bin/env bash
+#|     set -euo pipefail
+#|     restore() { {{BAZEL}} build --nobuild --allow_analysis_cache_discard //Apps/ProjectName >/dev/null 2>&1 || true; }
+#|     trap restore EXIT
+#|     {{BAZEL}} build --config=device //Apps/ProjectName
+#|     ipa="$({{BAZEL}} info --config=device execution_root 2>/dev/null)/$({{BAZEL}} cquery --config=device --output=files //Apps/ProjectName 2>/dev/null)"
+#|     restore
+#|     trap - EXIT
+#|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "{{udid}}"
+#|
+#| [doc('Install and launch the optimized build, without the debug drawer, on the connected iPhone or the one with this UDID, waiting for it to be unlocked')]
+#| phone-install-release udid="":
+#|     #!/usr/bin/env bash
+#|     set -euo pipefail
+#|     restore() { {{BAZEL_RELEASE}} build --config=release --nobuild --allow_analysis_cache_discard //Apps/ProjectName >/dev/null 2>&1 || true; }
+#|     trap restore EXIT
+#|     {{BAZEL_RELEASE}} build --config=release --config=device //Apps/ProjectName
+#|     ipa="$({{BAZEL_RELEASE}} info --config=release --config=device execution_root 2>/dev/null)/$({{BAZEL_RELEASE}} cquery --config=release --config=device --output=files //Apps/ProjectName 2>/dev/null)"
+#|     restore
+#|     trap - EXIT
+#|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "{{udid}}"
 # app:end
 
 [doc('Run one test target, e.g. just test-one //Tests/GreetingsTests')]

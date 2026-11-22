@@ -1,3 +1,4 @@
+load("@rules_apple//apple:apple.bzl", "local_provisioning_profile")
 load("@rules_apple//apple:ios.bzl", "ios_application")
 load("//tools:swift_rules.bzl", "swift_library")
 
@@ -19,16 +20,33 @@ swift_library(
     ],
 )
 
-# `just run` launches it in the simulator (.bazelrc picks the device).
+# `just run` launches it in the simulator (.bazelrc picks the device); `just phone-install` on an
+# iPhone. Keep bundle_id in step with PHONE_BUNDLE_ID in the justfile and the profile's name below.
 ios_application(
     name = "ProjectName",
     bundle_id = "com.example.projectname",
     families = ["iphone"],
     infoplists = ["Info.plist"],
     minimum_os_version = "18.0",
+    # The simulator runs apps unsigned.
+    provisioning_profile = select({
+        "@build_bazel_apple_support//constraints:device": ":provisioning_profile",
+        "//conditions:default": None,
+    }),
     visibility = [
         "//Apps/ProjectNameSmokeTests:__pkg__",
         "@rules_xcodeproj//xcodeproj:generated",
     ],
     deps = [":ProjectNameAppLibrary"],
+)
+
+# Signed for development on your own devices, never distributed. Xcode's automatic signing creates
+# the profile and adds each iPhone to it (`just phone-provision`, once per new iPhone); Bazel signs
+# device builds with it. The profile is found by name alone, so no team ID is committed; give it a
+# team_id only if two of your teams hold a profile of this name. (rules_xcodeproj's
+# xcode_provisioning_profile is left out: it requires a team ID.)
+local_provisioning_profile(
+    name = "provisioning_profile",
+    profile_name = "iOS Team Provisioning Profile: com.example.projectname",
+    tags = ["manual"],
 )
