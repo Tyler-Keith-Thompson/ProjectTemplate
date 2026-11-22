@@ -57,6 +57,10 @@ TEST_TARGETS = [bundle for package in TEST_PACKAGES for bundle in TEST_BUNDLES[p
 # The executables (EXECUTABLES in scripts/modules.py), each launchable from a scheme of its own.
 EXECUTABLE_TARGETS = ["//" + package for package in EXECUTABLE_PACKAGES]
 
+# The arguments an executable's scheme launches it with; one not listed launches with none.
+EXECUTABLE_ARGUMENTS = {}  # !server:line
+#| EXECUTABLE_ARGUMENTS = {"//Sources/ProjectNameServer": ["serve"]}  # server:line
+
 # The project's top-level targets are its test bundles and executables. Every library reaches the
 # project as a dependency of one of them.
 xcodeproj(
@@ -84,14 +88,19 @@ xcodeproj(
         )
         for package in TEST_PACKAGES
     ] + [
+        # A scheme takes its target's name: what follows the colon, else the package's last
+        # directory (//Apps/X:Y is Y, //Apps/X is X).
         xcschemes.scheme(
-            name = target.split("/")[-1],
-            run = xcschemes.run(launch_target = xcschemes.launch_target(target), args = ["serve"]),
+            name = target.split("/")[-1].split(":")[-1],
+            run = xcschemes.run(
+                launch_target = xcschemes.launch_target(target),
+                args = EXECUTABLE_ARGUMENTS.get(target, []),
+            ),
         )
         for target in EXECUTABLE_TARGETS
     ] + [
         xcschemes.scheme(
-            name = target.split("/")[-1],
+            name = target.split("/")[-1].split(":")[-1],
             run = xcschemes.run(launch_target = xcschemes.launch_target(target)),
         )
         for target in APP_TARGETS
