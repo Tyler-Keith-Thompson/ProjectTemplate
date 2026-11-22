@@ -9,6 +9,10 @@ rather than once per mutant:
     mode "expr":  old  ->  (__mutant(k) ? (new) : (old))   an expression
     mode "stmt":  old  ->  if __mutant(k) { new } else { old }   whole statements
 
+A stmt mutant's `old` never starts with `defer`: in the else block, the defer would run when that
+block ends rather than with its scope, changing the unmutated build, so the run refuses one. Mutate
+the statements inside the defer instead.
+
 `old` must occur once in the file, or `nth` picks the occurrence. `module` puts a mutant in another
 module's file (Sources/<module>/<file>), for code the spec's module wires into; the spec's TESTS
 then name the suites that reach it, run in order.
@@ -627,6 +631,13 @@ def main():
     names = {m.name for m in mutants}
     if len(names) != len(mutants):
         sys.exit("Mutant names must be unique")
+    for m in mutants:
+        # Wrapped in `if __mutant(k) { } else { old }`, a defer would run when the else block ends
+        # instead of when its scope does, so even the unmutated build would behave differently.
+        if m.mode == "stmt" and re.match(r"\s*defer\b", m.old):
+            sys.exit(f"{m.name}: a stmt mutant can't replace a `defer`: in the mutation build it would run "
+                     "when the mutant's else block ends, changing the unmutated code. Mutate the statements "
+                     "inside the defer instead.")
     unknown = set(args.names) - names
     if unknown:
         sys.exit(f"No such mutants: {', '.join(sorted(unknown))}")
