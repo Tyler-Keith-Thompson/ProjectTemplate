@@ -70,6 +70,10 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
   sources must be listed in `PERFORMANCE_TESTS`, and the reverse.
 - Add an executable: a row in `EXECUTABLES` (name, description, dependencies). It holds only
   `@main`; its code lives in a module, where tests reach it.
+- Add an example module (a demo app's views, a sample server's routes): a row in `MODULES` and its
+  name in `EXAMPLE_MODULES`, then `just modules`. It builds and tests like any module, but has no
+  library product, umbrella import or DocC archive, so neither it nor its dependencies ship. Only
+  executables, test targets and other example modules may depend on it (`check()` enforces it).
 - Add an external package: a row in `PACKAGES`, its `swiftpkg_<identity>` repository in
   `MODULE.bazel`'s `use_repo`, then `just modules` and `just resolve`.
 - Generate mocks: uncomment the Mockable row in `PACKAGES`, add `mockable/Mockable` to the
