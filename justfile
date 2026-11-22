@@ -172,6 +172,31 @@ wasi-test *args="":
     python3 -u {{PROJECT_ROOT}}/scripts/wasi_test.py {{args}}
 # wasm:end
 
+# examples:begin
+[doc('Build every example app, then run the examples’ tests')]
+examples: example-ios example-mac example-visionos example-watchos examples-test
+
+[doc('Run the examples’ tests (SwiftPM, in Examples/)')]
+examples-test *args="":
+    cd {{PROJECT_ROOT}}/Examples && {{SWIFT}} test {{args}}
+
+[doc('Build the iPhone and iPad example, one universal app, for the simulator')]
+example-ios:
+    {{BAZEL}} build //Examples/Apps/ExampleApp:iOSExample
+
+[doc('Build the Mac example')]
+example-mac:
+    {{BAZEL}} build //Examples/Apps/ExampleApp:MacExample
+
+[doc('Build the visionOS example for the simulator')]
+example-visionos:
+    {{BAZEL}} build //Examples/Apps/ExampleApp:VisionExample
+
+[doc('Build the watchOS example for the simulator')]
+example-watchos:
+    {{BAZEL}} build //Examples/Apps/ExampleApp:WatchExample
+# examples:end
+
 # explore:begin
 [doc('Build the browser explorer (Explore/) as size-optimized release WebAssembly into Explore/dist; EXPLORE_XCODE=/Applications/Xcode-<older>.app if the toolchain crashes on a newer SDK')]
 explore:
@@ -349,6 +374,7 @@ clean:
     rm -rf {{PROJECT_ROOT}}/Benchmarks/.build # benchmarks:line
     rm -rf {{PROJECT_ROOT}}/Fuzz/.build # fuzz:line
     rm -rf {{PROJECT_ROOT}}/Differential/.build # differential:line
+    rm -rf {{PROJECT_ROOT}}/Examples/.build # examples:line
     rm -rf {{PROJECT_ROOT}}/Explore/.build {{PROJECT_ROOT}}/Explore/dist # explore:line
     rm -rf {{PROJECT_ROOT}}/Firmware/build {{PROJECT_ROOT}}/Firmware/managed_components # embedded:line
 

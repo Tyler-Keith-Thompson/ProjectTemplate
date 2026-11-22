@@ -26,6 +26,13 @@ Fuzz/.build
 Differential/.build
 # differential:end
 
+# examples:begin
+# The example package's SwiftPM build. Bazel loads only the hand-written BUILD files beside its
+# sources, for the Apple apps.
+Examples/.build
+Examples/.swiftpm
+# examples:end
+
 # explore:begin
 # The browser explorer is a SwiftPM package; its build directory can contain BUILD files.
 Explore

@@ -20,7 +20,15 @@ IOS_PACKAGES = []
 
 SIMULATOR_TEST_PACKAGES = []
 
-APP_TARGETS = []
+APP_TARGETS = []  # !examples:line
+# examples:begin
+#| # The example apps (Examples/Apps/ExampleApp), each launched from a scheme of its own. They are
+#| # `manual`, so `bazel test //...` builds none of them, on a Mac or on Linux.
+#| APP_TARGETS = [
+#|     "//Examples/Apps/ExampleApp:" + name
+#|     for name in ["iOSExample", "MacExample", "VisionExample", "WatchExample"]
+#| ]
+# examples:end
 
 # !app:end
 # Test bundles are derived from the directory layout rather than listed: a directory under

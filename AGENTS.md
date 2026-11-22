@@ -35,6 +35,7 @@ scripts/mutants/<Module>.py      Planted bugs for `just mutate <Module>` (script
 Fuzz/Sources/Fuzz<Module>/       A libFuzzer target per module, in the separate Fuzz/ package <!-- fuzz:line -->
 Differential/                    The library side of `just diff`; scripts/differential_<area>.py the references <!-- differential:line -->
 Explore/                         The browser explorer: pages running the library as WebAssembly (`just explore`) <!-- explore:line -->
+Examples/                        The example apps, a SwiftPM package of their own; Apps/ExampleApp the Apple apps Bazel builds <!-- examples:line -->
 Firmware/                        The ESP-IDF project: main/ is the app; BUILD.bazel gathers the modules it imports <!-- embedded:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
                                  tools/bazel turns BuildBuddy on when the Keychain holds its key, and
@@ -57,6 +58,17 @@ simulated counts (`tools/benchmarks.bzl`). See `Benchmarks/README.md`.
 `Fuzz/` is a separate SwiftPM package of libFuzzer targets that Bazel ignores, built with a
 swift.org toolchain through swiftly (`swiftly install 6.3.3`); see `Fuzz/README.md`.
 <!-- fuzz:end -->
+<!-- examples:begin -->
+`Examples/` is a separate SwiftPM package of example apps that depends on the library by path, so
+the published package never depends on what the examples use. Its `Package.swift` and its few
+`BUILD.bazel` files are hand-written, not generated: SwiftPM builds and tests it
+(`just examples-test`), and Bazel builds only the Apple apps (`Examples/Apps/ExampleApp`: iPhone and
+iPad, Mac, visionOS, watchOS), every target `manual`, so `just test` never builds them, on a Mac
+or on Linux. The root BUILD.bazel lists them in `APP_TARGETS`, so `just generate` gives each an
+Xcode scheme. rules_apple has no Mac Catalyst rule: the Mac app stands in for it, and a
+Catalyst build would have to come from SwiftPM (`--triple arm64-apple-ios18.0-macabi`) outside
+Bazel. See `Examples/README.md`.
+<!-- examples:end -->
 
 ### Module graph
 
@@ -107,6 +119,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just wasi-test [-c release] [--targets X,Y]` | SwiftPM tests on wasm32-wasi under wasmtime: a 32-bit `Int` <!-- wasm:line --> |
 | `just explore` | Build the browser explorer into `Explore/dist` (serve it to try a page); the DocC workflow publishes it at `<pages>/explore/` <!-- explore:line --><!-- ci:line --> |
 | `just explore` | Build the browser explorer into `Explore/dist`; serve it to try a page <!-- explore:line --><!-- !ci:line --> |
+| `just examples-test`, `just example-ios` / `-mac` / `-visionos` / `-watchos`, `just examples` | The examples' tests (SwiftPM, in `Examples/`); build one Apple example app; every app, then the tests <!-- examples:line --> |
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
@@ -485,6 +498,7 @@ Watch for these:
 | A view module, or anything a view draws with | `just test` (lint, view and snapshot tests); `just record-snapshots` if it should look different, then review the images; `just spm-test` <!-- views:line --> |
 | Integer arithmetic that could overflow, or anything platform-conditional | `just wasi-test -c release --targets XTests` (a 32-bit `Int`) <!-- wasm:line --> |
 | `Benchmarks/`, or an API the benchmarks call | `cd Benchmarks && env -u TOOLCHAINS xcrun --toolchain default swift build -c release` <!-- benchmarks:line --> |
+| `Examples/`, or an API the examples call | `just examples-test`, then each `just example-*` the change touches (`just examples` for all) <!-- examples:line --> |
 | A change meant to be faster | `just bench-simulated-compare --target <Module>Benchmarks`, not `just bench-compare` <!-- benchmarks:line --> |
 
 ### Pushing

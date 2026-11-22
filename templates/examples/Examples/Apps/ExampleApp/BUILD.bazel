@@ -1,0 +1,74 @@
+load("@rules_apple//apple:ios.bzl", "ios_application")
+load("@rules_apple//apple:macos.bzl", "macos_application")
+load("@rules_apple//apple:visionos.bzl", "visionos_application")
+load("@rules_apple//apple:watchos.bzl", "watchos_application")
+load("//tools:swift_rules.bzl", "swift_library")
+
+# The Apple example app: a library holding the composition root, built for each platform by an
+# application rule below. Every target is `manual`, so `bazel build //...` and `just test` never
+# build the apps, on a Mac or on Linux; the `just example-*` recipes name them, and the root
+# BUILD.bazel gives each a scheme in the Xcode project. Mac Catalyst has no rules_apple
+# rule (AGENTS.md, Examples).
+swift_library(
+    name = "ExampleAppLibrary",
+    srcs = glob(["**/*.swift"]),
+    module_name = "ExampleApp",
+    tags = ["manual"],
+    deps = [
+        "//Examples/Sources/ExampleViews",
+        "//Sources/Greetings",
+    ],
+)
+
+# The application rules the Xcode project names (APP_TARGETS in the root BUILD.bazel) must be
+# visible to rules_xcodeproj's generated package.
+XCODEPROJ = ["@rules_xcodeproj//xcodeproj:generated"]
+
+# iPhone and iPad: one universal app. `just example-ios` builds it for the simulator.
+ios_application(
+    name = "iOSExample",
+    bundle_id = "com.example.projectname.ios",
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["Info-iOS.plist"],
+    minimum_os_version = "18.0",
+    tags = ["manual"],
+    visibility = XCODEPROJ,
+    deps = [":ExampleAppLibrary"],
+)
+
+# `just example-mac`. Keep minimum_os_version in step with .bazelrc's --macos_minimum_os.
+macos_application(
+    name = "MacExample",
+    bundle_id = "com.example.projectname.mac",
+    infoplists = ["Info-macOS.plist"],
+    minimum_os_version = "15.0",
+    tags = ["manual"],
+    visibility = XCODEPROJ,
+    deps = [":ExampleAppLibrary"],
+)
+
+# `just example-visionos`, for the simulator.
+visionos_application(
+    name = "VisionExample",
+    bundle_id = "com.example.projectname.vision",
+    infoplists = ["Info-visionOS.plist"],
+    minimum_os_version = "2.0",
+    tags = ["manual"],
+    visibility = XCODEPROJ,
+    deps = [":ExampleAppLibrary"],
+)
+
+# A single-target watch app (it has `deps`, no extension). `just example-watchos`, for the
+# simulator.
+watchos_application(
+    name = "WatchExample",
+    bundle_id = "com.example.projectname.watch",
+    infoplists = ["Info-watchOS.plist"],
+    minimum_os_version = "11.0",
+    tags = ["manual"],
+    visibility = XCODEPROJ,
+    deps = [":ExampleAppLibrary"],
+)

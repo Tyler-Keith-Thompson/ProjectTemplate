@@ -1,0 +1,13 @@
+load("//tools:swift_rules.bzl", "swift_library")
+
+# Hand-written, not generated: the Examples/ package is SwiftPM's (Examples/Package.swift), and
+# Bazel builds only what the Apple apps need (Examples/Apps/ExampleApp). `manual` keeps it out of
+# `bazel build //...`, so `just test` never builds the examples; `just examples-test` tests it.
+swift_library(
+    name = "ExampleViews",
+    srcs = glob(["**/*.swift"]),
+    module_name = "ExampleViews",
+    tags = ["manual"],
+    visibility = ["//Examples:__subpackages__"],
+    deps = ["//Sources/Greetings"],
+)
