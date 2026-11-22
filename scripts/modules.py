@@ -86,6 +86,13 @@ APPLE_ONLY_PACKAGES = []  # !views:line
 #| APPLE_ONLY_PACKAGES = ["viewinspector", "swift-snapshot-testing", "xctest-dynamic-overlay"]
 # views:end
 
+# Packages that build everywhere but WebAssembly (those on NIOPosix, such as Hummingbird or Vapor), by
+# identity. SwiftPM links their products on every other platform (`.when(platforms:)`), so the
+# package still builds for wasm32-wasi (`just wasi-test`), where the code using them is left out by
+# `#if canImport`. Bazel never builds for WASI, so it links them everywhere, and
+# //:package_swift_test leaves their products out of its comparison.
+NON_WASI_PACKAGES = []
+
 # Test targets with nothing to run off Apple platforms (all their tests under `#if os(macOS)`), by
 # name. Bazel runs them on macOS alone: elsewhere they are incompatible, so `bazel test //...` skips
 # them, where a test binary that ran no tests would fail. SwiftPM still builds them, empty, on Linux.
@@ -251,6 +258,9 @@ def check():
     for name in APPLE_ONLY_TESTS:
         assert name in dict(TEST_TARGETS), f"APPLE_ONLY_TESTS names unknown test target {name}"
     packages = [p[0] for p in PACKAGES]
+    for name in NON_WASI_PACKAGES:
+        assert name in packages, f"NON_WASI_PACKAGES names unknown package {name}"
+        assert name not in APPLE_ONLY_PACKAGES, f"{name} is Apple-only, which already leaves WASI out"
     for name, deps in [(m[0], m[3]) for m in MODULES] + [(e[0], e[2]) for e in EXECUTABLES]:
         for d in deps:
             if "/" in d:
@@ -309,7 +319,8 @@ def simulator_test(name):
 def spm_dep(d):
     if "/" in d:
         package, product = d.split("/")
-        condition = ", condition: .when(platforms: applePlatforms)" if package in APPLE_ONLY_PACKAGES else ""
+        condition = (", condition: .when(platforms: applePlatforms)" if package in APPLE_ONLY_PACKAGES
+                     else ", condition: .when(platforms: nonWASIPlatforms)" if package in NON_WASI_PACKAGES else "")
         return f'.product(name: "{product}", package: "{package}"{condition})'
     return f'"{d}"'
 
@@ -450,6 +461,16 @@ def package_swift():
         lines += [
             "// Where the Apple-only packages' products are linked (APPLE_ONLY_PACKAGES in scripts/modules.py).",
             "let applePlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS]",
+            "",
+        ]
+    if NON_WASI_PACKAGES:
+        lines += [
+            "// Where the packages that don't build for WebAssembly have their products linked: every",
+            "// platform but WASI (NON_WASI_PACKAGES in scripts/modules.py).",
+            "let nonWASIPlatforms: [Platform] = [",
+            "    .macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit,",
+            "    .linux, .windows, .android, .openbsd,",
+            "]",
             "",
         ]
     lines += [

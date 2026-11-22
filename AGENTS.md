@@ -85,6 +85,9 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
 - A package only Apple platforms build (Objective-C, a wrapper of an Apple framework) goes in
   `APPLE_ONLY_PACKAGES` too: its products are linked on Apple platforms only, so the targets still
   build on Linux, and the code that uses them sits under `#if canImport(...)`.
+- A package that builds everywhere but WebAssembly (one on NIOPosix: Hummingbird, Vapor) goes in
+  `NON_WASI_PACKAGES` too: its products are linked on every other platform, so the package still
+  builds for wasm32-wasi, and the code that uses them sits under `#if canImport(...)`.
 - A module name takes a `Module` suffix only when it would otherwise equal its main type's name
   (`GreetingModule` would hold `Greeting`). No catch-all modules ("Core", "Utilities").
 
@@ -168,6 +171,9 @@ the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
   anything needing threads (`#if !os(WASI)`). On WASI a time limit's timer holds the thread until
   it expires, after the body has run, so every `.timeLimit` test reports its limit exceeded; the
   script reports the issues besides those.
+- A dependency that doesn't build for WASI (NIOPosix and what sits on it) fails the whole build.
+  List its package in `NON_WASI_PACKAGES` (`scripts/modules.py`), and put the code and tests that
+  use it under `#if canImport(<its module>)`.
 <!-- wasm:end -->
 
 <!-- server:begin -->
