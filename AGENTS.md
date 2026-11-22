@@ -86,6 +86,11 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
   name in `EXAMPLE_MODULES`, then `just modules`. It builds and tests like any module, but has no
   library product, umbrella import or DocC archive, so neither it nor its dependencies ship. Only
   executables, test targets and other example modules may depend on it (`check()` enforces it).
+- Offer a module on its own but not through `import ProjectName` (a test-support back end, such as
+  an in-memory store adopters use in their tests): its name in `NON_UMBRELLA_MODULES` too, then
+  `just modules`. It keeps its library product and DocC archive; only the umbrella leaves it out.
+  The umbrella catalog's topic list is hand-written: list it there under a heading of its own, not
+  among the production modules.
 - Add an external package: a row in `PACKAGES`, its `swiftpkg_<identity>` repository in
   `MODULE.bazel`'s `use_repo`, then `just modules` and `just resolve`.
 - Generate mocks: uncomment the Mockable row in `PACKAGES`, add `mockable/Mockable` to the

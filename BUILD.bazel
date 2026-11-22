@@ -154,4 +154,11 @@ swiftpm_manifest_test(
         if package not in SIMULATOR_TEST_PACKAGES
         for module in TEST_MODULES[package]
     ],
+    # Every library under Sources/ is a product, the umbrella too, but executables, iOS modules and
+    # example modules.
+    products = [
+        "//" + package
+        for package in sorted(subpackages(include = ["Sources/*"]))
+        if package not in IOS_PACKAGES and package not in EXECUTABLE_PACKAGES and package not in EXAMPLE_PACKAGES
+    ],
 )
