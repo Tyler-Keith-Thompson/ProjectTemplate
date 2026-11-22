@@ -165,6 +165,16 @@ It needs a clean worktree, never commits, and moves the stamp to the new commit,
 shows the whole update. Then resolve any conflicts, `just modules`, `just test`, and commit.
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
 
+The Swift a project builds with is declared once, `SWIFT` and `SWIFT_TOOLCHAIN` in
+`scripts/modules.py`. `just modules` writes them into the generated manifests and replaces the
+previous ones in every other file that names them (`SWIFT_SITES`: the hand-written manifests, the
+workflows, the Dockerfile, the scripts and the docs), reading the previous ones from the generated
+`tools/swift_version.bzl`. When a project declares versions other than the stamped commit's,
+`update`, `add` and `retype` give both renders the project's versions before merging, so those lines
+never conflict, and the report says when the template's own floor has passed the project's. To
+raise the template's floor, change the two lines here, `just modules`, and publish the CI images
+(`ci-image/build.sh`).
+
 Every project's Bazel builds share one disk cache, `~/.cache/bazel-disk`, which Bazel keeps under
 30 GB. Projects made before that each had their own, `~/.cache/bazel-<name>`, which nothing trims;
 once every project is updated past it, delete those directories by hand (`template-update` only
@@ -217,12 +227,13 @@ numbering intact.
 | Piece | Where | Notes |
 |---|---|---|
 | One module table | `scripts/modules.py` | Writes `Package.swift`, every `BUILD.bazel`, the umbrella, `swift/Package.swift`; `//:package_swift_test` keeps them honest |
+| Swift version | `SWIFT`, `SWIFT_TOOLCHAIN` in `scripts/modules.py` | Generated into the manifests and replaced in `SWIFT_SITES` from the record in `tools/swift_version.bzl`; `template.py` renders with the project's versions |
 | Warnings as errors | `tools/swift_rules.bzl` | First-party only; dependencies build quietly (`.bazelrc`) |
 | Swift 6 mode, one package name | `tools/swift_rules.bzl` | So `package` access and retroactive conformances agree with SwiftPM |
 | Debug default, release config | `.bazelrc`, `justfile` | Release uses its own output base; `debug-only` tags keep ordinary tests out of release |
 | Analysis-cache guardrail | `.bazelrc` | `--noallow_analysis_cache_discard` |
 | Remote cache | `tools/bazel`, `tools/buildbuddy.bazelrc`, `tools/buildbuddy-credentials`, CI | BuildBuddy, on when the login Keychain holds the key: Bazelisk runs `tools/bazel`, which adds the BuildBuddy rc file, and a credential helper hands Bazel the key per request. Large outputs move in content-defined chunks (`--experimental_remote_cache_chunking`). CI writes the same flags from the `BUILDBUDDY_API_KEY` secret (`just ci-secrets`). `user.bazelrc.example` is the manual setup for a machine without a Keychain. |
-| CI image | `ci-image/`, CI | `ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>`: the `swift` image with Bazelisk and the Bazel in `.bazelversion` already downloaded, so CI's Bazel jobs install nothing. The package is private: each project's repository gets Read under Manage Actions access in its settings, and the jobs pull with their `GITHUB_TOKEN` (`packages: read`). `ci-image/build.sh --push [<swift>...]` builds it for arm64 and amd64 and pushes it (gh needs `write:packages`): 6.3 and 6.3.3 for the template's workflows, and 6.4 for projects whose Swift floor is higher, which switch their own workflows' tag; run it after changing `.bazelversion` or a workflow's Swift version, then update the workflows' tags. Bootstrap leaves the directory out of projects. Bazel's downloads persist between runs in `actions/cache` (`~/.cache/bazel-repository`, keyed on `MODULE.bazel.lock` and `swift/Package.resolved`). |
+| CI image | `ci-image/`, CI | `ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>`: the `swift` image with Bazelisk and the Bazel in `.bazelversion` already downloaded, so CI's Bazel jobs install nothing. The package is private: each project's repository gets Read under Manage Actions access in its settings, and the jobs pull with their `GITHUB_TOKEN` (`packages: read`). `ci-image/build.sh --push [<swift>...]` builds it for arm64 and amd64 and pushes it (gh needs `write:packages`): `SWIFT` and `SWIFT_TOOLCHAIN` (`scripts/modules.py`) for the template's workflows by default, and the higher versions in its `swift_versions` list for projects that raise their floor (add one there first); run it after changing `.bazelversion` or the template's Swift version. `just modules` writes the tags into the workflows. Bootstrap leaves the directory out of projects. Bazel's downloads persist between runs in `actions/cache` (`~/.cache/bazel-repository`, keyed on `MODULE.bazel.lock` and `swift/Package.resolved`). |
 | Xcode project from the graph | `just generate` | rules_xcodeproj, into `xcode/`; schemes derived from `Tests/*` |
 | DocC site | `tools/docc.bzl`, `just docs`, `docc.yml` | One archive per module, merged; published to gh-pages |
 | Benchmarks (opt-in) | `Benchmarks/`, `tools/benchmarks.bzl`, `scripts/bench_simulated.py` | Separate package, ordo-one/benchmark, generated from `BENCHMARKS` in `scripts/modules.py`; `BASELINE` entries, committed `main` and `simulated` baselines. Simulated counts are cached Bazel outputs, one `no-sandbox` action per target, so only targets whose inputs changed are measured |

@@ -39,6 +39,7 @@ The stamp is PROJECT/.template.json, written by bootstrap.sh. .github/README.md,
 projects current", describes the workflow.
 """
 import argparse
+import importlib.util
 import json
 import os
 import pathlib
@@ -118,6 +119,61 @@ def render(commit, stamp, scratch, variant=""):
     if result.returncode != 0:
         sys.exit(f"Rendering the template at {commit[:12]} failed:\n{result.stderr.strip()}")
     return rendered
+
+
+def declared_swift(project):
+    """The (SWIFT, SWIFT_TOOLCHAIN) that `project`'s scripts/modules.py declares, or None for one from
+    before the template declared them."""
+    path = project / "scripts" / "modules.py"
+    if not path.is_file():
+        return None
+    values = dict(re.findall(r'^(SWIFT|SWIFT_TOOLCHAIN) = "([^"]*)"$', path.read_text(), re.MULTILINE))
+    if "SWIFT" not in values or "SWIFT_TOOLCHAIN" not in values:
+        return None
+    return values["SWIFT"], values["SWIFT_TOOLCHAIN"]
+
+
+def rendered_swift(rendered, modules):
+    """The Swift versions a render's files name: its record, else (a template from before it kept one)
+    its manifest's tools version and the toolchain AGENTS.md has swiftly install."""
+    recorded = modules.recorded_swift(rendered)
+    if recorded:
+        return recorded
+    manifest = rendered / "Package.swift"
+    floor = re.match(r"// swift-tools-version: (\S+)", manifest.read_text()) if manifest.is_file() else None
+    agents = rendered / "AGENTS.md"
+    toolchain = re.search(r"swiftly install (\d+\.\d+\.\d+)", agents.read_text()) if agents.is_file() else None
+    return floor and floor.group(1), toolchain and toolchain.group(1)
+
+
+def version_key(version):
+    return tuple(int(part) for part in version.split("."))
+
+
+def follow_project_swift(project, base, new):
+    """Gives both renders the project's Swift versions when it chose its own, so every line naming
+    them merges as the project's rather than conflicting; returns a note for the report, or None.
+    The template's replacement is used for renders of any commit, which may predate it."""
+    declared = declared_swift(project)
+    if declared is None:
+        return None
+    spec = importlib.util.spec_from_file_location("template_modules", TEMPLATE / "scripts" / "modules.py")
+    modules = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modules)
+    if rendered_swift(base, modules) == declared:
+        return None
+    newer = rendered_swift(new, modules)
+    for rendered in (base, new):
+        modules.replace_swift(str(rendered), rendered_swift(rendered, modules), declared)
+        declaration = rendered / "scripts" / "modules.py"
+        if declaration.is_file():
+            text = re.sub(r'^SWIFT = "[^"]*"$', f'SWIFT = "{declared[0]}"', declaration.read_text(), flags=re.MULTILINE)
+            text = re.sub(r'^SWIFT_TOOLCHAIN = "[^"]*"$', f'SWIFT_TOOLCHAIN = "{declared[1]}"', text, flags=re.MULTILINE)
+            declaration.write_text(text)
+    if newer[0] and version_key(newer[0]) > version_key(declared[0]):
+        return (f"The template now builds with Swift {newer[0]} ({newer[1]}); this project stays on {declared[0]} "
+                f"({declared[1]}). To follow it, set SWIFT and SWIFT_TOOLCHAIN in scripts/modules.py and run `just modules`.")
+    return None
 
 
 def files(root):
@@ -221,6 +277,7 @@ def update(arguments):
         scratch = pathlib.Path(directory)
         base = render(old_commit, stamp, scratch)
         new = render(new_commit, stamp, scratch)
+        swift_note = follow_project_swift(project, base, new)
         report = merge(project, base, new, f"template {old_commit[:12]}", f"template {new_commit[:12]}")
     regenerate = regenerate_modules(project)
     stamp.update(commit=new_commit)
@@ -231,7 +288,7 @@ def update(arguments):
     for line in git("log", "--format=  %h %s", f"{old_commit}..{new_commit}").splitlines():
         print(line)
     print()
-    return print_report(report, regenerate)
+    return print_report(report, regenerate, swift_note)
 
 
 def regenerate_modules(project):
@@ -240,7 +297,7 @@ def regenerate_modules(project):
     return subprocess.run([sys.executable, "scripts/modules.py"], cwd=project, capture_output=True, text=True)
 
 
-def print_report(report, regenerate):
+def print_report(report, regenerate, swift_note=None):
     labels = {
         "updated": "Updated (unchanged here, so taken whole)",
         "added": "Added",
@@ -259,6 +316,8 @@ def print_report(report, regenerate):
     if regenerate is not None and regenerate.returncode != 0:
         print(f"\nscripts/modules.py failed, so the generated files are stale; fix it and run `just modules`:\n"
               f"{regenerate.stderr.strip()}")
+    if swift_note:
+        print(f"\n{swift_note}")
     print("\nNext: resolve any conflicts, `just modules`, `just test`, review `git diff`, then commit.")
     return 1 if report["conflicted"] or (regenerate is not None and regenerate.returncode != 0) else 0
 
@@ -302,12 +361,13 @@ def add(arguments):
         with_options = dict(stamp, **{feature: True for feature in new_features})
         base = render(commit, stamp, scratch)
         new = render(commit, with_options, scratch, variant=added)
+        swift_note = follow_project_swift(project, base, new)
         report = merge(project, base, new, f"template {commit[:12]}", f"template {commit[:12]} {added}")
     regenerate = regenerate_modules(project)
     write_stamp(project, with_options)
 
     print(f"{project.name}: {', '.join('--' + feature for feature in new_features)} at template {commit[:12]}\n")
-    return print_report(report, regenerate)
+    return print_report(report, regenerate, swift_note)
 
 
 def retype(arguments):
@@ -335,13 +395,14 @@ def retype(arguments):
         retyped = dict(stamp, type=arguments.type)
         base = render(commit, stamp, scratch)
         new = render(commit, retyped, scratch, variant=f"-{arguments.type}")
+        swift_note = follow_project_swift(project, base, new)
         report = merge(project, base, new, f"template {commit[:12]} {stamp['type']}",
                        f"template {commit[:12]} {arguments.type}")
     regenerate = regenerate_modules(project)
     write_stamp(project, retyped)
 
     print(f"{project.name}: {stamp['type']} -> {arguments.type} at template {commit[:12]}\n")
-    return print_report(report, regenerate)
+    return print_report(report, regenerate, swift_note)
 
 
 def stamp_command(arguments):
