@@ -130,7 +130,10 @@ def main():
             # In parallel by default: on WASI a time limit's timer holds the one thread until it
             # expires, so every time-limited test reports its limit as exceeded. In parallel the
             # timers overlap; one at a time (--serial), each costs its whole limit.
-            test = ["wasmtime", "run", "-W", f"max-wasm-stack={WASM_STACK}", "--dir", ".", binary,
+            # The checkout also at its own path: SwiftPM's `Bundle.module` names a module's resource
+            # bundle (RESOURCES in scripts/modules.py) by its absolute path in the build directory.
+            root = os.path.realpath(ROOT)
+            test = ["wasmtime", "run", "-W", f"max-wasm-stack={WASM_STACK}", "--dir", ".", "--dir", f"{root}::{root}", binary,
                     "--testing-library", "swift-testing"] + (["--no-parallel"] if args.serial else [])
             log = os.path.join(logs, f"{tag}-{name}-test.log")
             status = run(test, env, log, args.timeout)

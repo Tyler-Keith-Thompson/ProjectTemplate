@@ -176,6 +176,19 @@ NON_UMBRELLA_MODULES = []
 # so `import ProjectName` never needs Testing.
 TESTING_MODULES = []
 
+# Modules' resources, by name from MODULES: a list of (rule, path) per module, the path relative to
+# Sources/<name> (a file or a directory) and the rule SwiftPM's: "process" flattens the files into
+# the bundle's root (keeping a localization's `.lproj`), and processes them on Apple platforms as
+# Xcode does; "copy" keeps the entry whole, by its last path component. Package.swift gets
+# `resources: [.process(path), .copy(path)]`, and Bazel the same `<PROJECT>_<name>.bundle` and a
+# `Bundle.module` that finds it (tools/resources.bzl): in an app's or a test bundle's resources on
+# Apple platforms, in the runfiles of `bazel test` and `bazel run` on macOS and Linux. So the module
+# reads them through `Bundle.module` under either build system. Apple's privacy manifest is
+# ("copy", "PrivacyInfo.xcprivacy"), at the bundle's root where Apple reads it: a module holding one
+# must list it. Firmware modules have none: Embedded Swift has no Foundation and no bundles.
+# {"Greetings": [("process", "Data/greetings.json"), ("copy", "PrivacyInfo.xcprivacy")]}
+RESOURCES = {}
+
 # Compiler plugins holding macros: (name, group, description, dependencies), whose dependencies
 # are packages' products only (swift-syntax's). A module lists one among its dependencies to offer its
 # macros: SwiftPM takes it as a dependency of a `.macro` target, Bazel as a `plugins` entry of a
@@ -400,6 +413,35 @@ def duplicate_definitions():
     return sorted(name for name, count in counts.items() if count > 1)
 
 
+# Apple's privacy manifest, which a module that calls a required-reason API or collects data ships
+# at the root of its resource bundle (RESOURCES).
+PRIVACY_MANIFEST = "PrivacyInfo.xcprivacy"
+
+
+def check_resources(names):
+    """RESOURCES names modules by `names`, each entry a "process" or "copy" of a path that exists
+    under the module, none listed twice or inside another; and a module holding a privacy manifest
+    lists it."""
+    for name, entries in RESOURCES.items():
+        assert name in names, f"RESOURCES names unknown module {name}"
+        #| assert name not in FIRMWARE_MODULES, f"{name} is a firmware module, and Embedded Swift has no resource bundles"  # embedded:line
+        paths = [path for _, path in entries]
+        for rule, path in entries:
+            assert rule in ("process", "copy"), f"RESOURCES gives Sources/{name}/{path} the rule {rule!r}: use \"process\" or \"copy\""
+            assert path == os.path.normpath(path) and not os.path.isabs(path) and not path.startswith(".."), \
+                f"RESOURCES lists {path!r} for {name}: give a path inside Sources/{name}, without ./, ../ or a trailing /"
+            assert os.path.exists(os.path.join(ROOT, "Sources", name, path)), \
+                f"RESOURCES lists Sources/{name}/{path}, which doesn't exist"
+            assert paths.count(path) == 1, f"RESOURCES lists Sources/{name}/{path} more than once"
+            outer = [other for other in paths if path.startswith(other + "/")]
+            assert not outer, f"RESOURCES lists Sources/{name}/{path} inside Sources/{name}/{outer[0]}, which it lists too"
+    for name in names:
+        if os.path.isfile(os.path.join(ROOT, "Sources", name, PRIVACY_MANIFEST)):
+            assert PRIVACY_MANIFEST in [path for _, path in RESOURCES.get(name, [])], (
+                f"Sources/{name} holds a {PRIVACY_MANIFEST} that RESOURCES doesn't list, so it would ship in no bundle: "
+                f"add (\"copy\", \"{PRIVACY_MANIFEST}\") to RESOURCES[\"{name}\"]")
+
+
 def check():
     names = [m[0] for m in MODULES]
     # A plugin is a dependency like a module, but no list of modules below may name one.
@@ -491,6 +533,7 @@ def check():
     for name, _, deps in EXECUTABLES:
         for d in deps:
             assert d not in TESTING_MODULES, f"the executable {name} depends on {d}, which imports Testing, a test-only library"
+    check_resources(names)
     # embedded:begin
     #| for name in FIRMWARE_MODULES:
     #|     assert name in names, f"FIRMWARE_MODULES names unknown module {name}"
@@ -655,6 +698,40 @@ def swift_string(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
 
+def resources_arg(name):
+    """Module `name`'s `resources:` argument in Package.swift (RESOURCES), or nothing."""
+    entries = RESOURCES.get(name, [])
+    if not entries:
+        return ""
+    return ", resources: [" + ", ".join(f".{rule}({swift_string(path)})" for rule, path in entries) + "]"
+
+
+def resources_bazel(name):
+    """Module `name`'s resources in its BUILD.bazel (RESOURCES): the load, the swift_library's `srcs`
+    and `data`, and the module_resources call (tools/resources.bzl). Without resources, the plain
+    `srcs` and nothing else."""
+    entries = RESOURCES.get(name, [])
+    if not entries:
+        return "", '    srcs = glob(["**/*.swift"]),\n', "", ""
+    lists = "".join(
+        f"    {rule} = [\n" + "".join(f'        "{path}",\n' for r, path in entries if r == rule) + "    ],\n"
+        for rule in ("process", "copy") if any(r == rule for r, _ in entries)
+    )
+    return (
+        'load("//tools:resources.bzl", "module_resources", "module_resources_data")\n',
+        '    # `Bundle.module`, as SwiftPM generates it, for the resources below.\n'
+        '    srcs = glob(["**/*.swift"]) + [":ResourcesAccessor"],\n',
+        '    data = module_resources_data("Resources"),\n',
+        "\n# The module's resources (RESOURCES in scripts/modules.py), in the bundle SwiftPM builds for them.\n"
+        "module_resources(\n"
+        '    name = "Resources",\n'
+        f'    bundle_name = "{PROJECT}_{name}",\n'
+        f'    bundle_id = "{PROJECT.lower()}.{name}.resources",\n'
+        f"{lists}"
+        ")\n",
+    )
+
+
 def exclude_arg(path):
     files = excluded(path)
     if files == ["BUILD.bazel"]:
@@ -746,11 +823,12 @@ def package_swift():
             group = g
         ex = exclude_arg(f"Sources/{name}")
         settings = ', swiftSettings: [.define("MOCKING", .when(configuration: .debug))]' if MOCKING in deps else ""
+        resources = resources_arg(name)
         if deps:
             dl = ", ".join(spm_dep(d) for d in deps)
-            lines.append(f'    .target(name: "{name}", dependencies: [{dl}]{ex}{settings}),')
+            lines.append(f'    .target(name: "{name}", dependencies: [{dl}]{ex}{resources}{settings}),')
         else:
-            lines.append(f'    .target(name: "{name}"{ex}),')
+            lines.append(f'    .target(name: "{name}"{ex}{resources}),')
     for name, g, _, deps in MACROS:
         lines.append(f"    // {g}: compiler plugin")
         dl = ", ".join(spm_dep(d) for d in deps)
@@ -851,6 +929,7 @@ def build_bazel(name, description, deps, linked=()):
     #|         ")\n"
     #|     )
     # embedded:end
+    resources_load, srcs_attr, data_attr, resources = resources_bazel(name)
     deps_attr = bazel_deps(deps)
     defines_attr = (
         "    # Mock<Protocol> types from @Mockable, in debug builds only (MOCKING in scripts/modules.py).\n"
@@ -863,35 +942,41 @@ def build_bazel(name, description, deps, linked=()):
     if name in IOS_MODULES:
         return (
             "# GENERATED by scripts/modules.py — edit the table there, then run `just modules`.\n\n"
+            f"{resources_load}"
             'load("//tools:swift_rules.bzl", "swift_library")\n\n'
             f"# {description}\n"
             "# iOS only (IOS_MODULES in scripts/modules.py): built for the simulator through the app and the\n"
             "# simulator tests, skipped by `bazel build //...` on the Mac.\n"
             "swift_library(\n"
             f'    name = "{name}",\n'
-            '    srcs = glob(["**/*.swift"]),\n'
+            f"{srcs_attr}"
+            f"{data_attr}"
             f'    module_name = "{name}",\n'
             f"{defines_attr}"
             f"{deps_attr}"
             '    target_compatible_with = ["@platforms//os:ios"],\n'
             '    visibility = ["//visibility:public"],\n'
             ")\n"
+            f"{resources}"
         )
     if name in EXAMPLE_MODULES:
         return (
             "# GENERATED by scripts/modules.py — edit the table there, then run `just modules`.\n\n"
+            f"{resources_load}"
             'load("//tools:swift_rules.bzl", "swift_library")\n\n'
             f"# {description}\n"
             "# An example (EXAMPLE_MODULES in scripts/modules.py): no product, umbrella import or docs.\n"
             "swift_library(\n"
             f'    name = "{name}",\n'
-            '    srcs = glob(["**/*.swift"]),\n'
+            f"{srcs_attr}"
+            f"{data_attr}"
             f'    module_name = "{name}",\n'
             f"{defines_attr}"
             f"{deps_attr}"
             f"{testing_attr}"
             '    visibility = ["//visibility:public"],\n'
             ")\n"
+            f"{resources}"
         )
     doc_deps = "".join(f'        "{bazel_label(d)}:{d}Documentation",\n' for d in [*deps, *linked] if "/" not in d and not is_macro(d))
     doc_deps_attr = f"    deps = [\n{doc_deps}    ],\n" if doc_deps else ""
@@ -901,17 +986,21 @@ def build_bazel(name, description, deps, linked=()):
         "# GENERATED by scripts/modules.py — edit the table there, then run `just modules`.\n\n"
         'load("//tools:docc.bzl", "docc_archive")\n'
         f"{embedded_load}"  # embedded:line
+        f"{resources_load}"
         'load("//tools:swift_rules.bzl", "swift_library")\n\n'
         f"# {description}\n"
         "swift_library(\n"
         f'    name = "{name}",\n'
-        '    srcs = glob(["**/*.swift"]),\n'
+        f"{srcs_attr}"
+        f"{data_attr}"
         f'    module_name = "{name}",\n'
         f"{defines_attr}"
         f"{deps_attr}"
         f"{testing_attr}"
         '    visibility = ["//visibility:public"],\n'
-        ")\n\n"
+        ")\n"
+        f"{resources}"
+        "\n"
         "# The module's DocC archive, merged into //:docs. `manual` keeps it out of `bazel build //...`.\n"
         "docc_archive(\n"
         f'    name = "{name}Documentation",\n'

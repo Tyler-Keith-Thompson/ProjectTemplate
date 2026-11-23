@@ -112,6 +112,19 @@ in beside the project's own: keep one definition, holding the project's rows, an
   paths, which rules_swift gives testonly targets alone; the generator gives them to its
   `swift_library` and its docs' symbol graph. A module that depends on it must be listed too, and no
   executable may (`check()` enforces both).
+- Give a module resources (data files, Apple's privacy manifest): put them under `Sources/<Module>/`
+  and list each in `RESOURCES` (`{"<Module>": [("process", "Data/x.json"), ("copy", "Fixtures")]}`,
+  paths relative to the module, rules as SwiftPM's `.process` and `.copy`), then `just modules`.
+  Package.swift gets `resources:`, and Bazel the same `ProjectName_<Module>.bundle`
+  (`tools/resources.bzl`): nested in an app's or test bundle's resources on Apple platforms, in the
+  runfiles of `bazel test` and `bazel run` on macOS and Linux, found by a generated `Bundle.module`.
+  The module reads them through `Bundle.module` under either build system, and its tests read them
+  through the module. Bazel processes `process` files only inside Apple bundles (strings, asset
+  catalogs); elsewhere they are copied as they are, as SwiftPM does off Apple platforms. A module
+  that calls a required-reason API or collects data ships `PrivacyInfo.xcprivacy`, listed as
+  `("copy", "PrivacyInfo.xcprivacy")` so it sits at the bundle's root; `check()` refuses one left
+  out, a listed path that doesn't exist, and one inside another listed directory.
+  A firmware module can't have resources: Embedded Swift has no bundles. <!-- embedded:line -->
 - Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
   package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
   in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`

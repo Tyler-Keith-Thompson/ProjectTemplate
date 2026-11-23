@@ -16,22 +16,29 @@ The generated Benchmarks/BUILD.bazel holds one target per row of
 BENCHMARKS in scripts/modules.py; `just bench-simulated` builds them.
 """
 
+load(":resources.bzl", "ModuleResourcesInfo")
+
 _SourcesInfo = provider(
-    doc = "The first-party Swift sources a module compiles from, its own and its dependencies'.",
+    doc = "The first-party files a module compiles from, its own and its dependencies': Swift sources and resources.",
     fields = {"files": "depset of File"},
 )
 
 def _sources_aspect_impl(target, ctx):
     own = []
     if target.label.workspace_name == "" and hasattr(ctx.rule.files, "srcs"):
-        own = ctx.rule.files.srcs
+        # Bazel's own `Bundle.module` (tools/resources.bzl) is generated; SwiftPM generates its own.
+        own = [file for file in ctx.rule.files.srcs if file.is_source]
+    # A module's resources (RESOURCES in scripts/modules.py), which SwiftPM bundles with it.
+    if ModuleResourcesInfo in target:
+        own = target[ModuleResourcesInfo].files.to_list()
     # A module's compiler plugins (`plugins`) expand its macros, so their sources are inputs too.
-    transitive = [d[_SourcesInfo].files for d in getattr(ctx.rule.attr, "deps", []) + getattr(ctx.rule.attr, "plugins", []) if _SourcesInfo in d]
+    attributes = getattr(ctx.rule.attr, "deps", []) + getattr(ctx.rule.attr, "plugins", []) + getattr(ctx.rule.attr, "data", [])
+    transitive = [d[_SourcesInfo].files for d in attributes if _SourcesInfo in d]
     return [_SourcesInfo(files = depset(own, transitive = transitive))]
 
 _sources_aspect = aspect(
     implementation = _sources_aspect_impl,
-    attr_aspects = ["deps", "plugins"],
+    attr_aspects = ["deps", "plugins", "data"],
 )
 
 # One measurement starts a VM of 4 processors and 16 GiB (BenchmarkHarness's defaults), so Bazel

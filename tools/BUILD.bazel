@@ -30,6 +30,10 @@ config_setting(
     values = {"compilation_mode": "dbg"},
     visibility = ["//visibility:public"],
 )
+
+# The Info.plist of a module's resource bundle on Apple platforms (RESOURCES in scripts/modules.py,
+# tools/resources.bzl): the keys SwiftPM writes into the bundle it builds for the same resources.
+exports_files(["ResourceBundleInfo.plist"])
 # embedded:begin
 
 # The toolchain wrapper Embedded Swift compiles through (tools/embedded.bzl).
