@@ -94,6 +94,12 @@ in beside the project's own: keep one definition, holding the project's rows, an
   `just modules`. It keeps its library product and DocC archive; only the umbrella leaves it out.
   The umbrella catalog's topic list is hand-written: list it there under a heading of its own, not
   among the production modules.
+- A library module that imports Swift Testing (a helper adopters add to their test targets: a
+  custom `Trait`, an assertion that records an `Issue`): its name in `TESTING_MODULES` and
+  `NON_UMBRELLA_MODULES` too, then `just modules`. Bazel finds Testing only on the developer search
+  paths, which rules_swift gives testonly targets alone; the generator gives them to its
+  `swift_library` and its docs' symbol graph. A module that depends on it must be listed too, and no
+  executable may (`check()` enforces both).
 - Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
   package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
   in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`

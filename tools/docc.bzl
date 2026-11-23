@@ -139,7 +139,10 @@ def _extract_symbol_graph(ctx, module_name):
         # Matches the swift-docc-plugin's defaults.
         emit_extension_block_symbols = "1",
         feature_configuration = feature_configuration,
-        include_dev_srch_paths = False,
+        # A module that imports Testing (TESTING_MODULES in scripts/modules.py) finds it only on the
+        # developer search paths, as its compile did; every other module keeps them off, as
+        # rules_swift does for anything not testonly.
+        include_dev_srch_paths = ctx.attr.always_include_developer_search_paths,
         minimum_access_level = "public",
         module_name = module_name,
         output_dir = extracted,
@@ -258,6 +261,11 @@ docc_archive = rule(
         "deps": attr.label_list(
             providers = [DoccArchiveInfo],
             doc = "The archives of the module's first-party dependencies, for cross-module links.",
+        ),
+        "always_include_developer_search_paths": attr.bool(
+            default = False,
+            doc = "Whether symbol graph extraction searches the developer paths, where Testing is; " +
+                  "set it as on the module's swift_library.",
         ),
         "catalog_generator": attr.label(
             allow_single_file = [".py"],
