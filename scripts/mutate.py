@@ -159,7 +159,8 @@ def load_spec(module):
 def source_dirs(bundles):
     """Every directory whose sources the bundles are built from: the bundles, their modules and
     the modules' dependencies, transitively."""
-    deps = {name: d for name, _, _, d in TABLE["MODULES"]}
+    # Compiler plugins (MACROS) are built from their sources like modules.
+    deps = {name: d for name, _, _, d in TABLE["MODULES"] + TABLE["MACROS"]}
     deps[TEST_SUPPORT] = TABLE["TEST_SUPPORT_DEPENDENCIES"]
     tests = dict(TABLE["TEST_TARGETS"])
     # A performance bundle's sources are in Performance/ under its module's test directory.
@@ -193,7 +194,7 @@ def pruned_manifest(bundles, modules=()):
     with open(os.path.join(ROOT, "Package.swift")) as f:
         lines = f.read().split("\n")
     kept = [line for line in lines
-            if not (m := re.match(r'\s*\.(?:library|executable|target|executableTarget|testTarget)\(name: "([^"]+)"', line)) or m.group(1) in names]
+            if not (m := re.match(r'\s*\.(?:library|executable|target|executableTarget|testTarget|macro)\(name: "([^"]+)"', line)) or m.group(1) in names]
     return "\n".join(kept)
 
 
@@ -294,7 +295,7 @@ def sync_coverage_workspace(module, bundles):
         subprocess.run(["rsync", "-a", "-c", "--delete", os.path.join(WORK, item), COVERAGE_WORK], check=True)
     with open(os.path.join(WORK, "Package.swift")) as f:
         manifest = f.read()
-    manifest, found = re.subn(rf'(\.target\(name: "{module}",.*?)\),\n',
+    manifest, found = re.subn(rf'(\.(?:target|macro)\(name: "{module}",.*?)\),\n',
                               rf'\1, swiftSettings: [{INSTRUMENT}]),\n', manifest, count=1)
     if not found:
         sys.exit(f"No target {module} in Package.swift")

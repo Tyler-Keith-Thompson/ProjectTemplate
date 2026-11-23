@@ -25,12 +25,13 @@ def _sources_aspect_impl(target, ctx):
     own = []
     if target.label.workspace_name == "" and hasattr(ctx.rule.files, "srcs"):
         own = ctx.rule.files.srcs
-    transitive = [d[_SourcesInfo].files for d in getattr(ctx.rule.attr, "deps", []) if _SourcesInfo in d]
+    # A module's compiler plugins (`plugins`) expand its macros, so their sources are inputs too.
+    transitive = [d[_SourcesInfo].files for d in getattr(ctx.rule.attr, "deps", []) + getattr(ctx.rule.attr, "plugins", []) if _SourcesInfo in d]
     return [_SourcesInfo(files = depset(own, transitive = transitive))]
 
 _sources_aspect = aspect(
     implementation = _sources_aspect_impl,
-    attr_aspects = ["deps"],
+    attr_aspects = ["deps", "plugins"],
 )
 
 # One measurement starts a VM of 4 processors and 16 GiB (BenchmarkHarness's defaults), so Bazel

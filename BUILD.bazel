@@ -4,6 +4,7 @@ load("@rules_xcodeproj//xcodeproj:defs.bzl", "xcodeproj", "xcschemes")
 load("//tools:docc.bzl", "docc_site")
 load("//tools:examples.bzl", "EXAMPLE_PACKAGES")
 load("//tools:executables.bzl", "EXECUTABLE_PACKAGES")
+load("//tools:macros.bzl", "MACRO_PACKAGES")
 #| load("//tools:ios.bzl", "IOS_PACKAGES", "SIMULATOR_TEST_PACKAGES")  # app:line
 load("//tools:performance_tests.bzl", "PERFORMANCE_TEST_PACKAGES")
 load("//tools:swiftpm.bzl", "swiftpm_manifest_test")
@@ -35,11 +36,13 @@ APP_TARGETS = []  # !examples:line
 # `Tests/` with a BUILD.bazel holding a swift_test is a test bundle. Listing them by hand means a
 # new suite is invisible in Xcode until somebody remembers to come back here.
 #
-# ProjectNameTestSupport lives under Tests/ too, but it is a library, so it is excluded by name.
+# ProjectNameTestSupport lives under Tests/ too, but it is a library, so it is excluded by name, and
+# so is CompileFailures, which holds no test module: its tests check sources that must not compile
+# (tools/compile_failure_test.bzl).
 TEST_PACKAGES = sorted([
     package
     for package in subpackages(include = ["Tests/*"])
-    if package != "Tests/ProjectNameTestSupport"
+    if package not in ["Tests/ProjectNameTestSupport", "Tests/CompileFailures"]
 ])
 
 # Xcode runs each package's .xctest bundle target; `bazel test` runs its swift_test (see
@@ -125,7 +128,7 @@ docc_site(
     archives = [
         "//" + package + ":" + package.removeprefix("Sources/") + "Documentation"
         for package in sorted(subpackages(include = ["Sources/*"]))
-        if package not in EXECUTABLE_PACKAGES and package not in IOS_PACKAGES and package not in EXAMPLE_PACKAGES
+        if package not in EXECUTABLE_PACKAGES and package not in IOS_PACKAGES and package not in EXAMPLE_PACKAGES and package not in MACRO_PACKAGES
     ],
     landing_page_name = "ProjectName",
     tags = ["manual"],
@@ -154,11 +157,11 @@ swiftpm_manifest_test(
         if package not in SIMULATOR_TEST_PACKAGES
         for module in TEST_MODULES[package]
     ],
-    # Every library under Sources/ is a product, the umbrella too, but executables, iOS modules and
-    # example modules.
+    # Every library under Sources/ is a product, the umbrella too, but executables, iOS modules,
+    # example modules and compiler plugins.
     products = [
         "//" + package
         for package in sorted(subpackages(include = ["Sources/*"]))
-        if package not in IOS_PACKAGES and package not in EXECUTABLE_PACKAGES and package not in EXAMPLE_PACKAGES
+        if package not in IOS_PACKAGES and package not in EXECUTABLE_PACKAGES and package not in EXAMPLE_PACKAGES and package not in MACRO_PACKAGES
     ],
 )

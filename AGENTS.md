@@ -91,6 +91,21 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
   `just modules`. It keeps its library product and DocC archive; only the umbrella leaves it out.
   The umbrella catalog's topic list is hand-written: list it there under a heading of its own, not
   among the production modules.
+- Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
+  package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
+  in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`
+  and `just resolve`. The module that declares the macros (`#externalMacro(module: "<Plugin>",
+  type: ...)`) lists the plugin among its dependencies: Package.swift gets a `.macro` target, Bazel
+  a `swift_compiler_plugin` in that module's `plugins`. The plugin has no product, docs or umbrella
+  import; adopters import the declaring module, and build swift-syntax with it, so when the package
+  has an umbrella, consider `NON_UMBRELLA_MODULES` for it. A test target that lists the plugin tests
+  its expansions (`assertMacroExpansion` from `SwiftSyntaxMacrosGenericTestSupport`, with
+  `Issue.record` as its failure handler); one that lists the declaring module tests the expanded
+  code. A source that must not compile (a macro's diagnostic as the compiler reports it) is a
+  `swift_compile_failure_test` (`tools/compile_failure_test.bzl`) in `Tests/CompileFailures`, a
+  hand-written BUILD.bazel no Package.swift target holds, with a control that compiles.
+  A plugin takes planted bugs like a module (`scripts/mutants/<Plugin>.py`), with its expansion <!-- mutation:line -->
+  tests as the spec's `TESTS`. <!-- mutation:line -->
 - Add an external package: a row in `PACKAGES`, its `swiftpkg_<identity>` repository in
   `MODULE.bazel`'s `use_repo`, then `just modules` and `just resolve`.
 - Generate mocks: uncomment the Mockable row in `PACKAGES`, add `mockable/Mockable` to the
