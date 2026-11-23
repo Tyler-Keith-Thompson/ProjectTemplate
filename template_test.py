@@ -168,6 +168,41 @@ class TemplateCommandTests(unittest.TestCase):
             self.assertEqual(actual[path], wanted[path], path)
         self.assertTrue(json.loads((project / ".template.json").read_text())["wasm"])
 
+    def test_update_reports_a_table_the_project_already_defines_and_never_leaves_the_empty_one_in_effect(self):
+        # The template before it had MACROS: the stock file without its assignment.
+        modules = self.template / "scripts" / "modules.py"
+        stock = modules.read_text()
+        git("checkout", "-q", "-b", "before-macros", cwd=self.template)
+        modules.write_text(stock.replace("MACROS = []\n", "", 1))
+        git("commit", "-q", "-am", "before MACROS", cwd=self.template)
+        before = git("rev-parse", "HEAD", cwd=self.template)
+        result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", "--library", NAME,
+                     str(self.scratch / "own-macros"), cwd=self.scratch)
+        git("checkout", "-q", "main", cwd=self.template)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # A project that defined the table itself, far from where the template later puts it.
+        project = self.scratch / "own-macros"
+        (project / ".template.json").write_text(json.dumps({"commit": before, "name": NAME, "type": "library"}) + "\n")
+        own_row = 'MACROS = [("DemoMacrosPlugin", "Macros", "Expands #demo.", [])]\n'
+        project_modules = project / "scripts" / "modules.py"
+        text = project_modules.read_text()
+        project_modules.write_text(text.replace("\ndef main():", f"\n{own_row}\n\ndef main():", 1))
+        git("init", "-q", "-b", "main", cwd=project)
+        git("add", "-A", cwd=project)
+        git("commit", "-q", "-m", "project", cwd=project)
+        generated = (project / "tools" / "macros.bzl").read_bytes()
+
+        result = self.template_py("update", str(project), "--to", self.commit)
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        conflicts = result.stdout.split("CONFLICTS:", 1)[-1].split("\n\n", 1)[0]
+        self.assertIn("scripts/modules.py (a table or function is defined twice", conflicts)
+        self.assertIn(own_row, project_modules.read_text())
+        actual = run(sys.executable, "scripts/modules.py", cwd=project)
+        self.assertNotEqual(actual.returncode, 0)
+        self.assertIn("defines MACROS more than once", actual.stderr)
+        self.assertEqual((project / "tools" / "macros.bzl").read_bytes(), generated)
+
 
 if __name__ == "__main__":
     unittest.main()

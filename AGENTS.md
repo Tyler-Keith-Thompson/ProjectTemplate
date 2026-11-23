@@ -76,6 +76,8 @@ Bazel. See `Examples/README.md`.
 external packages and platforms. `just modules` regenerates `Package.swift`, every `BUILD.bazel`,
 the umbrella module and `swift/Package.swift` from it. Never edit the generated files by hand;
 `//:package_swift_test` fails when `Package.swift` disagrees with the Bazel graph.
+`just modules` refuses a table or function defined twice in it, which a template update can merge
+in beside the project's own: keep one definition, holding the project's rows, and delete the other.
 
 - Add a module: a row in `MODULES` (name, group, description, dependencies), then `just modules`.
 - Add a test target: a row in `TEST_TARGETS`. A target with a `Performance/` directory of Swift

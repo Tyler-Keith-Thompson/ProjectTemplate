@@ -11,6 +11,8 @@ would otherwise share a name with its main type (`GreetingModule` would hold `Gr
 catch-all modules ("Core", "Utilities").
 """
 
+import ast
+import collections
 import glob
 import os
 import re
@@ -346,6 +348,26 @@ def replace_swift(root, old, new):
 def performance_target(name):
     """The speed-reliant target split from test target `name`: FlowsTests -> FlowsPerformanceTests."""
     return name.removesuffix("Tests") + "PerformanceTests"
+
+
+def duplicate_definitions():
+    """The top-level names this file assigns or defines more than once, sorted.
+
+    A template update merges a table the template adds (`MACROS = []`) as a clean insertion even
+    when the project already defines it elsewhere in the file, and the later assignment wins, so
+    the check reads the source rather than the values.
+    """
+    with open(__file__) as file:
+        tree = ast.parse(file.read())
+    counts = collections.Counter()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            counts[node.name] += 1
+        elif isinstance(node, ast.Assign):
+            counts.update(target.id for target in node.targets if isinstance(target, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            counts[node.target.id] += 1
+    return sorted(name for name, count in counts.items() if count > 1)
 
 
 def check():
@@ -1204,6 +1226,10 @@ def write(path, text):
 
 
 def main():
+    duplicates = duplicate_definitions()
+    if duplicates:
+        sys.exit(f"scripts/modules.py defines {', '.join(duplicates)} more than once (a template update "
+                 "can merge a second copy in); keep one, holding this project's rows, and delete the other")
     check()
     # Before the record is rewritten: it names the versions the sites hold now.
     #| replace_swift(ROOT, recorded_swift(ROOT) or (SWIFT, SWIFT_TOOLCHAIN), (SWIFT, SWIFT_TOOLCHAIN))  # !wasi:line

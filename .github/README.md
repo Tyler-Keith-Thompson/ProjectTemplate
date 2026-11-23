@@ -164,6 +164,10 @@ with the project's name and options), then takes each file that changed between 
 
 It needs a clean worktree, never commits, and moves the stamp to the new commit, so `git diff`
 shows the whole update. Then resolve any conflicts, `just modules`, `just test`, and commit.
+A table or function the template adds to `scripts/modules.py` (`MACROS = []`, say) merges in
+without markers when the project already defines it elsewhere in the file. `just modules` refuses a
+name defined twice, so the report lists it among the conflicts: keep one definition, holding the
+project's rows, and delete the other.
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
 
 The Swift a project builds with is declared once, `SWIFT` and `SWIFT_TOOLCHAIN` in
