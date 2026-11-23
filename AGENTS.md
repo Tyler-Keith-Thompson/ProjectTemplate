@@ -83,6 +83,18 @@ in beside the project's own: keep one definition, holding the project's rows, an
 - Add a module: a row in `MODULES` (name, group, description, dependencies), then `just modules`.
 - Add a test target: a row in `TEST_TARGETS`. A target with a `Performance/` directory of Swift
   sources must be listed in `PERFORMANCE_TESTS`, and the reverse.
+- Run a test target in the iOS simulator as well (the tests of a module every platform builds that
+  holds code under `#if canImport(UIKit)`): its name in `SIMULATOR_TESTS`, then `just modules`. It
+  stays in Package.swift and keeps its run on the Mac and Linux, and gains
+  `//Tests/<Target>:<Target>Simulator`, an `ios_unit_test` of the same tests inside
+  `tools/test_host`, which `just test` runs on a Mac and Linux skips. Its UIKit tests sit under
+  `#if canImport(UIKit)`, and its exit tests under `#if !os(iOS)`, as iOS has none. At least one
+  test must run on the Mac, since Bazel's runner fails a run of none; a target whose Mac tests are
+  Apple's alone goes in `APPLE_ONLY_TESTS` too. A target that depends on an iOS module or a Bazel
+  label runs in the simulator alone already, so it isn't listed.
+  The app type ships the test host; any other copies `tools/test_host` and the simulator lines of <!-- !app:line -->
+  `.bazelrc` from an app render first (`just modules` refuses the table without them). <!-- !app:line -->
+  `just mutate` runs a spec's simulator targets through Bazel (`scripts/mutate.py`). <!-- mutation:line -->
 - Add an executable: a row in `EXECUTABLES` (name, description, dependencies). It holds only
   `@main`; its code lives in a module, where tests reach it.
 - Add an example module (a demo app's views, a sample server's routes): a row in `MODULES` and its
@@ -379,6 +391,9 @@ modules, which build on services, which hold no UI (Seams and composition, below
 - A test target that depends on an iOS module (or on a label such as
   `//tools/snapshots:BazelSnapshotTesting`) runs in the simulator as an `ios_unit_test` hosted by
   `tools/test_host`, with `__Snapshots__` packaged into its bundle. Package.swift leaves it out.
+  A service whose module also holds UIKit code (`#if canImport(UIKit)`) keeps its tests on the Mac
+  and runs them in the simulator too through `SIMULATOR_TESTS` (Module graph), rather than
+  depending on a label to get there.
 - **A view is a function of its state.** The state is one enum (`ViewState`) with a case per
   screen the view can show, set in one place from what the service returned. The view resolves its
   service and clock with `@ConstructorInjected`. Work starts in `.task` (`.task(id:)` restarts it
@@ -443,7 +458,9 @@ one, built for macOS by Bazel and for every platform by SwiftPM.
   `sut.inspection.inspect` (`tap`, `setInput`), then inspect what it shows. They run `@MainActor`
   and `.serialized`. The view's `let inspection = Inspection<Self>()` and its `.onReceive` are the
   one hook production code carries for tests; the test target makes `Inspection` an
-  `InspectionEmissary`.
+  `InspectionEmissary`. To run them in the iOS simulator as well, widen their guard to
+  `#if os(macOS) || os(iOS)` and list the target in `SIMULATOR_TESTS` (Module graph); the snapshot
+  tests stay the Mac's.
 - **Snapshot tests** pin how each state renders, in light and dark: `ImageRenderer` draws the view
   in the color scheme the test sets, and `assertSnapshot` compares it with the reference in
   `__Snapshots__` beside the test (Bazel puts them in the test's runfiles). macOS doesn't scale
@@ -498,7 +515,9 @@ have.
 <!-- mutation:begin -->
    - planted bugs in `scripts/mutants/<Module>.py` for the new code, then `just mutate <Module>`:
      every mutant caught, or a note in the spec on why a survivor is equivalent. A new module
-     gets a spec of its own, copied from `Greetings.py`.
+     gets a spec of its own, copied from `Greetings.py`. A simulator test target in the spec's
+     `TESTS` runs through Bazel, in a copy of the workspace, for the mutants the Mac tests let
+     through, so a mutant in code under `#if canImport(UIKit)` is caught there.
 <!-- mutation:end -->
 <!-- fuzz:begin -->
    - a fuzz target in `Fuzz/Sources/Fuzz<Module>` checking the new code against a model after

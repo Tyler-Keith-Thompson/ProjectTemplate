@@ -18,6 +18,11 @@ ios_application(
     families = ["iphone"],
     infoplists = ["Info.plist"],
     minimum_os_version = "18.0",
+    # Built only as the simulator tests' host, which only a Mac runs: `bazel test //...` on Linux
+    # (a project with SIMULATOR_TESTS in scripts/modules.py tests there too) would otherwise build it
+    # and find no iOS toolchain. Not `target_compatible_with`: the rule builds itself for iOS, where
+    # no constraint tells the host machine apart.
+    tags = ["manual"],
     visibility = ["//visibility:public"],
     deps = [":TestHostLibrary"],
 )

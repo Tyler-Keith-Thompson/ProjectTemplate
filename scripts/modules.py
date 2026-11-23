@@ -107,6 +107,14 @@ NON_WASI_PACKAGES = []
 APPLE_ONLY_TESTS = []  # !views:line
 #| APPLE_ONLY_TESTS = ["GreetingsUITests"]  # views:line
 
+# Test targets that also run in the iOS simulator, by name: tests of a module every platform builds
+# that holds code for UIKit alone (`#if canImport(UIKit)`). Each stays in Package.swift and keeps
+# its swift_test on the Mac (and Linux), and gains `<name>Simulator`, an ios_unit_test of the same
+# test library hosted by tools/test_host, which Bazel runs on macOS alone. A target that depends on
+# an iOS module or a Bazel label runs in the simulator alone already and isn't listed. Needs the
+# test host and .bazelrc's simulator settings, which the app type ships.
+SIMULATOR_TESTS = []
+
 # The product whose macro generates mocks. A module that depends on it is compiled with the
 # MOCKING condition in debug builds only (SwiftPM's debug configuration, Bazel's
 # --compilation_mode=dbg), so `@Mockable` emits Mock<Protocol> types for tests and release
@@ -399,6 +407,18 @@ def check():
     assert len(names + plugins) == len(set(names + plugins)), "duplicate module"
     for name in APPLE_ONLY_TESTS:
         assert name in dict(TEST_TARGETS), f"APPLE_ONLY_TESTS names unknown test target {name}"
+    for name in SIMULATOR_TESTS:
+        assert name in dict(TEST_TARGETS), f"SIMULATOR_TESTS names unknown test target {name}"
+        assert not simulator_only(name), \
+            f"{name} depends on an iOS module or a Bazel label, so it runs in the simulator alone already: leave it out of SIMULATOR_TESTS"
+    if SIMULATOR_TESTS:
+        with open(os.path.join(ROOT, ".bazelrc")) as file:
+            settings = "--local_resources=simulator=" in file.read()
+        assert os.path.isfile(os.path.join(ROOT, "tools", "test_host", "BUILD.bazel")) and settings, (
+            "SIMULATOR_TESTS needs the iOS test host and simulator settings the app type ships: copy "
+            "tools/test_host and the simulator lines of .bazelrc (--ios_minimum_os, --ios_simulator_device, "
+            "--ios_simulator_version, --local_resources=simulator=1) from an app render of the project "
+            "template (bootstrap.sh --render-only --app <Name> <directory>)")
     packages = [p[0] for p in PACKAGES]
     # wasi:begin
     for name in NON_WASI_PACKAGES:
@@ -497,10 +517,22 @@ def is_macro(d):
     return d in macro_names()
 
 
-def simulator_test(name):
-    """Whether test target `name` runs in the iOS simulator: it depends on an iOS module or a Bazel label."""
+def simulator_only(name):
+    """Whether test target `name` runs in the iOS simulator alone: it depends on an iOS module or a Bazel
+    label, so Package.swift leaves it out."""
     deps = dict(TEST_TARGETS)[name]
     return any(d in IOS_MODULES or d.startswith("//") for d in deps)
+
+
+def simulator_test(name):
+    """Whether test target `name` runs in the iOS simulator: alone, or on the Mac too (SIMULATOR_TESTS)."""
+    return name in SIMULATOR_TESTS or simulator_only(name)
+
+
+def simulator_label(name):
+    """The ios_unit_test that runs simulator test target `name`: the package's own target, or
+    `<name>Simulator` beside the Mac tests for one in SIMULATOR_TESTS."""
+    return f"//Tests/{name}" + (f":{name}Simulator" if name in SIMULATOR_TESTS else "")
 
 
 def spm_dep(d):
@@ -547,8 +579,8 @@ def umbrella_modules():
 
 
 def package_tests():
-    """TEST_TARGETS that Package.swift declares: every one but the simulator tests."""
-    return [t for t in TEST_TARGETS if not simulator_test(t[0])]
+    """TEST_TARGETS that Package.swift declares: every one but those run in the simulator alone."""
+    return [t for t in TEST_TARGETS if not simulator_only(t[0])]
 
 
 def package_dependencies():
@@ -566,22 +598,23 @@ def apple_only(d):
     return "/" in d and d.split("/")[0] in APPLE_ONLY_PACKAGES
 
 
-def bazel_deps(deps, testing=False):
-    """A `deps` attribute, or nothing when there are none; Apple-only products sit in a macOS `select`.
+def bazel_deps(deps, testing=False, ios=False):
+    """A `deps` attribute, or nothing when there are none; Apple-only products sit in a macOS `select`,
+    but for a target only iOS builds (`ios`), which lists them with the rest.
     A compiler plugin (MACROS) goes in a `plugins` attribute instead, but for a test library
     (`testing`), which links the plugin's `<name>Library` in its own package (see MACROS)."""
     if testing:
-        return _bazel_deps([f":{d}Library" if is_macro(d) else d for d in deps])
+        return _bazel_deps([f":{d}Library" if is_macro(d) else d for d in deps], ios)
     plugins = "".join(f'        "{bazel_label(d)}",\n' for d in deps if is_macro(d))
     return _bazel_deps([d for d in deps if not is_macro(d)]) + (f"    plugins = [\n{plugins}    ],\n" if plugins else "")
 
 
-def _bazel_deps(deps):
+def _bazel_deps(deps, ios=False):
     if not deps:
         return ""
-    listed = "".join(f'        "{bazel_label(d)}",\n' for d in deps if not apple_only(d))
+    listed = "".join(f'        "{bazel_label(d)}",\n' for d in deps if ios or not apple_only(d))
     text = f"    deps = [\n{listed}    ]"
-    apple = "".join(f'            "{bazel_label(d)}",\n' for d in deps if apple_only(d))
+    apple = "".join(f'            "{bazel_label(d)}",\n' for d in deps if not ios and apple_only(d))
     if apple:
         text += (
             " + select({\n"
@@ -1033,8 +1066,9 @@ def test_support_build_bazel():
     )
 
 
-def test_targets_bazel(name, deps, size, srcs, tags):
-    """One test module: its library, the swift_test that `bazel test` runs, and the Xcode bundle."""
+def test_targets_bazel(name, deps, size, srcs, tags, simulator=False):
+    """One test module: its library, the swift_test that `bazel test` runs, and the Xcode bundle; with
+    `simulator`, the ios_unit_test that runs the same library in the simulator too (SIMULATOR_TESTS)."""
     tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
     # SnapshotTesting finds a reference beside the test file through #filePath, which Bazel makes
     # relative to the workspace, and a test runs from its runfiles: so the references go in them.
@@ -1081,6 +1115,46 @@ def test_targets_bazel(name, deps, size, srcs, tags):
         "    # Visible so `//:xcodeproj` can name it as a top-level target.\n"
         '    visibility = ["//visibility:public"],\n'
         f'    deps = [":{name}Library"],\n'
+        ")\n"
+    ) + (simulator_half_bazel(name, deps, srcs, tags) if simulator else "")
+
+
+def simulator_half_bazel(name, deps, srcs, tags):
+    """The same tests as test target `name`'s library, built for iOS and run in the simulator as well
+    (SIMULATOR_TESTS): a library of their own, without the Mac's `data`, which rules_apple would
+    flatten into the bundle as resources, and the ios_unit_test."""
+    tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
+    return (
+        "\n# The same tests in the iOS simulator (SIMULATOR_TESTS in scripts/modules.py), where the code\n"
+        "# under `#if canImport(UIKit)` compiles. iOS only, so `bazel build //...` builds it through the\n"
+        "# bundle below alone.\n"
+        "swift_library(\n"
+        f'    name = "{name}SimulatorLibrary",\n'
+        "    testonly = True,\n"
+        "    alwayslink = True,\n"
+        f"    srcs = {srcs},\n"
+        f'    module_name = "{name}",\n'
+        f"{tags_attr}"
+        '    target_compatible_with = ["@platforms//os:ios"],\n'
+        f"{bazel_deps(deps, testing=True, ios=True)}"
+        ")\n\n"
+        "# Run inside the test host (tools/test_host), which gives windows a scene. The runner drives\n"
+        "# xcodebuild directly; the default one fails a run that holds only Swift Testing tests.\n"
+        f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
+        "ios_unit_test(\n"
+        f'    name = "{name}Simulator",\n'
+        f'    size = "{TEST_SIZES.get(name, "medium")}",\n'
+        f'    minimum_os_version = "{IOS_MINIMUM}",\n'
+        "    tags = [\n" + "".join(f'        "{t}",\n' for t in tags + [SIMULATOR_TEST_TAG]) + "    ],\n"
+        '    runner = "@rules_apple//apple/testing/default_runner:ios_xctestrun_ordered_runner",\n'
+        "    # The simulator is the Mac's alone, so elsewhere `bazel test //...` skips the bundle.\n"
+        "    target_compatible_with = select({\n"
+        '        "@platforms//os:macos": [],\n'
+        '        "//conditions:default": ["@platforms//:incompatible"],\n'
+        "    }),\n"
+        '    test_host = "//tools/test_host",\n'
+        '    visibility = ["//visibility:public"],\n'
+        f'    deps = [":{name}SimulatorLibrary"],\n'
         ")\n"
     )
 
@@ -1131,12 +1205,14 @@ def simulator_test_build_bazel(name, deps, size):
 
 def test_build_bazel(name, deps):
     size = TEST_SIZES.get(name, "small")
-    if simulator_test(name):
+    if simulator_only(name):
         # Booting a simulator takes much of a minute on its own.
         return simulator_test_build_bazel(name, deps, TEST_SIZES.get(name, "medium"))
+    simulator = name in SIMULATOR_TESTS
     header = (
         "# GENERATED by scripts/modules.py — edit the table there, then run `just modules`.\n\n"
-        'load("@rules_apple//apple:macos.bzl", "macos_unit_test")\n'
+        + ('load("@rules_apple//apple:ios.bzl", "ios_unit_test")\n' if simulator else "")
+        + 'load("@rules_apple//apple:macos.bzl", "macos_unit_test")\n'
         'load("//tools:swift_rules.bzl", "swift_library", "swift_test")\n\n'
     )
     excluded_note = (
@@ -1146,12 +1222,12 @@ def test_build_bazel(name, deps):
     header += "".join(macro_library_bazel(d) for d in deps if is_macro(d))
     if name not in PERFORMANCE_TESTS:
         return (header + "# The tests, built once and linked into two runners.\n# " + excluded_note
-                + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"])', [RELEASE_EXCLUDED_TAG]))
+                + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"])', [RELEASE_EXCLUDED_TAG], simulator))
     return (
         header
         + "# The tests, built once and linked into two runners; the speed-reliant ones, in Performance/, are\n"
         + f"# {performance_target(name)} below. " + excluded_note
-        + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"], exclude = ["Performance/**"])', [RELEASE_EXCLUDED_TAG])
+        + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"], exclude = ["Performance/**"])', [RELEASE_EXCLUDED_TAG], simulator)
         + "\n# The speed-reliant tests (PERFORMANCE_TESTS in scripts/modules.py): debug and `--config=release`\n"
         + "# both run them.\n"
         + test_targets_bazel(performance_target(name), deps, PERFORMANCE_TEST_SIZE, 'glob(["Performance/**/*.swift"])', [])
@@ -1191,7 +1267,7 @@ def examples_bzl():
 # app:begin
 #| def ios_bzl():
 #|     modules = "".join(f'    "Sources/{name}",\n' for name in IOS_MODULES)
-#|     tests = "".join(f'    "Tests/{name}",\n' for name, _ in TEST_TARGETS if simulator_test(name))
+#|     tests = "".join(f'    "Tests/{name}",\n' for name, _ in TEST_TARGETS if simulator_only(name))
 #|     return (
 #|         '"""GENERATED by scripts/modules.py (IOS_MODULES) — edit the table there, then run `just modules`."""\n\n'
 #|         "# The source packages only iOS builds, which the docs and //:package_swift_test leave out.\n"
