@@ -62,9 +62,21 @@ trap 'rm -rf "$fresh"' EXIT
 # The declared inputs, at their paths in the repository.
 rsync -a --copy-links --files-from="$files" . "$fresh/"
 # Every library target the root manifest declares must exist for SwiftPM to load it. A module this
-# benchmark doesn't use gets a placeholder source, dated so that it never looks changed.
+# benchmark doesn't use gets a placeholder source, dated so that it never looks changed. So does a
+# command plugin (Plugins/, PLUGINS in scripts/modules.py), which no benchmark uses: Linux's
+# SwiftPM links it, so its placeholder is an empty plugin, and it gets no BUILD.bazel, which its
+# target doesn't exclude.
 for directory in "$@"; do
     mkdir -p "$fresh/$directory"
+    case "$directory" in
+        Plugins/*)
+            if [ -z "$(find "$fresh/$directory" -name '*.swift' -print -quit)" ]; then
+                printf '// Not staged: no benchmark uses the plugin.\nimport PackagePlugin\n\n@main\nstruct Placeholder: CommandPlugin {\n    func performCommand(context: PluginContext, arguments: [String]) async throws {}\n}\n' > "$fresh/$directory/Placeholder.swift"
+                touch -t 200001010000 "$fresh/$directory/Placeholder.swift"
+            fi
+            continue
+            ;;
+    esac
     if [ -z "$(find "$fresh/$directory" -name '*.swift' -print -quit)" ]; then
         echo "// Not staged: this benchmark doesn't use the module." > "$fresh/$directory/Placeholder.swift"
         touch -t 200001010000 "$fresh/$directory/Placeholder.swift"

@@ -189,12 +189,14 @@ def source_dirs(bundles):
 def pruned_manifest(bundles, modules=()):
     """Package.swift with only the bundles, the modules and everything they depend on. Other
     targets are left out of the workspace, so another module's unfinished edits cannot break this
-    run's build, and their changes do not invalidate its stored results."""
+    run's build, and their changes do not invalidate its stored results. Command plugins (PLUGINS
+    in scripts/modules.py) are always left out, with their products: no test depends on one, and
+    Plugins/ is not copied."""
     names = {os.path.basename(d) for d in source_dirs(bundles)} | set(modules) | set(bundles)
     with open(os.path.join(ROOT, "Package.swift")) as f:
         lines = f.read().split("\n")
     kept = [line for line in lines
-            if not (m := re.match(r'\s*\.(?:library|executable|target|executableTarget|testTarget|macro)\(name: "([^"]+)"', line)) or m.group(1) in names]
+            if not (m := re.match(r'\s*\.(?:library|executable|plugin|target|executableTarget|testTarget|macro)\(name: "([^"]+)"', line)) or m.group(1) in names]
     return "\n".join(kept)
 
 

@@ -11,9 +11,10 @@ COPY Package.swift ./
 COPY swift/Package.resolved ./Package.resolved
 RUN swift package resolve --force-resolved-versions
 
-# SwiftPM checks that every target's directory exists, tests included.
-COPY Sources ./Sources
-COPY Tests ./Tests
+# SwiftPM checks that every target's directory exists, tests and command plugins included. The
+# context holds only what .dockerignore lets in: Sources, Tests and, once a project has a command
+# plugin, Plugins, which a COPY naming it would fail without.
+COPY . ./
 RUN --mount=type=cache,target=/build/.build \
     swift build -c release --product ProjectNameServer --static-swift-stdlib \
  && mkdir -p /staging \

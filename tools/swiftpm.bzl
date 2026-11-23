@@ -9,7 +9,8 @@ analyzed graph (through an aspect, so nothing is compiled), writes them as one l
 and compares that with the same lines pulled out of Package.swift's `.target`, `.executableTarget`,
 `.macro` and `.testTarget` entries. A missing target, an extra one or a different dependency list
 fails the test. It also compares the manifest's `.library` products with the modules Bazel says the package
-offers, so a product dropped from or added to the list fails it too.
+offers, so a product dropped from or added to the list fails it too. Command plugins (`.plugin`
+targets and products, PLUGINS in scripts/modules.py) are SwiftPM's alone, so neither side has them.
 """
 
 _ModuleDependencies = provider(

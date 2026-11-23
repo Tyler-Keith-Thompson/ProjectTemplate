@@ -171,6 +171,15 @@ NON_UMBRELLA_MODULES = []
 # plugin's own package that library's swiftmodule would collide with the plugin's.)
 MACROS = []
 
+# SwiftPM command plugins: (name, verb, description, reason), run with `swift package <verb>`.
+# Each is a `.plugin` target with a product of the same name, its sources in Plugins/<name>
+# (SwiftPM's default). `reason` is why the plugin writes to the package directory, which SwiftPM
+# shows when asking for it (`--allow-writing-to-package-directory` grants it up front); None asks
+# for no permissions. Bazel builds none of them: PackagePlugin is SwiftPM's alone, so Plugins/ holds
+# no BUILD.bazel, and the docs and //:package_swift_test leave them out. Keep a plugin thin, and
+# prove it by running it.
+PLUGINS = []
+
 # Executables: (name, description, dependencies). Each is an `.executableTarget` and product in
 # Package.swift and a swift_binary in Bazel (`bazel run //Sources/<name>`). Keep them thin: the
 # code lives in MODULES, where tests can reach it. They are left out of the umbrella and the docs.
@@ -405,6 +414,17 @@ def check():
                 assert d in names + plugins + [PROJECT, TEST_SUPPORT], f"{name} depends on unknown {d}"
         assert not (simulator_test(name) and any(is_macro(d) for d in deps)), \
             f"{name} tests a compiler plugin, which only tests on the Mac can link"
+    # A command plugin shares SwiftPM's namespace of targets and products.
+    taken = {**{t: "a test target" for t in tests + [TEST_SUPPORT]}, **{e: "an executable" for e in executables},
+             **{m: "a macro" for m in plugins}, **{m: "a module" for m in names + [PROJECT]}}
+    commands = [p[0] for p in PLUGINS]
+    assert len(commands) == len(set(commands)), "duplicate command plugin"
+    verbs = [p[1] for p in PLUGINS]
+    assert len(verbs) == len(set(verbs)), "two command plugins share a verb"
+    for name, _, _, _ in PLUGINS:
+        assert name not in taken, f"the command plugin {name} has the name of {taken.get(name)}"
+        assert glob.glob(os.path.join(ROOT, "Plugins", name, "**", "*.swift"), recursive=True), \
+            f"the command plugin {name} has no Swift sources in Plugins/{name}"
     for name in PERFORMANCE_TESTS:
         assert name in tests, f"PERFORMANCE_TESTS names unknown test target {name}"
         assert not simulator_test(name), f"{name} runs in the simulator, which PERFORMANCE_TESTS doesn't support"
@@ -563,6 +583,11 @@ def excluded(path):
     return [f for f in ("BUILD.bazel", "README.md", "Performance", "__Snapshots__") if os.path.exists(os.path.join(ROOT, path, f))]
 
 
+def swift_string(text):
+    """`text` as a Swift string literal."""
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+
 def exclude_arg(path):
     files = excluded(path)
     if files == ["BUILD.bazel"]:
@@ -643,6 +668,7 @@ def package_swift():
         lines.append(f'    .library(name: "{PROJECT}", targets: ["{PROJECT}"]),')
     lines += [f'    .library(name: "{m[0]}", targets: ["{m[0]}"]),' for m in library_modules()]
     lines += [f'    .executable(name: "{e[0]}", targets: ["{e[0]}"]),' for e in EXECUTABLES]
+    lines += [f'    .plugin(name: "{p[0]}", targets: ["{p[0]}"]),' for p in PLUGINS]
     lines += ["]", "", "let dependencies: [Package.Dependency] = ["]
     lines += [f'    .package(url: "{url}", {requirement(version)}),' for _, url, version in package_dependencies()]
     lines += ["]", "", "let targets: [Target] = ["]
@@ -667,6 +693,12 @@ def package_swift():
     for name, _, deps in EXECUTABLES:
         dl = ", ".join(spm_dep(d) for d in deps)
         lines.append(f'    .executableTarget(name: "{name}", dependencies: [{dl}]{exclude_arg(f"Sources/{name}")}),')
+    if PLUGINS:
+        lines += ["", "    // Command plugins (PLUGINS in scripts/modules.py), which Bazel doesn't build"]
+    for name, verb, description, reason in PLUGINS:
+        intent = f".custom(verb: {swift_string(verb)}, description: {swift_string(description)})"
+        permissions = "" if reason is None else f", permissions: [.writeToPackageDirectory(reason: {swift_string(reason)})]"
+        lines.append(f'    .plugin(name: "{name}", capability: .command(intent: {intent}{permissions}){exclude_arg(f"Plugins/{name}")}),')
     all_deps = ", ".join(f'"{m[0]}"' for m in umbrella_modules())
     support_deps = ", ".join(spm_dep(d) for d in TEST_SUPPORT_DEPENDENCIES)
     support_deps_arg = f"dependencies: [{support_deps}], " if TEST_SUPPORT_DEPENDENCIES else ""
@@ -1141,6 +1173,7 @@ def examples_bzl():
 def library_directories():
     """Every non-test target directory the root Package.swift declares."""
     directories = [f"Sources/{m[0]}" for m in package_modules()] + [f"Sources/{e[0]}" for e in EXECUTABLES] + [f"Sources/{name}" for name in macro_names()]
+    directories += [f"Plugins/{p[0]}" for p in PLUGINS]
     if umbrella():
         directories.append(f"Sources/{PROJECT}")
     return sorted(directories + [f"Tests/{TEST_SUPPORT}"])

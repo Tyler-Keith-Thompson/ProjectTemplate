@@ -1,9 +1,11 @@
-# The image needs the manifest, the pins, the sources and (for SwiftPM's target check) the tests.
+# The image needs the manifest, the pins, the sources and (for SwiftPM's target check) the tests
+# and command plugins.
 *
 !Package.swift
 !swift/Package.resolved
 !Sources/
 !Tests/
+!Plugins/
 # litestream:begin
 !litestream.yml
 !scripts/docker-entrypoint.sh

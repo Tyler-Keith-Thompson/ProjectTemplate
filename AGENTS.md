@@ -12,6 +12,7 @@ every project built; delete a rule only when it cannot apply here, and say so in
 ```
 Sources/<Module>/                One directory per module, each with a generated BUILD.bazel
 Sources/ProjectName/             Umbrella module (@_exported imports) and the landing DocC catalog
+Plugins/<Plugin>/                SwiftPM command plugins (PLUGINS in scripts/modules.py); Bazel builds none
 Tests/<Module>Tests/             One test target per module; Performance/ holds speed-reliant tests
 Sources/App/                     The Vapor application: configure(_:), routes, models <!-- server:line -->
 Sources/ProjectNameServer/       The executable (@main): builds an Application, configures, serves <!-- server:line -->
@@ -108,6 +109,12 @@ in beside the project's own: keep one definition, holding the project's rows, an
   hand-written BUILD.bazel no Package.swift target holds, with a control that compiles.
   A plugin takes planted bugs like a module (`scripts/mutants/<Plugin>.py`), with its expansion <!-- mutation:line -->
   tests as the spec's `TESTS`. <!-- mutation:line -->
+- Add a command plugin (`swift package <verb>`): a row in `PLUGINS` (name, verb, description, and
+  the reason it writes to the package directory, or `None` when it writes nothing there), its
+  sources in `Plugins/<name>/` (an `@main` `CommandPlugin`), then `just modules`. Package.swift gets
+  a `.plugin` target and product; Bazel builds none of it, so no test reaches the plugin. Keep it
+  thin, its logic in a module or an executable it builds and runs, and run it on the package
+  (`swift package --allow-writing-to-package-directory <verb>`) after a change to it.
 - Add an external package: a row in `PACKAGES`, its `swiftpkg_<identity>` repository in
   `MODULE.bazel`'s `use_repo`, then `just modules` and `just resolve`.
 - Generate mocks: uncomment the Mockable row in `PACKAGES`, add `mockable/Mockable` to the
