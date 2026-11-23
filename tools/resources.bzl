@@ -25,8 +25,11 @@ nested bundle.
 load("@rules_apple//apple:resources.bzl", "apple_resource_bundle")
 
 ModuleResourcesInfo = provider(
-    doc = "The source files of a module's resources, for tools that stage the SwiftPM package (tools/benchmarks.bzl).",
-    fields = {"files": "depset of the resources' source files"},
+    doc = "A module's resources: their source files, for tools that stage the SwiftPM package (tools/benchmarks.bzl), and their entries, for the manifest check (tools/swiftpm.bzl).",
+    fields = {
+        "files": "depset of the resources' source files",
+        "entries": "list of (rule, path) pairs, as `module_resources` was given them and Package.swift's `resources:` spells them",
+    },
 )
 
 # The Apple operating systems, as Package.swift's applePlatforms: only their bundles nest resources.
@@ -109,7 +112,10 @@ def _module_resources_impl(ctx):
     return [
         DefaultInfo(files = depset(), runfiles = ctx.runfiles(files = placed + copied)),
         OutputGroupInfo(accessor = depset([accessor]), copied = depset(copied)),
-        ModuleResourcesInfo(files = depset(sources.values())),
+        ModuleResourcesInfo(
+            files = depset(sources.values()),
+            entries = [("process", entry) for entry in ctx.attr.process_entries] + [("copy", entry) for entry in ctx.attr.copy_entries],
+        ),
     ]
 
 _module_resources = rule(
@@ -121,6 +127,10 @@ _module_resources = rule(
             allow_files = True,
             doc = "The files of the `.copy` entries, each keyed to the directory holding its entry, which the copy leaves out of its path.",
         ),
+        # The entries themselves, before globbing: `process` and `copy` hold a directory's files,
+        # and the manifest check compares entries with Package.swift's.
+        "process_entries": attr.string_list(doc = "The `.process` entries as written."),
+        "copy_entries": attr.string_list(doc = "The `.copy` entries as written."),
     },
     doc = "A module's resource bundle in runfiles, and the source of its `Bundle.module`.",
 )
@@ -146,7 +156,15 @@ def module_resources(name, bundle_name, bundle_id, process = [], copy = [], **kw
     """
     processed = [file for entry in process for file in _entry_files(entry)]
     copied = {file: _parent(entry) for entry in copy for file in _entry_files(entry)}
-    _module_resources(name = name, bundle_name = bundle_name, process = processed, copy = copied, **kwargs)
+    _module_resources(
+        name = name,
+        bundle_name = bundle_name,
+        process = processed,
+        copy = copied,
+        process_entries = process,
+        copy_entries = copy,
+        **kwargs
+    )
     native.filegroup(name = name + "Accessor", srcs = [":" + name], output_group = "accessor", **kwargs)
     native.filegroup(name = name + "Copied", srcs = [":" + name], output_group = "copied", **kwargs)
     apple_resource_bundle(
