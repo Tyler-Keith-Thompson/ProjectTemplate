@@ -270,6 +270,12 @@ the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
 - Without wasm tail calls, an await that doesn't suspend deepens both stacks. The script links a
   64 MB stack and gives wasmtime a 256 MB one, enough for a 10,000-deep chain of such awaits; a
   deeper one traps or hangs on WASI alone.
+- Foundation on WASI drops the last character of a resource's file name when the lookup names a
+  subdirectory: `Bundle.module.url(forResource: "sample", withExtension: "txt", subdirectory:
+  "Fixtures")` returns `Fixtures/sample.tx`, which doesn't exist, and so do
+  `path(forResource:ofType:inDirectory:)`, `urls(forResourcesWithExtension:subdirectory:)` and a
+  name holding the directory. Look up the directory itself, then append the file:
+  `Bundle.module.url(forResource: "Fixtures", withExtension: nil)?.appending(path: "sample.txt")`.
 - A dependency that doesn't build for WASI (NIOPosix and what sits on it) fails the whole build.
   List its package in `NON_WASI_PACKAGES` (`scripts/modules.py`), and put the code and tests that
   use it under `#if canImport(<its module>)`.
