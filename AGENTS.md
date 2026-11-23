@@ -249,7 +249,11 @@ watchOS's arm64_32 and wasm32 have a 32-bit `Int`. `just wasi-test` (`scripts/wa
 builds the SwiftPM test targets with `swift build --build-tests --swift-sdk
 swift-6.3.3-RELEASE_wasm` through swiftly into `.build/wasm`, then runs each test binary (one
 `<Target>-test-runner.wasm` per target from Swift 6.4, one `<Project>PackageTests.xctest` before)
-with `wasmtime run --dir . <binary> --testing-library swift-testing`, logs in `.build/wasm/logs`.
+with `wasmtime run --dir . --dir <checkout>::<checkout> --argv0 <binary's path> <binary>
+--testing-library swift-testing`, logs in `.build/wasm/logs`. The checkout at its own path and the
+binary's path as `argv[0]` are where SwiftPM's `Bundle.module` looks for a module's resource bundle
+(an absolute build path in 6.3, beside `Bundle.main` from 6.4, which WASI's Foundation takes from
+`argv[0]`).
 Needs swiftly's 6.3.3 toolchain, its WebAssembly SDK (`swift sdk list`; swift.org's "Getting
 Started with Swift SDKs for WebAssembly" has the install command) and `brew install wasmtime`. If
 the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
