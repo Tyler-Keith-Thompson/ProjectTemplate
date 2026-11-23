@@ -1138,15 +1138,13 @@ def simulator_half_bazel(name, deps, srcs, tags):
         '    target_compatible_with = ["@platforms//os:ios"],\n'
         f"{bazel_deps(deps, testing=True, ios=True)}"
         ")\n\n"
-        "# Run inside the test host (tools/test_host), which gives windows a scene. The runner drives\n"
-        "# xcodebuild directly; the default one fails a run that holds only Swift Testing tests.\n"
+        "# Run inside the test host (tools/test_host), which gives windows a scene.\n"
         f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
         "ios_unit_test(\n"
         f'    name = "{name}Simulator",\n'
         f'    size = "{TEST_SIZES.get(name, "medium")}",\n'
         f'    minimum_os_version = "{IOS_MINIMUM}",\n'
         "    tags = [\n" + "".join(f'        "{t}",\n' for t in tags + [SIMULATOR_TEST_TAG]) + "    ],\n"
-        '    runner = "@rules_apple//apple/testing/default_runner:ios_xctestrun_ordered_runner",\n'
         "    # The simulator is the Mac's alone, so elsewhere `bazel test //...` skips the bundle.\n"
         "    target_compatible_with = select({\n"
         '        "@platforms//os:macos": [],\n'
@@ -1187,15 +1185,13 @@ def simulator_test_build_bazel(name, deps, size):
         f'    tags = ["{RELEASE_EXCLUDED_TAG}"],\n'
         ")\n\n"
         "# `bazel test` and the generated Xcode project both run this bundle in the simulator, inside the\n"
-        "# test host (tools/test_host), which gives windows a scene. The runner drives xcodebuild\n"
-        "# directly; the default one fails a run that holds only Swift Testing tests.\n"
+        "# test host (tools/test_host), which gives windows a scene.\n"
         f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
         "ios_unit_test(\n"
         f'    name = "{name}",\n'
         f'    size = "{size}",\n'
         f'    minimum_os_version = "{IOS_MINIMUM}",\n'
         f'    tags = [\n        "{RELEASE_EXCLUDED_TAG}",\n        "{SIMULATOR_TEST_TAG}",\n    ],\n'
-        '    runner = "@rules_apple//apple/testing/default_runner:ios_xctestrun_ordered_runner",\n'
         '    test_host = "//tools/test_host",\n'
         '    visibility = ["//visibility:public"],\n'
         f'    deps = [":{name}Library"],\n'
