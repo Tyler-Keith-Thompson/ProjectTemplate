@@ -78,6 +78,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -106,6 +107,10 @@ RESULTS = os.path.join(BASE, "results")
 # mutant runs use an uninstrumented build.
 COVERAGE_WORK = os.path.join(BASE, "modules", _MODULE_ARG, "coverage")
 SWIFT = ["env", "-u", "TOOLCHAINS", "xcrun", "--toolchain", "default", "swift"]
+# Test binaries run in an empty directory of their own, never the caller's (the project root under
+# `just mutate`): a mutant that makes an absolute path relative would write into the project. One
+# per run, since runs proceed in parallel and a file one leaves must not reach the next.
+RUN_DIRECTORIES = os.path.join(BASE, "runs")
 # Bump when the schemata, the runner or the stored format change meaning: every stored result
 # is then stale.
 STORE_VERSION = "3"
@@ -443,8 +448,9 @@ def run_bundle(command, env, mutant, limit, extra=(), stream=None):
     env = dict(env, **{MUTANT_VARIABLE: str(mutant), RUN_VARIABLE: str(run)})
     if stream:
         extra = list(extra) + ["--event-stream-output-path", stream, "--event-stream-version", "0"]
-    process = subprocess.Popen(command + list(extra), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               text=True, errors="replace", start_new_session=True)
+    directory = run_directory()
+    process = subprocess.Popen(command + list(extra), env=env, cwd=directory, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, errors="replace", start_new_session=True)
     def kill():
         # The group may already be gone, or be exiting (macOS then answers EPERM).
         try:
@@ -471,6 +477,7 @@ def run_bundle(command, env, mutant, limit, extra=(), stream=None):
         timed_out = not timer.is_alive() and failure is None and process.returncode == -signal.SIGKILL
         timer.cancel()
         reap(run)
+        shutil.rmtree(directory, ignore_errors=True)
     if failure:
         return "failed", failure
     if timed_out:
@@ -517,8 +524,19 @@ def failing_tests(stream):
     return sorted({t for t in blamed if t in functions})
 
 
+def run_directory():
+    """A new empty directory for one test binary's run, under RUN_DIRECTORIES; the caller removes it."""
+    os.makedirs(RUN_DIRECTORIES, exist_ok=True)
+    return tempfile.mkdtemp(dir=RUN_DIRECTORIES)
+
+
 def list_tests(command, env, bundle):
-    out = subprocess.run(command + ["--list-tests"], env=env, capture_output=True, text=True, timeout=600)
+    directory = run_directory()
+    try:
+        out = subprocess.run(command + ["--list-tests"], env=env, cwd=directory, capture_output=True, text=True,
+                             timeout=600)
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
     if out.returncode != 0:
         sys.exit(f"Could not list the tests of {bundle}:\n{out.stdout[-2000:]}{out.stderr[-2000:]}")
     return [line.strip() for line in out.stdout.splitlines() if line.startswith(bundle + ".")]
