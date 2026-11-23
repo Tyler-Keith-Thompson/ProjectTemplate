@@ -28,6 +28,16 @@
       that doesn't apply to the project's type. Nothing is committed; PROJECT must have no
       uncommitted changes.
 
+  ./template.py remove PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
+                               [--views] [--examples] [--fly] [--database] [--ci] [--trunk]
+      Turn options off, the mirror of `add`. The template is rendered at the stamped commit with the
+      stamp's options and again with these turned off, and every file that differs is merged three
+      ways into the project, as `add` does: what the options brought is removed where the project
+      left it alone, kept and reported where it changed it, and files the project added itself stay.
+      The stamp then records the options off. It refuses an option the stamp doesn't have on, and
+      --ci while --trunk stays on (the merge queue waits for CI's checks). Nothing is committed;
+      PROJECT must have no uncommitted changes.
+
   ./template.py retype PROJECT --type library|server|embedded|mcp|app
       Change a project's type, such as a library that grew into an MCP server. The template is
       rendered at the stamped commit as the stamp's type and again as the new one, and every file
@@ -202,6 +212,15 @@ def install(source, destination):
     shutil.copy2(source, destination)
 
 
+def delete(project, path):
+    """Deletes `path` and the directories it leaves empty, up to `project`."""
+    path.unlink()
+    folder = path.parent
+    while folder != project and not any(folder.iterdir()):
+        folder.rmdir()
+        folder = folder.parent
+
+
 def merge(project, base, new, base_label, new_label):
     """Merges every file that changed from `base` to `new` into `project`; returns a report by outcome."""
     report = {name: [] for name in ("updated", "added", "removed", "merged", "conflicted",
@@ -218,9 +237,7 @@ def merge(project, base, new, base_label, new_label):
             if not theirs.is_file() and current.is_file() and is_generated(current):
                 # Gone from the template: scripts/modules.py writes it again if the project still
                 # lists what it was generated for.
-                current.unlink()
-                if not any(current.parent.iterdir()):
-                    current.parent.rmdir()
+                delete(project, current)
                 report["removed"].append(relative)
             else:
                 report["regenerated"].append(relative)
@@ -229,7 +246,7 @@ def merge(project, base, new, base_label, new_label):
             if not current.is_file():
                 continue
             if current.read_bytes() == old.read_bytes():
-                current.unlink()
+                delete(project, current)
                 report["removed"].append(relative)
             else:
                 report["kept"].append(f"{relative} (the template removed it; this project changed it)")
@@ -370,6 +387,45 @@ def add(arguments):
     return print_report(report, regenerate, swift_note)
 
 
+def remove(arguments):
+    project = pathlib.Path(arguments.project).resolve()
+    stamp = read_stamp(project)
+    wanted = [feature for feature in FEATURES if getattr(arguments, feature)]
+    if not wanted:
+        sys.exit("Name an option to remove, such as --wasm")
+    absent = [feature for feature in wanted if not enabled(stamp, feature)]
+    if absent:
+        sys.exit(f"{project.name} doesn't have {', '.join('--' + feature for feature in absent)} "
+                 f"(its {STAMP} has it off), so there is nothing to remove")
+    if "ci" in wanted and enabled(stamp, "trunk") and "trunk" not in wanted:
+        sys.exit("--trunk needs CI: the merge queue waits for CI's checks; remove --trunk with it")
+    if git("status", "--porcelain", cwd=project):
+        sys.exit(f"{project} has uncommitted changes; commit or stash them so the diff shows only the removed options")
+    commit = resolve(stamp["commit"])
+    if stamp.get("modified"):
+        print("Note: the project was made from a template with uncommitted changes, so its stamp is approximate.",
+              file=sys.stderr)
+    removed = "".join(f"-{feature}" for feature in wanted)
+    with tempfile.TemporaryDirectory(prefix="template-remove-") as directory:
+        scratch = pathlib.Path(directory)
+        script = bootstrap_source(commit, scratch)
+        # An option on by default is turned off by its --no- flag, which an older bootstrap.sh lacks.
+        unknown = [feature for feature in wanted if feature in ON_BY_DEFAULT and f"--no-{feature})" not in script]
+        if unknown:
+            sys.exit(f"The template at {commit[:12]}, which {project.name} is stamped with, has no "
+                     f"{', '.join('--no-' + feature for feature in unknown)}; run ./template.py update first")
+        without_options = dict(stamp, **{feature: False for feature in wanted})
+        base = render(commit, stamp, scratch)
+        new = render(commit, without_options, scratch, variant=removed)
+        swift_note = follow_project_swift(project, base, new)
+        report = merge(project, base, new, f"template {commit[:12]}", f"template {commit[:12]} {removed}")
+    regenerate = regenerate_modules(project)
+    write_stamp(project, without_options)
+
+    print(f"{project.name}: without {', '.join('--' + feature for feature in wanted)} at template {commit[:12]}\n")
+    return print_report(report, regenerate, swift_note)
+
+
 def retype(arguments):
     project = pathlib.Path(arguments.project).resolve()
     stamp = read_stamp(project)
@@ -492,6 +548,12 @@ def main():
     for feature in FEATURES:
         add_parser.add_argument(f"--{feature}", action="store_true")
     add_parser.set_defaults(run=add)
+
+    remove_parser = commands.add_parser("remove", help="turn options off in a project made with them")
+    remove_parser.add_argument("project")
+    for feature in FEATURES:
+        remove_parser.add_argument(f"--{feature}", action="store_true")
+    remove_parser.set_defaults(run=remove)
 
     retype_parser = commands.add_parser("retype", help="change a project's type")
     retype_parser.add_argument("project")

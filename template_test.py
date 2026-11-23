@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Tests of template.py's add and remove, against a copy of this checkout committed in a scratch repository.
+
+    python3 template_test.py
+
+Each test makes a project the way bootstrap.sh would (a render, its generated files, a stamp, one
+commit), changes it the way an owner might, runs template.py from the copy, and compares the result
+with a fresh render. The copy includes uncommitted changes, so the tests check the working tree.
+Like template.py, this file stays behind: bootstrap.sh leaves it out of projects.
+"""
+import json
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+TEMPLATE = pathlib.Path(__file__).resolve().parent
+NAME = "Demo"
+# A line in AGENTS.md's placeholder paragraph, far from what any option marks, and what a project
+# writes there instead.
+PLACEHOLDER = "<One paragraph: what Demo is, what it optimizes for, who uses it.>"
+DESCRIPTION = "Demo greets people, quickly, for the people who need greeting."
+
+
+def run(*command, cwd):
+    return subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+
+
+def git(*args, cwd):
+    result = run("git", "-c", "user.name=Test", "-c", "user.email=test@example.com", *args, cwd=cwd)
+    assert result.returncode == 0, f"git {' '.join(args)}: {result.stderr}"
+    return result.stdout.strip()
+
+
+def tree(root):
+    """Every file under `root` but git's and the stamp, by path, as bytes."""
+    return {path.relative_to(root).as_posix(): path.read_bytes()
+            for path in root.rglob("*")
+            if path.is_file() and ".git" not in path.relative_to(root).parts and path.name != ".template.json"}
+
+
+class TemplateCommandTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scratch = pathlib.Path(tempfile.mkdtemp(prefix="template-test-"))
+        cls.template = cls.scratch / "ProjectTemplate"
+        listed = git("ls-files", "-z", "--cached", "--others", "--exclude-standard", cwd=TEMPLATE).split("\0")
+        for relative in filter(None, listed):
+            source = TEMPLATE / relative
+            if source.is_file() and not source.is_symlink():
+                destination = cls.template / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        git("init", "-q", "-b", "main", cwd=cls.template)
+        git("add", "-A", cwd=cls.template)
+        git("commit", "-q", "-m", "template", cwd=cls.template)
+        cls.commit = git("rev-parse", "HEAD", cwd=cls.template)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.scratch)
+
+    def render(self, directory, *flags):
+        """The template rendered with `flags`, with the files scripts/modules.py generates."""
+        result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", *flags, NAME, str(directory),
+                     cwd=self.scratch)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return directory
+
+    def project(self, label, stamp, *flags):
+        """A committed project rendered with `flags`, stamped with `stamp`'s options."""
+        directory = self.render(self.scratch / label, *flags)
+        stamp = {"commit": self.commit, "name": NAME, "type": "library", "benchmarks": False, "mutation": False,
+                 "fuzz": False, "differential": False, "wasm": False, "explore": False, "views": False,
+                 "examples": False, "fly": False, "database": False, "ci": True, "trunk": False, **stamp}
+        (directory / ".template.json").write_text(json.dumps(stamp, indent=2) + "\n")
+        git("init", "-q", "-b", "main", cwd=directory)
+        git("add", "-A", cwd=directory)
+        git("commit", "-q", "-m", "project", cwd=directory)
+        return directory
+
+    def own_edits(self, project):
+        """The project's own changes, committed: its description and a module of its own."""
+        agents = project / "AGENTS.md"
+        agents.write_text(agents.read_text().replace(PLACEHOLDER, DESCRIPTION))
+        own = project / "Sources" / "Greetings" / "Farewell.swift"
+        own.write_text("public let farewell = \"Goodbye\"\n")
+        git("add", "-A", cwd=project)
+        git("commit", "-q", "-m", "own edits", cwd=project)
+
+    def template_py(self, *args):
+        return run(sys.executable, str(self.template / "template.py"), *args, cwd=self.scratch)
+
+    def test_remove_wasm_gives_a_fresh_render_without_it_plus_the_project_edits(self):
+        project = self.project("remove-wasm", {"wasm": True}, "--library", "--wasm")
+        self.own_edits(project)
+        expected = self.render(self.scratch / "expected-no-wasm", "--library")
+        agents = expected / "AGENTS.md"
+        agents.write_text(agents.read_text().replace(PLACEHOLDER, DESCRIPTION))
+        (expected / "Sources" / "Greetings" / "Farewell.swift").write_text("public let farewell = \"Goodbye\"\n")
+        expected_commits = git("rev-list", "--count", "HEAD", cwd=project)
+
+        result = self.template_py("remove", str(project), "--wasm")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        actual, wanted = tree(project), tree(expected)
+        self.assertEqual(sorted(actual), sorted(wanted))
+        for path in sorted(wanted):
+            self.assertEqual(actual[path], wanted[path], path)
+        stamp = json.loads((project / ".template.json").read_text())
+        self.assertFalse(stamp["wasm"])
+        self.assertEqual(stamp["commit"], self.commit)
+        self.assertEqual(git("rev-list", "--count", "HEAD", cwd=project), expected_commits)
+        self.assertTrue(git("status", "--porcelain", cwd=project))
+
+    def test_remove_wasm_keeps_what_the_explorer_still_builds_for_wasi(self):
+        project = self.project("remove-wasm-explore", {"wasm": True, "explore": True}, "--library", "--wasm", "--explore")
+        expected = self.render(self.scratch / "expected-explore", "--library", "--explore")
+
+        result = self.template_py("remove", str(project), "--wasm")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        actual, wanted = tree(project), tree(expected)
+        self.assertEqual(sorted(actual), sorted(wanted))
+        for path in sorted(wanted):
+            self.assertEqual(actual[path], wanted[path], path)
+        self.assertIn("NON_WASI_PACKAGES = []", (project / "scripts" / "modules.py").read_text())
+        self.assertFalse((project / "scripts" / "wasi_test.py").exists())
+
+    def test_remove_refuses_an_option_the_stamp_lacks_and_changes_nothing(self):
+        project = self.project("remove-absent", {}, "--library")
+        expected_stamp = (project / ".template.json").read_text()
+
+        result = self.template_py("remove", str(project), "--wasm")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("doesn't have --wasm", result.stderr)
+        self.assertEqual(git("status", "--porcelain", cwd=project), "")
+        self.assertEqual((project / ".template.json").read_text(), expected_stamp)
+
+    def test_remove_refuses_ci_while_trunk_stays_on(self):
+        project = self.project("remove-ci", {"trunk": True}, "--library", "--trunk")
+
+        result = self.template_py("remove", str(project), "--ci")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("remove --trunk with it", result.stderr)
+        self.assertEqual(git("status", "--porcelain", cwd=project), "")
+
+    def test_add_wasm_gives_a_fresh_render_with_it_plus_the_project_edits(self):
+        project = self.project("add-wasm", {}, "--library")
+        self.own_edits(project)
+        expected = self.render(self.scratch / "expected-wasm", "--library", "--wasm")
+        agents = expected / "AGENTS.md"
+        agents.write_text(agents.read_text().replace(PLACEHOLDER, DESCRIPTION))
+        (expected / "Sources" / "Greetings" / "Farewell.swift").write_text("public let farewell = \"Goodbye\"\n")
+
+        result = self.template_py("add", str(project), "--wasm")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        actual, wanted = tree(project), tree(expected)
+        self.assertEqual(sorted(actual), sorted(wanted))
+        for path in sorted(wanted):
+            self.assertEqual(actual[path], wanted[path], path)
+        self.assertTrue(json.loads((project / ".template.json").read_text())["wasm"])
+
+
+if __name__ == "__main__":
+    unittest.main()

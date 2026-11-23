@@ -289,6 +289,10 @@ LITESTREAM=false
 # view and snapshot tests use.
 SWIFTUI=false
 { [ "$APP" = true ] || [ "$VIEWS" = true ]; } && SWIFTUI=true
+# Whatever builds the package for wasm32-wasi: the WebAssembly tests and the explorer. It keeps
+# NON_WASI_PACKAGES, the packages whose products every platform but WASI links.
+WASI=false
+{ [ "$WASM" = true ] || [ "$EXPLORE" = true ]; } && WASI=true
 
 if [ "$RENDER_ONLY" = false ]; then
     echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, views: $VIEWS, examples: $EXAMPLES, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
@@ -305,7 +309,7 @@ fi
 rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
-    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' --exclude '/ci-image' \
+    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/template_test.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' --exclude '/ci-image' \
     --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '/Explore/dist' --exclude '*.xcodeproj' --exclude '/xcode' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
@@ -377,7 +381,7 @@ done
 #                                                       it stops the render, naming file and line
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "swiftui=$SWIFTUI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "swiftui=$SWIFTUI" "wasi=$WASI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" <<'PY'
 import pathlib, re, sys
 

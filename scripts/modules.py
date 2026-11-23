@@ -89,12 +89,15 @@ APPLE_ONLY_PACKAGES = []  # !views:line
 #| APPLE_ONLY_PACKAGES = ["viewinspector", "swift-snapshot-testing", "xctest-dynamic-overlay"]
 # views:end
 
+# wasi:begin
 # Packages that build everywhere but WebAssembly (those on NIOPosix, such as Hummingbird or Vapor), by
 # identity. SwiftPM links their products on every other platform (`.when(platforms:)`), so the
-# package still builds for wasm32-wasi (`just wasi-test`), where the code using them is left out by
-# `#if canImport`. Bazel never builds for WASI, so it links them everywhere, and
-# //:package_swift_test leaves their products out of its comparison.
+# package still builds for wasm32-wasi, where the code using them is left out by `#if canImport`.
+# Bazel never builds for WASI, so it links them everywhere, and //:package_swift_test leaves their
+# products out of its comparison.
 NON_WASI_PACKAGES = []
+
+# wasi:end
 
 # Test targets with nothing to run off Apple platforms (all their tests under `#if os(macOS)`), by
 # name. Bazel runs them on macOS alone: elsewhere they are incompatible, so `bazel test //...` skips
@@ -271,7 +274,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SWIFT_SITES = [
     "Fuzz/Package.swift", "Explore/Package.swift", "Examples/Package.swift",
     ".github/workflows/*.yml", "Dockerfile", "justfile",
-    "scripts/wasi_test.py", "scripts/fuzz.py", "Explore/build.sh", "tools/embedded-swift", "tools/swift_rules.bzl",
+    "scripts/wasi_test.py", "scripts/fuzz.py", "Explore/build.sh", "tools/embedded-swift", "tools/swift_rules.bzl",  # wasm:line
+    #| "scripts/fuzz.py", "Explore/build.sh", "tools/embedded-swift", "tools/swift_rules.bzl",  # !wasm:line
     "README.md", "AGENTS.md", ".github/README.md", "Fuzz/README.md", "Explore/README.md", "Examples/README.md",
 ]
 
@@ -338,9 +342,11 @@ def check():
     for name in APPLE_ONLY_TESTS:
         assert name in dict(TEST_TARGETS), f"APPLE_ONLY_TESTS names unknown test target {name}"
     packages = [p[0] for p in PACKAGES]
+    # wasi:begin
     for name in NON_WASI_PACKAGES:
         assert name in packages, f"NON_WASI_PACKAGES names unknown package {name}"
         assert name not in APPLE_ONLY_PACKAGES, f"{name} is Apple-only, which already leaves WASI out"
+    # wasi:end
     for name, deps in [(m[0], m[3]) for m in MODULES] + [(e[0], e[2]) for e in EXECUTABLES]:
         for d in deps:
             if "/" in d:
@@ -404,8 +410,11 @@ def simulator_test(name):
 def spm_dep(d):
     if "/" in d:
         package, product = d.split("/")
+        # wasi:begin
         condition = (", condition: .when(platforms: applePlatforms)" if package in APPLE_ONLY_PACKAGES
                      else ", condition: .when(platforms: nonWASIPlatforms)" if package in NON_WASI_PACKAGES else "")
+        # wasi:end
+        #| condition = ", condition: .when(platforms: applePlatforms)" if package in APPLE_ONLY_PACKAGES else ""  # !wasi:line
         return f'.product(name: "{product}", package: "{package}"{condition})'
     return f'"{d}"'
 
@@ -553,6 +562,7 @@ def package_swift():
             "let applePlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS]",
             "",
         ]
+    # wasi:begin
     if NON_WASI_PACKAGES:
         lines += [
             "// Where the packages that don't build for WebAssembly have their products linked: every",
@@ -563,6 +573,7 @@ def package_swift():
             "]",
             "",
         ]
+    # wasi:end
     lines += [
         "// Typed arrays of their own: as one `Package(...)` expression, a large manifest is too big for",
         "// the type checker.",
@@ -1097,6 +1108,8 @@ def write(path, text):
 def main():
     check()
     # Before the record is rewritten: it names the versions the sites hold now.
+    #| replace_swift(ROOT, recorded_swift(ROOT) or (SWIFT, SWIFT_TOOLCHAIN), (SWIFT, SWIFT_TOOLCHAIN))  # !wasi:line
+    # wasi:begin
     for path in replace_swift(ROOT, recorded_swift(ROOT) or (SWIFT, SWIFT_TOOLCHAIN), (SWIFT, SWIFT_TOOLCHAIN)):
         if not path.endswith(".yml"):
             continue
@@ -1105,6 +1118,7 @@ def main():
                 # A checksum can't be derived from the version; swift.org publishes it with the SDK.
                 print(f"{os.path.relpath(path, ROOT)}: WASM_SDK_URL now names Swift {SWIFT_TOOLCHAIN}'s WebAssembly SDK; "
                       "set WASM_SDK_SHA256 to its checksum (swift.org's install page lists it)", file=sys.stderr)
+    # wasi:end
     write(os.path.join(ROOT, "tools", "swift_version.bzl"), swift_version_bzl())
     for name, _, description, deps in MODULES:
         d = os.path.join(ROOT, "Sources", name)

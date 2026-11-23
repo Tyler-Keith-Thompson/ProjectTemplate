@@ -102,9 +102,11 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
 - A package only Apple platforms build (Objective-C, a wrapper of an Apple framework) goes in
   `APPLE_ONLY_PACKAGES` too: its products are linked on Apple platforms only, so the targets still
   build on Linux, and the code that uses them sits under `#if canImport(...)`.
+<!-- wasi:begin -->
 - A package that builds everywhere but WebAssembly (one on NIOPosix: Hummingbird, Vapor) goes in
   `NON_WASI_PACKAGES` too: its products are linked on every other platform, so the package still
   builds for wasm32-wasi, and the code that uses them sits under `#if canImport(...)`.
+<!-- wasi:end -->
 - Raise the Swift floor (a dependency's manifest needs a newer Swift): set `SWIFT` (every
   manifest's tools version, CI's and the Docker image's Swift, the minimum the docs state) and
   `SWIFT_TOOLCHAIN` (the swiftly release for fuzzing, WebAssembly and Embedded Swift) in
@@ -113,7 +115,8 @@ the umbrella module and `swift/Package.swift` from it. Never edit the generated 
   in `tools/swift_version.bzl`. Never edit a version in those files by hand. `just template-update`
   keeps the project's versions, and says when the template's have passed them.
   CI needs a `swift-bazel` image of the new version, published from the project template's <!-- ci:line -->
-  `ci-image/build.sh`; with the explorer, `just modules` asks for docc.yml's `WASM_SDK_SHA256`. <!-- ci:line -->
+  `ci-image/build.sh`; with the explorer, `just modules` asks for docc.yml's `WASM_SDK_SHA256`. <!-- ci:line --><!-- explore:line -->
+  `ci-image/build.sh`. <!-- ci:line --><!-- !explore:line -->
 - A module name takes a `Module` suffix only when it would otherwise equal its main type's name
   (`GreetingModule` would hold `Greeting`). No catch-all modules ("Core", "Utilities").
 
@@ -176,8 +179,9 @@ Every shell command gets a timeout. macOS has no `timeout`; use
   the Bazel in `.bazelversion` already in it, built by the project template's `ci-image/build.sh`. <!-- ci:line -->
   Changing `.bazelversion` or the workflows' Swift version means a new tag from there. <!-- ci:line -->
   The package is private; a repository pulls it once added under its Manage Actions access. <!-- ci:line -->
-- Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests:
-  builds for platforms that cannot start a child process leave those files out.
+- Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests: <!-- wasm:line -->
+  builds for platforms that cannot start a child process leave those files out. <!-- wasm:line -->
+- Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests. <!-- !wasm:line -->
 <!-- wasm:begin -->
 
 ### 32-bit `Int` (WebAssembly)

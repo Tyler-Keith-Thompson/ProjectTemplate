@@ -1,5 +1,6 @@
-// Exit tests, in a file of their own: each runs its body in a child process, which some platforms
-// (WASI) cannot start, and those builds leave out every file holding one.
+// Exit tests, in a file of their own: each runs its body in a child process, which some platforms // wasm:line
+// (WASI) cannot start, and those builds leave out every file holding one. // wasm:line
+//| // Exit tests, in a file of their own: each runs its body in a child process. // !wasm:line
 
 import Greetings
 import ProjectNameTestSupport

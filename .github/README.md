@@ -146,6 +146,7 @@ just template-update                           # inside a project
 ./template.py update ~/workspace/MyProject     # the same, from the template
 ./template.py status                           # every project in ~/workspace and how far behind it is
 ./template.py add ~/workspace/MyProject --wasm # turn an option on in a project made without it
+./template.py remove ~/workspace/MyProject --wasm  # turn it off again
 ./template.py retype ~/workspace/MyProject --type mcp  # change its type: a library that became an MCP server
 ```
 
@@ -187,6 +188,14 @@ matches a project made with those options from the start. It refuses an option t
 doesn't know yet (run `update` first) or one that doesn't fit the project's type, needs a clean
 worktree, records the options in the stamp, and never commits.
 
+`remove` is its mirror: it renders the stamped commit with the project's options and with the
+named ones off, and merges the difference the same way, so what an option brought goes where the
+project left it alone, a file the project changed is kept and reported, and files the project
+added itself stay. It refuses an option the stamp doesn't have on, and `--ci` while `--trunk`
+stays on; it needs a clean worktree, records the options off in the stamp, and never commits.
+Removing `--wasm` from a project with `--explore` keeps `NON_WASI_PACKAGES`, which the explorer's
+WebAssembly build still needs.
+
 A project made before stamps existed is adopted with `./template.py stamp <project> --type …
 [--benchmarks] [--fly] [--database]`, which records that it matches the template's `HEAD`. Later
 updates merge only what changes after that. To see how far it had drifted first, render the
@@ -202,9 +211,11 @@ and `templates/` stay behind.
 
 ### Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `views`, `examples`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `swiftui`, `ci`, `trunk`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `views`, `examples`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `swiftui`, `wasi`, `ci`, `trunk`) keeps
 or drops the sections marked for it, in any text file. `litestream` is on with `fly` and `database`
-together, and `swiftui` with `app` or `views`: the lint stack and view-test packages they share.
+together, `swiftui` with `app` or `views` (the lint stack and view-test packages they share), and
+`wasi` with `wasm` or `explore`: what any build for wasm32-wasi needs, `NON_WASI_PACKAGES` and its
+manifest condition, so a render without either names neither WASI nor wasm.
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
   Markdown); blocks nest, and `!feature:begin` / `!feature:end` marks a block kept when the
@@ -240,7 +251,7 @@ numbering intact.
 | Mutation testing (opt-in) | `scripts/mutate.py`, `scripts/mutants/` | Mutant schemata over a scratch SwiftPM copy outside the repository (`~/Library/Caches/<project>-mutation`); `<PROJECT>_MUTANT` picks the live mutant |
 | Fuzzing (opt-in) | `Fuzz/`, `scripts/fuzz.py` | libFuzzer through `LLVMFuzzerRunDriver` (each target's `@main` calls `runFuzzer`); swiftly's toolchain, `<PROJECT>_FUZZ_SWIFT` picks its version; corpus in `Fuzz/Corpus/`, crashes in `Fuzz/Crashes/` |
 | Differential testing (opt-in) | `Differential/`, `scripts/differential*.py` | `DIFFERENTIAL_DEPENDENCIES` in `scripts/modules.py` writes the package's BUILD.bazel and Package.swift; areas are discovered by file name |
-| WebAssembly tests (opt-in) | `scripts/wasi_test.py`, `scripts/modules.py` | The generated `Package.swift` reads `<PROJECT>_WASI_TESTS` (marked `wasm` in the generator); builds in `.build/wasm`. `NON_WASI_PACKAGES` (every type) links a package's products on every platform but WASI |
+| WebAssembly tests (opt-in) | `scripts/wasi_test.py`, `scripts/modules.py` | The generated `Package.swift` reads `<PROJECT>_WASI_TESTS` (marked `wasm` in the generator); builds in `.build/wasm`. `NON_WASI_PACKAGES` (marked `wasi`: with `--wasm` or `--explore`, any type that takes them) links a package's products on every platform but WASI |
 | Browser explorer (opt-in) | `Explore/`, `docc.yml` | ElementaryUI and JavaScriptKit (PackageToJS); the workflow job is dormant (`#|`) in the template, so only `--explore` projects run it |
 | Mocks (off until needed) | `scripts/modules.py` (`MOCKING`), `tools/BUILD.bazel` | Mockable row commented out in `PACKAGES`; a module depending on it gets `MOCKING` in debug only, in both build systems |
 | CI | `templates/ci/.github/workflows` (copied into projects with CI; the template repository runs no workflows) | Linux arm64 Bazel tests on branches and PRs; tag-and-release on main |
@@ -270,6 +281,12 @@ and `just load` in the bootstrapped project; for a fuzz change, `just fuzz -t 30
 embedded change, `just firmware` in the bootstrapped project; for an MCP change, `INSTALL_DIR=<scratch> just install`
 and an `initialize`, `tools/list` and `tools/call` piped into the installed binary; for an app change,
 `just lint`, `just smoke` and, after a change to how a screen looks, `just record-snapshots` with the images reviewed; for a views change, `just spm-test` and, after a change to how a view looks, `just record-snapshots` with the images reviewed, then the references copied back into `templates/views`.
+
+After a change to `template.py` (or to what `add` and `remove` merge), `python3 template_test.py`:
+it commits a copy of this checkout, working tree included, in a scratch repository, then checks that
+`add --wasm` and `remove --wasm` turn a stamped project into a fresh render with or without the
+option plus the project's own edits, and that `remove` refuses what it should. Like `template.py`,
+bootstrap leaves it out of projects.
 
 Write each commit so it stands alone: projects receive template commits through
 `just template-update`, and a commit is what they review.
