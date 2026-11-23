@@ -291,10 +291,14 @@ MACOS_MINIMUM = "15.0"
 # The Swift the project builds with. SWIFT is the floor: every manifest's swift-tools-version, CI's
 # swift:<SWIFT> and swift-bazel:<SWIFT>-<bazel> images, the Docker image's base and the minimum the
 # docs state. SWIFT_TOOLCHAIN is the swift.org release swiftly installs where Xcode's toolchain falls
-# short (fuzzing, WebAssembly, Embedded Swift), which the embedded type's images pin too. To raise
-# the floor, change both and run `just modules`: it writes them into the generated manifests and
-# replaces the previous ones in SWIFT_SITES. CI needs a swift-bazel image of the new version (the
-# project template's ci-image/build.sh publishes them).
+# short.
+# The fuzz targets build with it.  # fuzz:line
+# just wasi-test builds with it and its WebAssembly SDK.  # wasm:line
+# The explorer builds with it and its WebAssembly SDK.  # explore:line
+# The firmware builds with its Embedded Swift, and the embedded type's images pin it.  # embedded:line
+# To raise the floor, change both and run `just modules`: it writes them into the generated
+# manifests and replaces the previous ones in SWIFT_SITES. CI needs a swift-bazel image of the new
+# version (the project template's ci-image/build.sh publishes them).
 SWIFT = "6.3"
 SWIFT_TOOLCHAIN = "6.3.3"
 
