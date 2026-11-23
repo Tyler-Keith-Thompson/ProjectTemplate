@@ -184,8 +184,9 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 
 watchOS's arm64_32 and wasm32 have a 32-bit `Int`. `just wasi-test` (`scripts/wasi_test.py`)
 builds the SwiftPM test targets with `swift build --build-tests --swift-sdk
-swift-6.3.3-RELEASE_wasm` through swiftly into `.build/wasm`, then runs each binary with
-`wasmtime run --dir . <binary> --testing-library swift-testing`, logs in `.build/wasm/logs`.
+swift-6.3.3-RELEASE_wasm` through swiftly into `.build/wasm`, then runs each test binary (one
+`<Target>-test-runner.wasm` per target from Swift 6.4, one `<Project>PackageTests.xctest` before)
+with `wasmtime run --dir . <binary> --testing-library swift-testing`, logs in `.build/wasm/logs`.
 Needs swiftly's 6.3.3 toolchain, its WebAssembly SDK (`swift sdk list`; swift.org's "Getting
 Started with Swift SDKs for WebAssembly" has the install command) and `brew install wasmtime`. If
 the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
@@ -195,9 +196,17 @@ the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
   groups (`<PROJECT>_WASI_TESTS`, the project's name in capitals, makes `Package.swift` declare
   only those).
 - Not run on WASI: files with exit tests (no child processes; the manifest leaves them out), and
-  anything needing threads (`#if !os(WASI)`). On WASI a time limit's timer holds the thread until
-  it expires, after the body has run, so every `.timeLimit` test reports its limit exceeded; the
-  script reports the issues besides those.
+  anything needing threads (`#if !os(WASI)`).
+- WASI runs every task on one thread, and a sleep that is cancelled still holds it until its
+  deadline. A time limit's timer is such a sleep: the body runs, but the timer then holds the
+  thread for the whole limit, so every `.timeLimit` test reports its limit exceeded. The script
+  counts only the issues besides those. Tests run in parallel, so the timers overlap; `--serial`
+  (Swift Testing's `--no-parallel`) costs each time-limited test its whole limit. A test that
+  cancels a real-clock sleep waits it out the same way, which is one more reason code takes its
+  clock from `Container` and tests advance a `TestClock`.
+- Without wasm tail calls, an await that doesn't suspend deepens both stacks. The script links a
+  64 MB stack and gives wasmtime a 256 MB one, enough for a 10,000-deep chain of such awaits; a
+  deeper one traps or hangs on WASI alone.
 - A dependency that doesn't build for WASI (NIOPosix and what sits on it) fails the whole build.
   List its package in `NON_WASI_PACKAGES` (`scripts/modules.py`), and put the code and tests that
   use it under `#if canImport(<its module>)`.
