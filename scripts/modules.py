@@ -609,6 +609,10 @@ def bazel_deps(deps, testing=False, ios=False):
     return _bazel_deps([d for d in deps if not is_macro(d)]) + (f"    plugins = [\n{plugins}    ],\n" if plugins else "")
 
 
+# The Apple operating systems Bazel's platforms name, for APPLE_ONLY_PACKAGES' select.
+APPLE_OSES = ["macos", "ios", "tvos", "watchos", "visionos"]
+
+
 def _bazel_deps(deps, ios=False):
     if not deps:
         return ""
@@ -616,10 +620,14 @@ def _bazel_deps(deps, ios=False):
     text = f"    deps = [\n{listed}    ]"
     apple = "".join(f'            "{bazel_label(d)}",\n' for d in deps if not ios and apple_only(d))
     if apple:
+        # Every Apple OS, as Package.swift's applePlatforms: a module built for the simulator (an iOS
+        # module's dependency, a SIMULATOR_TESTS target) would otherwise compile out, without an
+        # error, the code it holds under `#if canImport` of these products.
+        keys = "".join(f'        "@platforms//os:{os_name}": [\n{apple}        ],\n' for os_name in APPLE_OSES)
         text += (
             " + select({\n"
             "        # Apple-only packages (APPLE_ONLY_PACKAGES in scripts/modules.py).\n"
-            f'        "@platforms//os:macos": [\n{apple}        ],\n'
+            f"{keys}"
             '        "//conditions:default": [],\n'
             "    })"
         )
