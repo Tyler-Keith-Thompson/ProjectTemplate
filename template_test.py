@@ -206,6 +206,15 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn("justfile: {{BAZEL}} run //Apps/Demo", result.stdout)
         self.assertEqual(build.read_text().count(load), 2)
 
+    def test_a_render_leaves_out_the_templates_own_readme_and_docs(self):
+        directory = self.render(self.scratch / "own-docs", "--library")
+
+        actual = tree(directory)
+
+        self.assertIn(".github/workflows/CI.yml", actual)
+        self.assertNotIn(".github/README.md", actual)
+        self.assertEqual([path for path in actual if path.startswith(".github/docs/")], [])
+
     def test_add_ios_refuses_a_type_it_doesnt_apply_to(self):
         project = self.project("add-ios-mcp", {"type": "mcp"}, "--mcp")
 

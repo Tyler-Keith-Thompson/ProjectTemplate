@@ -54,7 +54,7 @@
 # templates/<type>/ on top, --views adds templates/views/, --examples templates/examples/, --ios
 # templates/ios/, the app type and --ios templates/simulator/, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
 # the template repository runs none of them. Each optional piece keeps or drops the sections marked
-# for it (.github/README.md, "Optional pieces").
+# for it (.github/docs/working-on-the-template.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
@@ -357,7 +357,7 @@ fi
 copy_template "" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
-    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/template_test.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' --exclude '/ci-image' \
+    --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/template_test.py' --exclude '/.github/README.md' --exclude '/.github/docs' --exclude 'user.bazelrc' --exclude '/templates' --exclude '/ci-image' \
     --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '/Explore/dist' --exclude '*.xcodeproj' --exclude '/xcode' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
     copy_template templates/server --exclude '.DS_Store'
@@ -510,7 +510,7 @@ if [ "$RENDER_ONLY" = true ]; then
 fi
 
 # The stamp: which template commit and options made this project, so template.py can merge later
-# template changes into it (.github/README.md, "Keeping projects current").
+# template changes into it (.github/docs/updating.md).
 if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
     MODIFIED=false
     if [ -n "$(git -C "$TEMPLATE" status --porcelain)" ]; then

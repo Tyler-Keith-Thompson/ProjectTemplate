@@ -45,8 +45,8 @@
       type. It refuses a type the stamped commit doesn't know (run `update` first) and options the
       new type doesn't take. Nothing is committed; PROJECT must have no uncommitted changes.
 
-The stamp is PROJECT/.template.json, written by bootstrap.sh. .github/README.md, "Keeping
-projects current", describes the workflow.
+The stamp is PROJECT/.template.json, written by bootstrap.sh. .github/docs/updating.md describes
+the workflow.
 """
 import argparse
 import collections
@@ -79,7 +79,7 @@ def resolve(revision):
 def read_stamp(project):
     path = project / STAMP
     if not path.is_file():
-        sys.exit(f"{project} has no {STAMP}; adopt it first with ./template.py stamp (.github/README.md, \"Keeping projects current\")")
+        sys.exit(f"{project} has no {STAMP}; adopt it first with ./template.py stamp (.github/docs/updating.md)")
     return json.loads(path.read_text())
 
 
