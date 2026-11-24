@@ -40,8 +40,11 @@ Examples/.swiftpm
 Explore
 # explore:end
 
-# Overlays the bootstrap script copies over the template (server and embedded types); not built in place.
+# template:begin
+# The pieces bootstrap.sh copies onto the template for a type or an option, not built in place. A
+# render leaves out both them and this line.
 templates
+# template:end
 # embedded:begin
 
 # ESP-IDF's build directory and the components it downloads.

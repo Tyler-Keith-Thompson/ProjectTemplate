@@ -457,7 +457,7 @@ done
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
 python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "ios=$IOS" "simulator=$SIMULATOR" "swiftui=$SWIFTUI" "wasi=$WASI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
-    "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" <<'PY'
+    "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" "template=false" <<'PY'
 import pathlib, re, sys
 
 root = pathlib.Path(sys.argv[1])
@@ -523,6 +523,8 @@ for path in sorted(p for p in root.rglob("*") if p.is_file() and ".git" not in p
         text, merged = "".join(out), None
         while merged != text:
             merged, text = text, re.sub(r"\n\n(?:\x00\n)+\n", "\n\n", text)
+        # A blank line followed only by removed lines would end the file.
+        text = re.sub(r"\n\n(?:\x00\n)+\Z", "\n", text)
         path.write_text(text.replace(REMOVED, ""))
 PY
 

@@ -14,7 +14,8 @@ or drops the sections marked for it, in any text file. `litestream` is on with `
 together, `swiftui` with `app` or `views` (the lint stack and view-test packages they share), `simulator`
 with `app`, `ios` or the `--simulator` option (the test host, `.bazelrc`'s simulator settings and `tools/ios.bzl`), and
 `wasi` with `wasm` or `explore`: what any build for wasm32-wasi needs, `NON_WASI_PACKAGES` and its
-manifest condition, so a render without either names neither WASI nor wasm.
+manifest condition, so a render without either names neither WASI nor wasm. `template` is never on
+in a render: it marks what only the template's checkout needs, such as `.bazelignore`'s `templates`.
 
 - `# feature:begin` / `# feature:end` blocks (`//` in Swift and JavaScript, `<!-- -->` in
   Markdown); blocks nest, and `!feature:begin` / `!feature:end` marks a block kept when the

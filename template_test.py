@@ -265,6 +265,21 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotIn(".github/README.md", actual)
         self.assertEqual([path for path in actual if path.startswith(".github/docs/")], [])
 
+    def test_a_render_leaves_out_the_template_only_ignore_line_and_ends_on_content(self):
+        found = {}
+
+        for flags in (["--library"], ["--library", "--explore", "--wasm"], ["--embedded"]):
+            directory = self.scratch / ("ignore" + "".join(flags))
+            result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", *flags, NAME, str(directory),
+                         cwd=self.scratch)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = (directory / ".bazelignore").read_text().split("\n")
+            # (has the line, ends on a blank line), as split leaves "" after the final newline.
+            found[" ".join(flags)] = ("templates" in lines, lines[-2] == "")
+
+        self.assertEqual(found, {name: (False, False) for name in found})
+        self.assertIn("templates", (self.template / ".bazelignore").read_text().split("\n"))
+
     def test_update_notes_template_changes_only_for_tracked_files(self):
         project = self.project("update-untracked", {}, "--library")
         untracked = self.template / ".kanban" / "board.json"
