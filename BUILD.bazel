@@ -5,7 +5,7 @@ load("//tools:docc.bzl", "docc_site")
 load("//tools:examples.bzl", "EXAMPLE_PACKAGES")
 load("//tools:executables.bzl", "EXECUTABLE_PACKAGES")
 load("//tools:macros.bzl", "MACRO_PACKAGES")
-#| load("//tools:ios.bzl", "IOS_PACKAGES", "SIMULATOR_TEST_PACKAGES")  # app:line
+#| load("//tools:ios.bzl", "IOS_PACKAGES", "SIMULATOR_TEST_PACKAGES")  # simulator:line
 load("//tools:performance_tests.bzl", "PERFORMANCE_TEST_PACKAGES")
 load("//tools:swiftpm.bzl", "swiftpm_manifest_test")
 
@@ -15,13 +15,27 @@ load("//tools:swiftpm.bzl", "swiftpm_manifest_test")
 #|
 # app:end
 # !app:begin
+# !simulator:begin
 # Nothing here builds for iOS only (IOS_MODULES in scripts/modules.py, which writes tools/ios.bzl
 # for an app), and no tests run in the simulator.
 IOS_PACKAGES = []
 
 SIMULATOR_TEST_PACKAGES = []
 
+# !simulator:end
+# !ios:begin
 APP_TARGETS = []  # !examples:line
+# !ios:end
+# ios:begin
+#| # The iOS app (Apps/ProjectName), launched from a scheme of its own. It is `manual`, so
+#| # `bazel test //...` builds it on a Mac only through the justfile.
+#| APP_TARGETS = ["//Apps/ProjectName"]  # !examples:line
+#| APP_TARGETS = ["//Apps/ProjectName"] + [  # examples:line
+#|     "//Examples/Apps/ExampleApp:" + name  # examples:line
+#|     for name in ["iOSExample", "MacExample", "VisionExample", "WatchExample"]  # examples:line
+#| ]  # examples:line
+# ios:end
+# !ios:begin
 # examples:begin
 #| # The example apps (Examples/Apps/ExampleApp), each launched from a scheme of its own. They are
 #| # `manual`, so `bazel test //...` builds none of them, on a Mac or on Linux.
@@ -30,6 +44,7 @@ APP_TARGETS = []  # !examples:line
 #|     for name in ["iOSExample", "MacExample", "VisionExample", "WatchExample"]
 #| ]
 # examples:end
+# !ios:end
 
 # !app:end
 # Test bundles are derived from the directory layout rather than listed: a directory under

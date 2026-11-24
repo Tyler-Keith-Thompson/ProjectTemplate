@@ -16,19 +16,26 @@ SWIFT := "env -u TOOLCHAINS xcrun --toolchain default swift"
 [doc('Build everything (default)')]
 all: build
 
+# ios:begin
+#| # The iOS app is `manual` (Apps/ProjectName/BUILD.bazel), so `//...` leaves it out, as Linux has no
+#| # iOS toolchain; on a Mac, build and test name it too.
+# ios:end
 [doc('Build every target')]
 build:
-    {{BAZEL}} build //...
+    {{BAZEL}} build //...  # !ios:line
+    #| {{BAZEL}} build //... $(uname | grep -q Darwin && echo //Apps/ProjectName)  # ios:line
 
 # !swiftui:begin
 [doc('Run every test')]
 test:
-    {{BAZEL}} test //...
+    {{BAZEL}} test //...  # !ios:line
+    #| {{BAZEL}} test //... $(uname | grep -q Darwin && echo //Apps/ProjectName)  # ios:line
 # !swiftui:end
 # views:begin
 #| [doc('Lint, then run every test')]
 #| test: lint
-#|     {{BAZEL}} test //...
+#|     {{BAZEL}} test //...  # !ios:line
+#|     {{BAZEL}} test //... $(uname | grep -q Darwin && echo //Apps/ProjectName)  # ios:line
 #|
 #| # SwiftPM compiles #filePath as an absolute path, so SnapshotTesting writes each reference beside
 #| # its test; under Bazel it would land in the test's runfiles. Recording reports every snapshot it
@@ -101,6 +108,13 @@ test:
 #|     trap - EXIT
 #|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "{{udid}}"
 # app:end
+# ios:begin
+#| [doc('Launch the iOS app in the simulator')]
+#| run:  # library:line
+#| run-app:  # server:line
+#|     {{BAZEL}} run //Apps/ProjectName
+#|
+# ios:end
 
 [doc('Run one test target, e.g. just test-one //Tests/GreetingsTests')]
 test-one target:

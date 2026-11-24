@@ -24,7 +24,8 @@ Sources/GreetingFeature/         The greeting screen, GreetingView (iOS) <!-- ap
 Apps/ProjectName/                The iOS app: the composition root, Info.plist, the ios_application, and the debug drawer's trigger <!-- app:line -->
 Apps/ProjectNameSmokeTests/      The one XCUITest, against the built app (`just smoke`) <!-- app:line -->
 tools/snapshots/                 assertBazelSnapshot: snapshot references read from the test bundle under Bazel <!-- app:line -->
-tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- app:line -->
+Apps/ProjectName/                The iOS app: the composition root, Info.plist and the ios_application (`manual`) <!-- ios:line -->
+tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- simulator:line -->
 tools/iphone/                    The scripts `just phone-install` and `just phone-provision` run, and their test <!-- app:line -->
 Sources/GreetingsUI/             GreetingCard, a SwiftUI view of a Greeting for macOS and iOS <!-- views:line -->
 Tests/GreetingsUITests/          Its ViewInspector and snapshot tests, run on the Mac; __Snapshots__ the references <!-- views:line -->
@@ -92,9 +93,18 @@ in beside the project's own: keep one definition, holding the project's rows, an
   test must run on the Mac, since Bazel's runner fails a run of none; a target whose Mac tests are
   Apple's alone goes in `APPLE_ONLY_TESTS` too. A target that depends on an iOS module or a Bazel
   label runs in the simulator alone already, so it isn't listed.
-  The app type ships the test host; any other copies `tools/test_host` and the simulator lines of <!-- !app:line -->
-  `.bazelrc` from an app render first (`just modules` refuses the table without them). <!-- !app:line -->
+  It needs the test host and the simulator settings in `.bazelrc`, which the app type and the <!-- !simulator:line -->
+  `--ios` option ship (`just modules` refuses the table without them). <!-- !simulator:line -->
   `just mutate` runs a spec's simulator targets through Bazel (`scripts/mutate.py`). <!-- mutation:line -->
+- Add an iOS module (a screen of the iOS app): a row in `MODULES` and its name in `IOS_MODULES`, <!-- ios:line -->
+  then `just modules`. Bazel builds it for the simulator alone; Package.swift, the umbrella and the <!-- ios:line -->
+  docs leave it out (`tools/ios.bzl`, generated), and a module that depends on it must be iOS too. <!-- ios:line -->
+  Its test target runs in the simulator alone, an `ios_unit_test` inside `tools/test_host` that <!-- ios:line -->
+  Linux skips. The app (`Apps/ProjectName/BUILD.bazel`) lists it among its dependencies. <!-- ios:line -->
+- Add an iOS app, iOS modules and simulator tests to this project: from the project template's <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+  checkout, `./template.py add <project> --ios` (after `just template-update`, if the stamp <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+  predates the option). It brings `Apps/ProjectName`, the test host, the simulator settings and <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+  `tools/ios.bzl`; until then `just modules` refuses `IOS_MODULES` and simulator tests. <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
 - Give a test target an environment variable under `bazel test` (an integration test that runs
   only when `TEST_DATABASE_URL` is set, say): its name and the variables in `TEST_ENVIRONMENT`
   (`{"<Target>Tests": ["TEST_DATABASE_URL"]}`), then `just modules`. Bazel strips the test
@@ -225,6 +235,8 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just install` | Build the server optimized and install it as `~/.local/bin/projectname-mcp`, the binary `claude mcp add` registers <!-- mcp:line --> |
 | `just run [args]` | The server over stdio (`bazel run //Sources/ProjectNameMCP`), waiting for a client <!-- mcp:line --> |
 | `just run` | The app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- app:line --> |
+| `just run` | The iOS app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- ios:line --><!-- library:line --> |
+| `just run-app` | The iOS app in the simulator (`bazel run //Apps/ProjectName`; .bazelrc names the device) <!-- ios:line --><!-- server:line --> |
 | `just lint` | SwiftLint and a11y-check over every first-party target; `just test` runs it first <!-- swiftui:line --> |
 | `just smoke` | The XCUITest smoke test, launching the built app in the simulator <!-- app:line --> |
 | `just phone-provision [udid]` | Once per new iPhone: Xcode's automatic signing registers it and makes the app's provisioning profile <!-- app:line --> |

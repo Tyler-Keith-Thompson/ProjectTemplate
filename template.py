@@ -14,13 +14,13 @@
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
   ./template.py stamp PROJECT [--type library|server|embedded|mcp|app] [--benchmarks] [--mutation] [--fuzz]
-                              [--differential] [--wasm] [--explore] [--views] [--examples] [--fly] [--database] [--no-ci]
+                              [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--fly] [--database] [--no-ci]
                               [--trunk] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
   ./template.py add PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                            [--views] [--examples] [--fly] [--database] [--ci] [--trunk]
+                            [--views] [--examples] [--ios] [--fly] [--database] [--ci] [--trunk]
       Turn options on in a project made without them. The template is rendered at the stamped commit
       with the stamp's options and again with the new ones added, and every file that differs is
       merged three ways into the project, as `update` does; the stamp then records the options. It
@@ -29,7 +29,7 @@
       uncommitted changes.
 
   ./template.py remove PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                               [--views] [--examples] [--fly] [--database] [--ci] [--trunk]
+                               [--views] [--examples] [--ios] [--fly] [--database] [--ci] [--trunk]
       Turn options off, the mirror of `add`. The template is rendered at the stamped commit with the
       stamp's options and again with these turned off, and every file that differs is merged three
       ways into the project, as `add` does: what the options brought is removed where the project
@@ -86,7 +86,7 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "views", "examples", "fly", "database", "ci", "trunk")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "views", "examples", "ios", "fly", "database", "ci", "trunk")
 # Options on unless the stamp says otherwise: a stamp from before the option had it.
 ON_BY_DEFAULT = ("ci",)
 
@@ -345,7 +345,7 @@ def print_report(report, regenerate, swift_note=None):
 
 
 # Options that apply to some types only: the types each applies to.
-TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "views": ("library",), "examples": ("library",), "fly": ("server",), "database": ("server",),
+TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "views": ("library",), "examples": ("library",), "ios": ("library", "server"), "fly": ("server",), "database": ("server",),
              # The workflows run in Linux containers; an iOS app's tests need a Mac.
              "ci": ("library", "server", "embedded", "mcp"), "trunk": ("library", "server", "embedded", "mcp")}
 

@@ -168,6 +168,74 @@ class TemplateCommandTests(unittest.TestCase):
             self.assertEqual(actual[path], wanted[path], path)
         self.assertTrue(json.loads((project / ".template.json").read_text())["wasm"])
 
+    def test_add_ios_to_a_server_gives_a_fresh_render_with_it_plus_the_project_edits(self):
+        project = self.project("add-ios", {"type": "server"}, "--server")
+        self.own_edits(project)
+        expected = self.render(self.scratch / "expected-ios", "--server", "--ios")
+        agents = expected / "AGENTS.md"
+        agents.write_text(agents.read_text().replace(PLACEHOLDER, DESCRIPTION))
+        (expected / "Sources" / "Greetings" / "Farewell.swift").write_text("public let farewell = \"Goodbye\"\n")
+
+        result = self.template_py("add", str(project), "--ios")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        actual, wanted = tree(project), tree(expected)
+        self.assertEqual(sorted(actual), sorted(wanted))
+        for path in sorted(wanted):
+            self.assertEqual(actual[path], wanted[path], path)
+        self.assertIn("Apps/Demo/BUILD.bazel", actual)
+        self.assertIn("tools/test_host/BUILD.bazel", actual)
+        self.assertIn("tools/ios.bzl", actual)
+        self.assertTrue(json.loads((project / ".template.json").read_text())["ios"])
+
+    def test_add_ios_refuses_a_type_it_doesnt_apply_to(self):
+        project = self.project("add-ios-mcp", {"type": "mcp"}, "--mcp")
+
+        result = self.template_py("add", str(project), "--ios")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--ios doesn't apply to the mcp type", result.stderr)
+        self.assertEqual(git("status", "--porcelain", cwd=project), "")
+
+    def test_modules_without_ios_refuses_ios_modules_and_simulator_tests(self):
+        directory = self.render(self.scratch / "no-ios", "--server")
+        modules = directory / "scripts" / "modules.py"
+        original = modules.read_text()
+        cases = [
+            (original.replace("IOS_MODULES = []", 'IOS_MODULES = ["Greetings"]', 1), "IOS_MODULES needs tools/ios.bzl"),
+            (original.replace('    ("AppTests", ["App", "vapor/VaporTesting"]),',
+                              '    ("AppTests", ["App", "vapor/VaporTesting", "//tools/snapshots:BazelSnapshotTesting"]),', 1),
+             "AppTests run in the iOS simulator"),
+        ]
+        for text, expected_message in cases:
+            self.assertNotEqual(text, original)
+            modules.write_text(text)
+
+            result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(expected_message, result.stderr)
+            self.assertIn("./template.py add <project> --ios", result.stderr)
+
+    def test_a_simulator_only_test_target_is_incompatible_off_macos(self):
+        directory = self.render(self.scratch / "ios-library", "--library", "--ios")
+        modules = directory / "scripts" / "modules.py"
+        text = modules.read_text()
+        modules.write_text(text.replace("IOS_MODULES = []", 'IOS_MODULES = ["Screens"]', 1)
+                           .replace("MODULES = [\n", 'MODULES = [\n    ("Screens", "App", "Screens.", ["Greetings"]),\n', 1)
+                           .replace("TEST_TARGETS = [\n", 'TEST_TARGETS = [\n    ("ScreensTests", ["Screens"]),\n', 1))
+        for path in ("Sources/Screens/Screens.swift", "Tests/ScreensTests/ScreensTests.swift"):
+            (directory / path).parent.mkdir(parents=True, exist_ok=True)
+            (directory / path).write_text("import Foundation\n")
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        build = (directory / "Tests" / "ScreensTests" / "BUILD.bazel").read_text()
+        self.assertIn('"@platforms//os:macos": [],', build.split("ios_unit_test(")[1])
+        self.assertIn('"Sources/Screens"', (directory / "tools" / "ios.bzl").read_text())
+        self.assertIn('"Tests/ScreensTests"', (directory / "tools" / "ios.bzl").read_text())
+
     def test_update_reports_a_table_the_project_already_defines_and_never_leaves_the_empty_one_in_effect(self):
         # The template before it had MACROS: the stock file without its assignment.
         modules = self.template / "scripts" / "modules.py"

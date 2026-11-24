@@ -1,0 +1,26 @@
+load("@rules_apple//apple:ios.bzl", "ios_application")
+load("//tools:swift_rules.bzl", "swift_library")
+
+# The app's own code: the composition root and nothing a test needs to reach.
+swift_library(
+    name = "ProjectNameAppLibrary",
+    srcs = glob(["**/*.swift"]),
+    module_name = "ProjectNameApp",
+    target_compatible_with = ["@platforms//os:ios"],
+    deps = ["//Sources/Greetings"],
+)
+
+# The iOS app, launched in the simulator .bazelrc names (justfile). Tagged `manual`, so `bazel build
+# //...` and `bazel test //...` leave it out, on Linux (CI) above all, where no iOS toolchain
+# exists: the rule builds itself for iOS, where no `target_compatible_with` constraint tells the
+# host machine apart. The justfile's build and test name it on a Mac.
+ios_application(
+    name = "ProjectName",
+    bundle_id = "com.example.projectname",
+    families = ["iphone"],
+    infoplists = ["Info.plist"],
+    minimum_os_version = "18.0",
+    tags = ["manual"],
+    visibility = ["@rules_xcodeproj//xcodeproj:generated"],
+    deps = [":ProjectNameAppLibrary"],
+)

@@ -8,7 +8,7 @@ build --host_macos_minimum_os=15.0
 # two different defaults would discard the analysis cache every time you switched between them.
 build --compilation_mode=dbg
 
-# app:begin
+# simulator:begin
 #| # The iOS app and the simulator tests (IOS_MODULES in scripts/modules.py), on the device and runtime
 #| # `just run` and `bazel test` boot: Apple silicon simulators, the default on an Apple silicon Mac.
 #| # Naming sim_arm64 here would keep it in a device build too, since --ios_multi_cpus adds to the
@@ -20,6 +20,9 @@ build --compilation_mode=dbg
 #| # One simulator test at a time: each carries SIMULATOR_TEST_TAG (scripts/modules.py) and boots a
 #| # simulator of its own. An execution option, so it keeps the analysis cache.
 #| build --local_resources=simulator=1
+#|  # !app:line
+# simulator:end
+# app:begin
 #| # An iPhone build (`just phone-install`, `just phone-install-release`), signed with the profile
 #| # `just phone-provision` makes. Switching to it changes the configuration, so it lets Bazel
 #| # discard the analysis cache; the recipes analyse the ordinary configuration again afterwards.

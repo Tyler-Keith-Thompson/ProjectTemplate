@@ -30,6 +30,9 @@
 #                           SwiftUI screen shared by iPhone and iPad, Mac, visionOS and watchOS apps
 #                           that Bazel builds (`just example-*`, `just examples`), each with an Xcode
 #                           scheme.
+#   --ios                   Library or server: an iOS app (Apps/<Name>, `just run` or, for a
+#                           server, `just run-app`) and what iOS modules and simulator tests need
+#                           (tools/test_host, the simulator settings in .bazelrc, tools/ios.bzl).
 #   --fly                   Server only: deploy to Fly.io (fly.toml; with CI, a deploy job in
 #                           Release deploys every push to main, else `just deploy` only).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
@@ -41,20 +44,21 @@
 #                           (--ci), and the only option asked as [Y/n]. The app type has none: the
 #                           workflows run in Linux containers, and its tests need a Mac.
 #   --no-benchmarks, --no-mutation, --no-fuzz,
-#                           --no-differential, --no-wasm, --no-explore, --no-views, --no-examples, --no-fly,
+#                           --no-differential, --no-wasm, --no-explore, --no-views, --no-examples, --no-ios, --no-fly,
 #                           --no-database, --no-trunk
 #   --yes, -y               Ask nothing.
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
 #                           generated files, git, stamp or tests. template.py renders with it.
 #
 # The template is the library type in place. The server, embedded, mcp and app types add
-# templates/<type>/ on top, --views adds templates/views/, --examples templates/examples/, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
+# templates/<type>/ on top, --views adds templates/views/, --examples templates/examples/, --ios
+# templates/ios/, the app type and --ios templates/simulator/, and CI adds templates/ci/: the GitHub Actions workflows, kept there so
 # the template repository runs none of them. Each optional piece keeps or drops the sections marked
 # for it (.github/README.md, "Optional pieces").
 set -euo pipefail
 
 usage() {
-    sed -n '3,48p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,51p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -67,6 +71,7 @@ WASM=""
 EXPLORE=""
 VIEWS=""
 EXAMPLES=""
+IOS=""
 FLY=""
 DATABASE=""
 CI=""
@@ -99,6 +104,8 @@ while [ $# -gt 0 ]; do
         --no-views) VIEWS=false ;;
         --examples) EXAMPLES=true ;;
         --no-examples) EXAMPLES=false ;;
+        --ios) IOS=true ;;
+        --no-ios) IOS=false ;;
         --fly) FLY=true ;;
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
@@ -199,6 +206,10 @@ if [ "$TYPE" != library ] && [ "$EXAMPLES" = true ]; then
     echo "--examples applies to the library type only" >&2
     exit 1
 fi
+if { [ "$TYPE" != library ] && [ "$TYPE" != server ]; } && [ "$IOS" = true ]; then
+    echo "--ios applies to the library and server types only (the app type is an iOS app already)" >&2
+    exit 1
+fi
 if [ "$TYPE" = app ]; then
     if [ "$CI" = true ] || [ "$TRUNK" = true ]; then
         echo "The app type has no CI (--ci, --trunk): the workflows run in Linux containers, and its tests need a Mac" >&2
@@ -246,12 +257,14 @@ if [ "$TYPE" = server ]; then
     EXPLORE=false
     VIEWS=false
     EXAMPLES=false
+    IOS="$(ask_unset "$IOS" "An iOS app (and iOS modules tested in the simulator)?")"
 elif [ "$TYPE" = embedded ]; then
     FLY=false
     DATABASE=false
     EXPLORE=false
     VIEWS=false
     EXAMPLES=false
+    IOS=false
     WASM="$(ask_unset "$WASM" "Tests on WebAssembly (wasm32-wasi, a 32-bit Int like the chip's)?")"
 elif [ "$TYPE" = mcp ] || [ "$TYPE" = app ]; then
     FLY=false
@@ -260,6 +273,7 @@ elif [ "$TYPE" = mcp ] || [ "$TYPE" = app ]; then
     EXPLORE=false
     VIEWS=false
     EXAMPLES=false
+    IOS=false
 else
     FLY=false
     DATABASE=false
@@ -267,6 +281,7 @@ else
     EXPLORE="$(ask_unset "$EXPLORE" "A browser explorer?")"
     VIEWS="$(ask_unset "$VIEWS" "SwiftUI views (view and snapshot tests, lint)?")"
     EXAMPLES="$(ask_unset "$EXAMPLES" "Example apps for iOS, macOS, visionOS and watchOS?")"
+    IOS="$(ask_unset "$IOS" "An iOS app (and iOS modules tested in the simulator)?")"
 fi
 BENCHMARKS="$(ask_unset "$BENCHMARKS" "Benchmarks package?")"
 MUTATION="$(ask_unset "$MUTATION" "Mutation testing?")"
@@ -293,9 +308,13 @@ SWIFTUI=false
 # NON_WASI_PACKAGES, the packages whose products every platform but WASI links.
 WASI=false
 { [ "$WASM" = true ] || [ "$EXPLORE" = true ]; } && WASI=true
+# What the app type and --ios share: iOS modules (tools/ios.bzl), tests in the simulator
+# (tools/test_host) and the simulator settings in .bazelrc.
+SIMULATOR=false
+{ [ "$APP" = true ] || [ "$IOS" = true ]; } && SIMULATOR=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, views: $VIEWS, examples: $EXAMPLES, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, views: $VIEWS, examples: $EXAMPLES, ios: $IOS, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -352,6 +371,12 @@ if [ "$MCP" = true ]; then
 fi
 if [ "$APP" = true ]; then
     copy_template templates/app --exclude '.DS_Store'
+fi
+if [ "$SIMULATOR" = true ]; then
+    copy_template templates/simulator --exclude '.DS_Store'
+fi
+if [ "$IOS" = true ]; then
+    copy_template templates/ios --exclude '.DS_Store'
 fi
 if [ "$VIEWS" = true ]; then
     copy_template templates/views --exclude '.DS_Store'
@@ -410,7 +435,7 @@ done
 #                                                       it stops the render, naming file and line
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "swiftui=$SWIFTUI" "wasi=$WASI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "ios=$IOS" "simulator=$SIMULATOR" "swiftui=$SWIFTUI" "wasi=$WASI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" <<'PY'
 import pathlib, re, sys
 
@@ -492,14 +517,14 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$VIEWS" "$EXAMPLES" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$VIEWS" "$EXAMPLES" "$IOS" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, views, examples, fly, database, ci, trunk, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, views, examples, ios, fly, database, ci, trunk, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
          "mutation": mutation == "true", "fuzz": fuzz == "true",
          "differential": differential == "true", "wasm": wasm == "true",
-         "explore": explore == "true", "views": views == "true", "examples": examples == "true", "fly": fly == "true", "database": database == "true",
+         "explore": explore == "true", "views": views == "true", "examples": examples == "true", "ios": ios == "true", "fly": fly == "true", "database": database == "true",
          "ci": ci == "true", "trunk": trunk == "true"}
 if modified == "true":
     stamp["modified"] = True
@@ -551,6 +576,11 @@ elif [ "$VIEWS" = true ]; then
 else
     echo "  2. Replace the Greetings example: add your first module to MODULES in scripts/modules.py,"
     echo "     remove the Greetings rows and directories, run \`just modules\`."
+fi
+if [ "$IOS" = true ]; then
+    if [ "$SERVER" = true ]; then RUN_APP="just run-app"; else RUN_APP="just run"; fi
+    next "The iOS app, Apps/$NAME: \`$RUN_APP\` launches it in the simulator. Its screens go in modules listed"
+    echo "     in IOS_MODULES (scripts/modules.py), whose tests run in the simulator."
 fi
 next "git add -A && git commit -m \"[main] - $NAME from the project template\""
 if [ "$MCP" = true ]; then
