@@ -14,8 +14,8 @@ pass wasmtime's limit of a million functions, so the targets run in groups of `-
 Package.swift then declares only its test targets and leaves out each test file with an exit test
 (WASI cannot start a child process). Builds go to .build/wasm, logs to .build/wasm/logs.
 
-The toolchain writes one `<Target>-test-runner.wasm` per test target (Swift 6.4), or one
-`<Project>PackageTests.xctest` for the group (6.3); each runs in turn. Without wasm tail calls,
+The toolchain writes one `<Target>-test-runner.wasm` per test target, or, if older, one
+`<Project>PackageTests.xctest` for the group; each runs in turn. Without wasm tail calls,
 every await that doesn't suspend deepens both stacks, so the binaries link a 64 MB stack and run
 with a 256 MB wasm stack, enough for a 10,000-deep chain of such awaits. `--serial` runs a binary's
 tests one at a time (Swift Testing's `--no-parallel`).
@@ -77,8 +77,8 @@ WASM_STACK = 256 * 1024 * 1024
 
 
 def test_binaries(products, group):
-    """The test binaries a group's build wrote: one `<Target>-test-runner.wasm` per target (Swift 6.4
-    and later), else the one `<Project>PackageTests.xctest` (Swift 6.3)."""
+    """The test binaries a group's build wrote: one `<Target>-test-runner.wasm` per target, else (an
+    older toolchain) the one `<Project>PackageTests.xctest`."""
     runners = [os.path.join(products, f"{target}-test-runner.wasm") for target in group]
     runners = [path for path in runners if os.path.isfile(path)]
     if runners:
@@ -132,8 +132,9 @@ def main():
             # timers overlap; one at a time (--serial), each costs its whole limit.
             # The checkout also at its own path, and the binary's real path as argv[0]: SwiftPM's
             # `Bundle.module` finds a module's resource bundle (RESOURCES in scripts/modules.py) by
-            # its absolute path in the build directory (Swift 6.3), or beside Bundle.main (6.4),
-            # which Foundation on WASI takes from argv[0]'s directory. wasmtime passes the file's
+            # its absolute path in the build directory (with the .xctest layout), or beside
+            # Bundle.main (with -test-runner.wasm), which Foundation on WASI takes from argv[0]'s
+            # directory. wasmtime passes the file's
             # name alone, and Bundle.main is then the guest's `/`.
             root = os.path.realpath(ROOT)
             test = ["wasmtime", "run", "-W", f"max-wasm-stack={WASM_STACK}", "--dir", ".", "--dir", f"{root}::{root}",
