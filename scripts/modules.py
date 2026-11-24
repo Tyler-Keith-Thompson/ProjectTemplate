@@ -1350,6 +1350,11 @@ def simulator_half_bazel(name, deps, srcs, tags, env_attr):
         '    target_compatible_with = ["@platforms//os:ios"],\n'
         f"{bazel_deps(deps, testing=True, ios=True)}"
         ")\n\n"
+        # rules_apple's default runner, with no pre-action to uninstall the host as the UI
+        # tests' has (tools/ui_test). It reuses a booted simulator and installs over the earlier
+        # install, keeping files whose size and time match, but the host never changes and the
+        # test bundle is installed fresh on every run: same-size changes to a test and to the
+        # module under test both ran on the next run.
         "# Run inside the test host (tools/test_host), which gives windows a scene.\n"
         f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
         "ios_unit_test(\n"
@@ -1403,6 +1408,7 @@ def simulator_test_build_bazel(name, deps, size):
         '    structured_resources = glob(["__Snapshots__/**"], allow_empty = True),\n'
         f'    tags = ["{RELEASE_EXCLUDED_TAG}"],\n'
         ")\n\n"
+        # The default runner, with no uninstall: simulator_half_bazel says why.
         "# `bazel test` and the generated Xcode project both run this bundle in the simulator, inside the\n"
         "# test host (tools/test_host), which gives windows a scene.\n"
         f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"

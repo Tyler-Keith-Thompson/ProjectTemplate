@@ -14,6 +14,8 @@ swift_library(
 ios_ui_test(
     name = "ProjectNameSmokeTests",
     minimum_os_version = "18.0",
+    # Uninstalls the app first, so the test drives this build of it (tools/ui_test).
+    runner = "//tools/ui_test:runner",
     tags = [
         "external",
         "manual",

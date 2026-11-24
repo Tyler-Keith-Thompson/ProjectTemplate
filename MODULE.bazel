@@ -13,6 +13,10 @@ bazel_dep(name = "rules_swift", version = "4.3.0")
 # XCUnit.framework, which Xcode 27.2 no longer ships, into a UI test's runner app, so every UI test
 # on it failed before it ran.
 bazel_dep(name = "rules_apple", version = "5.4.0")
+# simulator:begin
+#| # sh_binary, which Bazel 9 no longer has built in, for the UI tests' runner (tools/ui_test).
+#| bazel_dep(name = "rules_shell", version = "0.6.1")
+# simulator:end
 
 # ── Xcode project generation ─────────────────────────────────────────
 # Bazel is the build system, but the package still has to be workable in Xcode (debugger,
