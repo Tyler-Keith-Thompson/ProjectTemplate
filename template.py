@@ -14,7 +14,8 @@
       generates are regenerated instead of merged. Nothing is committed. PROJECT must be a git
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did. When
       PROJECT holds a file only an option renders (Fuzz/, say) and its stamp has that option off,
-      a note names the option and the `stamp` or `add` command that records it; the update goes on.
+      a note names the option and the `stamp` or `add` command that records it (for an option newer
+      than the stamped commit, an `update --to` its first commit, then `add`); the update goes on.
 
   ./template.py stamp PROJECT [--type library|server|embedded|mcp|app] [--benchmarks] [--mutation] [--fuzz]
                               [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--no-ci]
@@ -166,20 +167,47 @@ def unstamped_options(project, stamp):
             and present(project, signature.format(name=stamp["name"]))]
 
 
+def first_commit_with(feature, since):
+    """The first template commit after `since` whose bootstrap.sh takes --<feature>, or None."""
+    found = git("log", "--reverse", "--ancestry-path", "--format=%H", f"-S--{feature})", f"{since}..HEAD",
+                "--", "bootstrap.sh", check=False).split()
+    return found[0] if found else None
+
+
 def unstamped_note(project, stamp):
-    """A note naming the options `unstamped_options` finds and the commands that fix the stamp, or None."""
+    """A note naming the options `unstamped_options` finds and the commands that fix the stamp, or None.
+    An option the stamped commit's bootstrap.sh doesn't take can't be stamped there (every later render
+    would refuse the flag) or added there, so for it the note says to update past its first commit,
+    then add it."""
     found = unstamped_options(project, stamp)
     if not found:
         return None
+    script = git("show", f"{stamp['commit']}:bootstrap.sh", check=False)
+    known = [feature for feature in found if not script or f"--{feature})" in script]
+    unknown = [feature for feature in found if feature not in known]
     flags = " ".join(f"--{feature}" for feature in found)
-    corrected = dict(stamp, **{feature: True for feature in found})
-    command = ["./template.py", "stamp", str(project), *options(corrected), "--name", stamp["name"],
-               "--commit", stamp["commit"][:12]]
     them = "it" if len(found) == 1 else "them"
-    return (f"Note: {project.name} has the files of {flags}, but its stamp has {them} off, so updates render "
-            f"without {them} and never reach those files. If they match the template at the stamped commit, "
-            f"record {them}: `{' '.join(command)}`. Otherwise `./template.py add {project} {flags}` and "
-            f"resolve what differs.")
+    note = (f"Note: {project.name} has the files of {flags}, but its stamp has {them} off, so updates render "
+            f"without {them} and never reach those files.")
+    if known:
+        known_flags = " ".join(f"--{feature}" for feature in known)
+        corrected = dict(stamp, **{feature: True for feature in known})
+        command = ["./template.py", "stamp", str(project), *options(corrected), "--name", stamp["name"],
+                   "--commit", stamp["commit"][:12]]
+        note += (f" If the files of {known_flags} match the template at the stamped commit, record "
+                 f"{'it' if len(known) == 1 else 'them'}: `{' '.join(command)}`. Otherwise "
+                 f"`./template.py add {project} {known_flags}` and resolve what differs.")
+    if unknown:
+        unknown_flags = " ".join(f"--{feature}" for feature in unknown)
+        firsts = [first_commit_with(feature, stamp['commit']) for feature in unknown]
+        # The latest of their first commits, so the update reaches every one of them.
+        target = max(filter(None, firsts), key=lambda commit: int(git("rev-list", "--count", commit)), default=None)
+        to = f" --to {target[:12]}" if target else ""
+        note += (f" The stamped commit, {stamp['commit'][:12]}, has no {unknown_flags}"
+                 f"{f' (from {target[:12]})' if target else ''}, so it can't be stamped or added there: "
+                 f"`./template.py update {project}{to}` (or later), then `./template.py add {project} {unknown_flags}` "
+                 f"and resolve what differs.")
+    return note
 
 
 def bootstrap_source(commit, scratch):

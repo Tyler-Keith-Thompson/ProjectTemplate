@@ -43,6 +43,8 @@ a file only an off option renders (`Fuzz/` for `--fuzz`, `scripts/mutate.py` for
 option, then updates as usual, and `status` flags the project. If the files match the template at
 the stamped commit, record the option with the `stamp` command the note prints (the stamped
 commit, the project's options and the new one). Otherwise `add` it and resolve what differs.
+An option newer than the stamped commit can be neither stamped nor added there, so for it the note
+names the commit that brought the option: `update --to` that commit or a later one, then `add`.
 
 `add` on a project that already holds the option's files reports four things that need work:
 

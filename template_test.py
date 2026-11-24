@@ -376,6 +376,37 @@ class TemplateCommandTests(unittest.TestCase):
 
         self.assertEqual(actual, [])
 
+    def test_an_unstamped_option_the_stamped_commit_lacks_is_noted_as_update_then_add_not_stamp(self):
+        bootstrap = self.template / "bootstrap.sh"
+        original = bootstrap.read_text()
+        bootstrap.write_text(original.replace("--simulator)", "--simulator-not-yet)"))
+        git("commit", "-q", "-am", "before --simulator", cwd=self.template)
+        before = git("rev-parse", "HEAD", cwd=self.template)
+        bootstrap.write_text(original)
+        git("commit", "-q", "-am", "--simulator", cwd=self.template)
+        arrived = git("rev-parse", "HEAD", cwd=self.template)
+        project = self.project("unstamped-too-old", {"commit": before}, "--library", "--simulator")
+        try:
+            result = self.template_py("update", str(project), "--to", before)
+        finally:
+            git("reset", "-q", "--hard", self.commit, cwd=self.template)
+
+        self.assertIn("has the files of --simulator", result.stderr)
+        self.assertNotIn("template.py stamp", result.stderr)
+        self.assertIn(f"has no --simulator (from {arrived[:12]})", result.stderr)
+        self.assertIn(f"./template.py update {project.resolve()} --to {arrived[:12]}", result.stderr)
+        self.assertIn(f"./template.py add {project.resolve()} --simulator", result.stderr)
+
+    def test_an_unstamped_option_the_stamped_commit_has_is_still_noted_as_stamp_or_add(self):
+        project = self.project("unstamped-known", {}, "--library", "--simulator")
+
+        result = self.template_py("update", str(project))
+
+        self.assertIn(f"./template.py stamp {project.resolve()} --type library --simulator --name {NAME} "
+                      f"--commit {self.commit[:12]}", result.stderr)
+        self.assertIn(f"./template.py add {project.resolve()} --simulator", result.stderr)
+        self.assertNotIn("can't be stamped or added there", result.stderr)
+
     def bootstrap_stamp(self, label):
         """A full bootstrap.sh run of a library into the scratch directory, with a stand-in `just` so it
         neither resolves nor tests; returns the stamp it wrote."""
