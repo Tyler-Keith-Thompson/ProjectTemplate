@@ -95,6 +95,14 @@ in beside the project's own: keep one definition, holding the project's rows, an
   The app type ships the test host; any other copies `tools/test_host` and the simulator lines of <!-- !app:line -->
   `.bazelrc` from an app render first (`just modules` refuses the table without them). <!-- !app:line -->
   `just mutate` runs a spec's simulator targets through Bazel (`scripts/mutate.py`). <!-- mutation:line -->
+- Give a test target an environment variable under `bazel test` (an integration test that runs
+  only when `TEST_DATABASE_URL` is set, say): its name and the variables in `TEST_ENVIRONMENT`
+  (`{"<Target>Tests": ["TEST_DATABASE_URL"]}`), then `just modules`. Bazel strips the test
+  environment; the generator writes the names as `env_inherit` on that target's `swift_test`, its
+  Performance one and its simulator `ios_unit_test`, so only those targets see the variable and
+  only their cached results depend on it. Not `--test_env` in `.bazelrc`, which hands it to every
+  test. SwiftPM passes the whole environment already. `check()` refuses a name that isn't a test
+  target.
 - Add an executable: a row in `EXECUTABLES` (name, description, dependencies). It holds only
   `@main`; its code lives in a module, where tests reach it.
 - Add an example module (a demo app's views, a sample server's routes): a row in `MODULES` and its

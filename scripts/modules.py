@@ -115,6 +115,16 @@ APPLE_ONLY_TESTS = []  # !views:line
 # test host and .bazelrc's simulator settings, which the app type ships.
 SIMULATOR_TESTS = []
 
+# Environment variables a test target's tests read, by test target name: Bazel runs a test with
+# almost none of the caller's environment, so each name listed is handed through to that target's
+# runners alone (`env_inherit` on its swift_test, its Performance/ one and its simulator
+# ios_unit_test), and only those targets' cached results depend on the variable's value. For an
+# integration test that runs only when a variable is set, such as one naming a database the
+# developer starts. `--test_env` in .bazelrc would hand it to every test instead. SwiftPM passes the
+# whole environment already, so Package.swift is unchanged.
+# {"GreetingsTests": ["TEST_DATABASE_URL"]}
+TEST_ENVIRONMENT = {}
+
 # The product whose macro generates mocks. A module that depends on it is compiled with the
 # MOCKING condition in debug builds only (SwiftPM's debug configuration, Bazel's
 # --compilation_mode=dbg), so `@Mockable` emits Mock<Protocol> types for tests and release
@@ -453,6 +463,13 @@ def check():
         assert name in dict(TEST_TARGETS), f"SIMULATOR_TESTS names unknown test target {name}"
         assert not simulator_only(name), \
             f"{name} depends on an iOS module or a Bazel label, so it runs in the simulator alone already: leave it out of SIMULATOR_TESTS"
+    for name, variables in TEST_ENVIRONMENT.items():
+        assert name in dict(TEST_TARGETS), f"TEST_ENVIRONMENT names unknown test target {name}"
+        assert variables, f"TEST_ENVIRONMENT gives {name} no variables: list at least one, or leave {name} out"
+        for variable in variables:
+            assert re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", variable), \
+                f"TEST_ENVIRONMENT gives {name} {variable!r}, which isn't an environment variable's name"
+            assert variables.count(variable) == 1, f"TEST_ENVIRONMENT lists {variable} for {name} more than once"
     if SIMULATOR_TESTS:
         with open(os.path.join(ROOT, ".bazelrc")) as file:
             settings = "--local_resources=simulator=" in file.read()
@@ -1163,9 +1180,19 @@ def test_support_build_bazel():
     )
 
 
-def test_targets_bazel(name, deps, size, srcs, tags, simulator=False):
+def env_inherit_attr(name):
+    """The `env_inherit` line for test target `name`'s runners (TEST_ENVIRONMENT), or nothing."""
+    variables = TEST_ENVIRONMENT.get(name)
+    if not variables:
+        return ""
+    return "    env_inherit = [" + ", ".join(f'"{v}"' for v in variables) + "],\n"
+
+
+def test_targets_bazel(name, deps, size, srcs, tags, simulator=False, environment=None):
     """One test module: its library, the swift_test that `bazel test` runs, and the Xcode bundle; with
-    `simulator`, the ios_unit_test that runs the same library in the simulator too (SIMULATOR_TESTS)."""
+    `simulator`, the ios_unit_test that runs the same library in the simulator too (SIMULATOR_TESTS).
+    `environment` names the TEST_ENVIRONMENT entry its runners inherit, `name` by default."""
+    env_attr = env_inherit_attr(environment or name)
     tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
     # SnapshotTesting finds a reference beside the test file through #filePath, which Bazel makes
     # relative to the workspace, and a test runs from its runfiles: so the references go in them.
@@ -1195,6 +1222,7 @@ def test_targets_bazel(name, deps, size, srcs, tags, simulator=False):
         "# `bazel test` / `just test`: a standalone executable, fast to start and run in Bazel's sandbox.\n"
         "swift_test(\n"
         f'    name = "{name}",\n'
+        f"{env_attr}"
         f'    size = "{size}",\n'
         f"{tags_attr}"
         f"{compatible_attr}"
@@ -1213,10 +1241,10 @@ def test_targets_bazel(name, deps, size, srcs, tags, simulator=False):
         '    visibility = ["//visibility:public"],\n'
         f'    deps = [":{name}Library"],\n'
         ")\n"
-    ) + (simulator_half_bazel(name, deps, srcs, tags) if simulator else "")
+    ) + (simulator_half_bazel(name, deps, srcs, tags, env_attr) if simulator else "")
 
 
-def simulator_half_bazel(name, deps, srcs, tags):
+def simulator_half_bazel(name, deps, srcs, tags, env_attr):
     """The same tests as test target `name`'s library, built for iOS and run in the simulator as well
     (SIMULATOR_TESTS): a library of their own, without the Mac's `data`, which rules_apple would
     flatten into the bundle as resources, and the ios_unit_test."""
@@ -1239,6 +1267,8 @@ def simulator_half_bazel(name, deps, srcs, tags):
         f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
         "ios_unit_test(\n"
         f'    name = "{name}Simulator",\n'
+        # rules_apple's runner hands the simulator only the variables listed here.
+        f"{env_attr}"
         f'    size = "{TEST_SIZES.get(name, "medium")}",\n'
         f'    minimum_os_version = "{IOS_MINIMUM}",\n'
         "    tags = [\n" + "".join(f'        "{t}",\n' for t in tags + [SIMULATOR_TEST_TAG]) + "    ],\n"
@@ -1286,6 +1316,7 @@ def simulator_test_build_bazel(name, deps, size):
         f"# `{SIMULATOR_TEST_TAG}` runs one simulator test at a time (.bazelrc).\n"
         "ios_unit_test(\n"
         f'    name = "{name}",\n'
+        f"{env_inherit_attr(name)}"
         f'    size = "{size}",\n'
         f'    minimum_os_version = "{IOS_MINIMUM}",\n'
         f'    tags = [\n        "{RELEASE_EXCLUDED_TAG}",\n        "{SIMULATOR_TEST_TAG}",\n    ],\n'
@@ -1323,7 +1354,8 @@ def test_build_bazel(name, deps):
         + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"], exclude = ["Performance/**"])', [RELEASE_EXCLUDED_TAG], simulator)
         + "\n# The speed-reliant tests (PERFORMANCE_TESTS in scripts/modules.py): debug and `--config=release`\n"
         + "# both run them.\n"
-        + test_targets_bazel(performance_target(name), deps, PERFORMANCE_TEST_SIZE, 'glob(["Performance/**/*.swift"])', [])
+        + test_targets_bazel(performance_target(name), deps, PERFORMANCE_TEST_SIZE, 'glob(["Performance/**/*.swift"])', [],
+                             environment=name)
     )
 
 

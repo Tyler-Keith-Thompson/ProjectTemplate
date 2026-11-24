@@ -678,15 +678,19 @@ def sync_bazel_workspace(modules, simulated):
             if os.path.normpath(os.path.join(rel, name)) not in kept:
                 os.remove(os.path.join(parent, name))
     # rules_apple's runner hands the simulator only the variables an ios_unit_test lists in
-    # env_inherit, so the copy's bundles list the mutant's; the checkout's BUILD files stay as generated.
+    # env_inherit, so the copy's bundles list the mutant's too, beside any TEST_ENVIRONMENT gives them
+    # (the generator writes that list on the line after the name); the checkout's BUILD files stay as
+    # generated.
     for b in simulated:
         label = TABLE["simulator_label"](b)
         package, _, target = label.removeprefix("//").partition(":")
         path = os.path.join(BAZEL_WORK, package, "BUILD.bazel")
         with open(path) as f:
             text = f.read()
-        text, found = re.subn(rf'(ios_unit_test\(\n    name = "{target or os.path.basename(package)}",\n)',
-                              rf'\1    env_inherit = ["{MUTANT_VARIABLE}"],\n', text, count=1)
+        text, found = re.subn(rf'(ios_unit_test\(\n    name = "{target or os.path.basename(package)}",\n)(    env_inherit = \[)?',
+                              lambda match: match.group(1) + (f'    env_inherit = ["{MUTANT_VARIABLE}", ' if match.group(2)
+                                                              else f'    env_inherit = ["{MUTANT_VARIABLE}"],\n'),
+                              text, count=1)
         if not found:
             sys.exit(f"No ios_unit_test {label} in {package}/BUILD.bazel")
         write_if_changed(path, text)
