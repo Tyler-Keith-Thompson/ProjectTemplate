@@ -192,6 +192,52 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn("tools/ios.bzl", actual)
         self.assertTrue(json.loads((project / ".template.json").read_text())["ios"])
 
+    def test_add_simulator_to_a_library_gives_a_fresh_render_with_it_plus_the_project_edits(self):
+        project = self.project("add-simulator", {}, "--library")
+        self.own_edits(project)
+        expected = self.render(self.scratch / "expected-simulator", "--library", "--simulator")
+        agents = expected / "AGENTS.md"
+        agents.write_text(agents.read_text().replace(PLACEHOLDER, DESCRIPTION))
+        (expected / "Sources" / "Greetings" / "Farewell.swift").write_text("public let farewell = \"Goodbye\"\n")
+
+        result = self.template_py("add", str(project), "--simulator")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        actual, wanted = tree(project), tree(expected)
+        self.assertEqual(sorted(actual), sorted(wanted))
+        for path in sorted(wanted):
+            self.assertEqual(actual[path], wanted[path], path)
+        self.assertIn("tools/test_host/BUILD.bazel", actual)
+        self.assertIn("tools/ios.bzl", actual)
+        self.assertIn(b"--local_resources=simulator=1", actual[".bazelrc"])
+        self.assertFalse(any(path.startswith("Apps/") for path in actual))
+        stamp = json.loads((project / ".template.json").read_text())
+        self.assertTrue(stamp["simulator"])
+        self.assertFalse(stamp.get("ios", False))
+
+    def test_simulator_comes_with_ios_so_add_and_remove_leave_it_to_ios(self):
+        project = self.project("simulator-with-ios", {"ios": True}, "--library", "--ios")
+
+        added = self.template_py("add", str(project), "--simulator")
+        both = dict(json.loads((project / ".template.json").read_text()), simulator=True)
+        (project / ".template.json").write_text(json.dumps(both, indent=2) + "\n")
+        git("commit", "-q", "-am", "stamp both", cwd=project)
+        removed = self.template_py("remove", str(project), "--simulator")
+
+        self.assertEqual(added.returncode, 0, added.stderr)
+        self.assertIn("already has --simulator", added.stdout)
+        self.assertNotEqual(removed.returncode, 0)
+        self.assertIn("--ios brings --simulator's files too", removed.stderr)
+        self.assertEqual(git("status", "--porcelain", cwd=project), "")
+
+    def test_add_simulator_refuses_a_type_it_doesnt_apply_to(self):
+        project = self.project("add-simulator-mcp", {"type": "mcp"}, "--mcp")
+
+        result = self.template_py("add", str(project), "--simulator")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--simulator doesn't apply to the mcp type", result.stderr)
+
     def test_add_ios_reports_what_the_project_had_already_copied_by_hand_as_duplicates(self):
         project = self.project("add-ios-by-hand", {"type": "server"}, "--server")
         load = 'load("//tools:ios.bzl", "IOS_PACKAGES", "SIMULATOR_TEST_PACKAGES")'
@@ -322,7 +368,8 @@ class TemplateCommandTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(expected_message, result.stderr)
-            self.assertIn("./template.py add <project> --ios", result.stderr)
+            self.assertIn("./template.py add <project>", result.stderr)
+            self.assertIn("--simulator", result.stderr)
 
     def test_a_simulator_only_test_target_is_incompatible_off_macos(self):
         directory = self.render(self.scratch / "ios-library", "--library", "--ios")

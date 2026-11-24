@@ -12,7 +12,7 @@ and `templates/` stay behind.
 Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `views`, `examples`, `ios`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `swiftui`, `simulator`, `wasi`, `ci`, `trunk`) keeps
 or drops the sections marked for it, in any text file. `litestream` is on with `fly` and `database`
 together, `swiftui` with `app` or `views` (the lint stack and view-test packages they share), `simulator`
-with `app` or `ios` (the test host, `.bazelrc`'s simulator settings and `tools/ios.bzl`), and
+with `app`, `ios` or the `--simulator` option (the test host, `.bazelrc`'s simulator settings and `tools/ios.bzl`), and
 `wasi` with `wasm` or `explore`: what any build for wasm32-wasi needs, `NON_WASI_PACKAGES` and its
 manifest condition, so a render without either names neither WASI nor wasm.
 
@@ -86,7 +86,7 @@ The template repository runs no CI, so these local checks are all that stands be
    - `--embedded` alone and with `--wasm`;
    - `--mcp`;
    - `--app` alone and with `--benchmarks --mutation`;
-   - `--library --views`, `--library --ios` and `--server --ios`.
+   - `--library --views`, `--library --ios`, `--server --ios` and `--library --simulator`.
 3. Run what the change touches in the bootstrapped project:
 
 | Change | Also run |

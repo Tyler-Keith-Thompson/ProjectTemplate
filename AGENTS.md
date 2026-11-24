@@ -94,17 +94,21 @@ in beside the project's own: keep one definition, holding the project's rows, an
   Apple's alone goes in `APPLE_ONLY_TESTS` too. A target that depends on an iOS module or a Bazel
   label runs in the simulator alone already, so it isn't listed.
   It needs the test host and the simulator settings in `.bazelrc`, which the app type and the <!-- !simulator:line -->
-  `--ios` option ship (`just modules` refuses the table without them). <!-- !simulator:line -->
+  `--simulator` and `--ios` options ship (`just modules` refuses the table without them). <!-- !simulator:line -->
+  From the project template's checkout, `./template.py add <project> --simulator` brings them <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+  without an app. <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
   `just mutate` runs a spec's simulator targets through Bazel (`scripts/mutate.py`). <!-- mutation:line -->
 - Add an iOS module (a screen of the iOS app): a row in `MODULES` and its name in `IOS_MODULES`, <!-- ios:line -->
   then `just modules`. Bazel builds it for the simulator alone; Package.swift, the umbrella and the <!-- ios:line -->
   docs leave it out (`tools/ios.bzl`, generated), and a module that depends on it must be iOS too. <!-- ios:line -->
   Its test target runs in the simulator alone, an `ios_unit_test` inside `tools/test_host` that <!-- ios:line -->
   Linux skips. The app (`Apps/ProjectName/BUILD.bazel`) lists it among its dependencies. <!-- ios:line -->
-- Add an iOS app, iOS modules and simulator tests to this project: from the project template's <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  checkout, `./template.py add <project> --ios` (after `just template-update`, if the stamp <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  predates the option). It brings `Apps/ProjectName`, the test host, the simulator settings and <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  `tools/ios.bzl`; until then `just modules` refuses `IOS_MODULES` and simulator tests. <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+- Add an iOS app to this project: from the project template's checkout, <!-- !ios:line --><!-- !app:line --><!-- !embedded:line --><!-- !mcp:line -->
+  `./template.py add <project> --ios` (after `just template-update`, if the stamp predates the <!-- !ios:line --><!-- !app:line --><!-- !embedded:line --><!-- !mcp:line -->
+  option). It brings `Apps/ProjectName`, the test host, the simulator settings and `tools/ios.bzl`; <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+  until then `just modules` refuses `IOS_MODULES` and simulator tests. <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
+  option). It brings `Apps/ProjectName`, whose screens are iOS modules; the test host, the <!-- simulator:line --><!-- !ios:line --><!-- !app:line -->
+  simulator settings and `tools/ios.bzl` are here already (`--simulator`). <!-- simulator:line --><!-- !ios:line --><!-- !app:line -->
 - Give a test target an environment variable under `bazel test` (an integration test that runs
   only when `TEST_DATABASE_URL` is set, say): its name and the variables in `TEST_ENVIRONMENT`
   (`{"<Target>Tests": ["TEST_DATABASE_URL"]}`), then `just modules`. Bazel strips the test

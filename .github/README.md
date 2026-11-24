@@ -42,6 +42,7 @@ app's tests need a Mac, and the workflows run on Linux.
 | `--views` | A SwiftUI view module with view and snapshot tests (library) |
 | `--examples` | Example apps in a package of their own (library) |
 | `--ios` | An iOS app beside a library or server |
+| `--simulator` | Tests in the iOS simulator without an app (library, server; `--ios` brings it too) |
 | `--fly`, `--database` | Fly.io deployment; a SQLite database, replicated with Litestream when both are on (server) |
 | `--no-ci` | No GitHub Actions |
 | `--trunk` | Pull requests merge through Trunk's merge queue (with CI) |

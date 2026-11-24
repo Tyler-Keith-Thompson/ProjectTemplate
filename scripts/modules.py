@@ -117,7 +117,7 @@ APPLE_ONLY_TESTS = []  # !views:line
 # its swift_test on the Mac (and Linux), and gains `<name>Simulator`, an ios_unit_test of the same
 # test library hosted by tools/test_host, which Bazel runs on macOS alone. A target that depends on
 # an iOS module or a Bazel label runs in the simulator alone already and isn't listed. Needs the
-# test host and .bazelrc's simulator settings, which the app type ships.
+# test host and .bazelrc's simulator settings, which the app type, --ios and --simulator ship.
 SIMULATOR_TESTS = []
 
 # Environment variables a test target's tests read, by test target name: Bazel runs a test with
@@ -510,10 +510,11 @@ def check():
             assert variables.count(variable) == 1, f"TEST_ENVIRONMENT lists {variable} for {name} more than once"
     # !simulator:begin
     # The root BUILD.bazel leaves iOS modules out of the docs and //:package_swift_test through
-    # tools/ios.bzl, which only the app type and --ios write.
+    # tools/ios.bzl, which only the app type, --ios and --simulator write.
     assert not IOS_MODULES, (
-        "IOS_MODULES needs tools/ios.bzl, the iOS test host and the simulator settings the app type and the "
-        "--ios option ship: from the project template's checkout, ./template.py add <project> --ios")
+        "IOS_MODULES needs tools/ios.bzl, the iOS test host and the simulator settings the app type, --ios "
+        "and --simulator ship: from the project template's checkout, ./template.py add <project> --ios for "
+        "an iOS app, or --simulator for the modules and their tests alone")
     # !simulator:end
     simulator_tests = sorted(name for name, _ in TEST_TARGETS if simulator_test(name))
     if simulator_tests:
@@ -523,8 +524,8 @@ def check():
             f"{', '.join(simulator_tests)} run in the iOS simulator (SIMULATOR_TESTS, or a dependency on an iOS "
             "module or a Bazel label), which needs the test host (tools/test_host) and the simulator settings "
             "in .bazelrc (--ios_minimum_os, --ios_simulator_device, --ios_simulator_version, "
-            "--local_resources=simulator=1) that the app type and the --ios option ship: from the project "
-            "template's checkout, ./template.py add <project> --ios")
+            "--local_resources=simulator=1) that the app type, --ios and --simulator ship: from the project "
+            "template's checkout, ./template.py add <project> --simulator (or --ios, for an iOS app too)")
     packages = [p[0] for p in PACKAGES]
     for name, _, version in PACKAGES:
         if version.startswith("range:"):

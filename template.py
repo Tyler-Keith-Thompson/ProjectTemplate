@@ -14,13 +14,13 @@
       checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
 
   ./template.py stamp PROJECT [--type library|server|embedded|mcp|app] [--benchmarks] [--mutation] [--fuzz]
-                              [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--fly] [--database] [--no-ci]
+                              [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--no-ci]
                               [--trunk] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
   ./template.py add PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                            [--views] [--examples] [--ios] [--fly] [--database] [--ci] [--trunk]
+                            [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--ci] [--trunk]
       Turn options on in a project made without them. The template is rendered at the stamped commit
       with the stamp's options and again with the new ones added, and every file that differs is
       merged three ways into the project, as `update` does; the stamp then records the options. It
@@ -29,14 +29,16 @@
       uncommitted changes.
 
   ./template.py remove PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                               [--views] [--examples] [--ios] [--fly] [--database] [--ci] [--trunk]
+                               [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--ci] [--trunk]
       Turn options off, the mirror of `add`. The template is rendered at the stamped commit with the
       stamp's options and again with these turned off, and every file that differs is merged three
       ways into the project, as `add` does: what the options brought is removed where the project
       left it alone, kept and reported where it changed it, and files the project added itself stay.
       The stamp then records the options off. It refuses an option the stamp doesn't have on, and
-      --ci while --trunk stays on (the merge queue waits for CI's checks). Nothing is committed;
-      PROJECT must have no uncommitted changes.
+      --ci while --trunk stays on (the merge queue waits for CI's checks), and --simulator while
+      --ios stays on (--ios brings the same files). Removing --ios takes the test host with the app
+      unless the stamp has --simulator too: add --simulator first to keep simulator tests. Nothing
+      is committed; PROJECT must have no uncommitted changes.
 
   ./template.py retype PROJECT --type library|server|embedded|mcp|app
       Change a project's type, such as a library that grew into an MCP server. The template is
@@ -87,13 +89,23 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "views", "examples", "ios", "fly", "database", "ci", "trunk")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "views", "examples", "ios", "simulator", "fly", "database", "ci", "trunk")
 # Options on unless the stamp says otherwise: a stamp from before the option had it.
 ON_BY_DEFAULT = ("ci",)
 
 
 def enabled(stamp, feature):
     return stamp.get(feature, feature in ON_BY_DEFAULT)
+
+
+# Options another brings with it: --ios brings what --simulator does (the test host, the simulator
+# settings, tools/ios.bzl), so a project with --ios has --simulator's files without its flag.
+IMPLIED_BY = {"simulator": "ios"}
+
+
+def has(stamp, feature):
+    """Whether the project has the option's files, on its own flag or through one that implies it."""
+    return enabled(stamp, feature) or (feature in IMPLIED_BY and enabled(stamp, IMPLIED_BY[feature]))
 
 
 def options(stamp):
@@ -373,7 +385,7 @@ def print_report(report, regenerate, swift_note=None):
 
 
 # Options that apply to some types only: the types each applies to.
-TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "views": ("library",), "examples": ("library",), "ios": ("library", "server"), "fly": ("server",), "database": ("server",),
+TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "views": ("library",), "examples": ("library",), "ios": ("library", "server"), "simulator": ("library", "server"), "fly": ("server",), "database": ("server",),
              # The workflows run in Linux containers; an iOS app's tests need a Mac.
              "ci": ("library", "server", "embedded", "mcp"), "trunk": ("library", "server", "embedded", "mcp")}
 
@@ -390,7 +402,7 @@ def add(arguments):
         sys.exit(f"{', '.join('--' + feature for feature in wrong_type)} doesn't apply to the {stamp['type']} type")
     if "trunk" in wanted and not (enabled(stamp, "ci") or "ci" in wanted):
         sys.exit("--trunk needs CI: the merge queue waits for CI's checks; add --ci with it")
-    new_features = [feature for feature in wanted if not enabled(stamp, feature)]
+    new_features = [feature for feature in wanted if not has(stamp, feature)]
     if not new_features:
         print(f"{project.name} already has {', '.join('--' + feature for feature in wanted)}.")
         return 0
@@ -426,12 +438,17 @@ def remove(arguments):
     wanted = [feature for feature in FEATURES if getattr(arguments, feature)]
     if not wanted:
         sys.exit("Name an option to remove, such as --wasm")
-    absent = [feature for feature in wanted if not enabled(stamp, feature)]
+    absent = [feature for feature in wanted if not has(stamp, feature)]
     if absent:
         sys.exit(f"{project.name} doesn't have {', '.join('--' + feature for feature in absent)} "
                  f"(its {STAMP} has it off), so there is nothing to remove")
     if "ci" in wanted and enabled(stamp, "trunk") and "trunk" not in wanted:
         sys.exit("--trunk needs CI: the merge queue waits for CI's checks; remove --trunk with it")
+    kept_by = [feature for feature in wanted
+               if feature in IMPLIED_BY and enabled(stamp, IMPLIED_BY[feature]) and IMPLIED_BY[feature] not in wanted]
+    if kept_by:
+        sys.exit(f"--{IMPLIED_BY[kept_by[0]]} brings --{kept_by[0]}'s files too, so removing --{kept_by[0]} alone "
+                 f"changes nothing; remove --{IMPLIED_BY[kept_by[0]]} as well")
     if git("status", "--porcelain", cwd=project):
         sys.exit(f"{project} has uncommitted changes; commit or stash them so the diff shows only the removed options")
     commit = resolve(stamp["commit"])
