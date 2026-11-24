@@ -2,7 +2,9 @@
 """The module graph, written once.
 
 Package.swift, swift/Package.swift, every Sources/*/BUILD.bazel and Tests/*/BUILD.bazel, the
-umbrella module, tools/performance_tests.bzl, tools/executables.bzl, tools/examples.bzl, tools/macros.bzl and tools/swift_version.bzl are generated from the tables below, so SwiftPM
+umbrella module, tools/performance_tests.bzl, tools/executables.bzl, tools/examples.bzl,
+#| tools/ios.bzl (the iOS modules and simulator tests),  # simulator:line
+tools/macros.bzl and tools/swift_version.bzl are generated from the tables below, so SwiftPM
 and Bazel cannot drift. Run `just modules` after editing them. `//:package_swift_test` fails when
 Package.swift disagrees with the Bazel graph.
 
