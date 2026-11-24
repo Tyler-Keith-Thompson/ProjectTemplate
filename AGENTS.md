@@ -801,6 +801,14 @@ library with none of that can skip this section.
   and when it would become the right one. Doc comments describe the API; these record decisions. A
   comment that restates the code is deleted.
 - The README's examples are tests (`Tests/ProjectNameTests`).
+- The README is the front page: what the project is, how to install or run it, one short example,
+  and links. Everything else (guides, every option, reference) goes in the DocC catalogs, which
+  the README links to. When a section grows past a screen, move it out rather than trim the
+  README's other sections to make room.
+- Run prose docs through the `humanizer` skill (`/humanizer`) before committing them: READMEs, DocC
+  articles, doc comments and this file. It removes the tells of generated text (inflated claims,
+  stock phrases, forced lists of three) without changing what the text says. Docs only: not code,
+  `//` comments, commit messages or backlog items.
 
 ### Git (*default*)
 
