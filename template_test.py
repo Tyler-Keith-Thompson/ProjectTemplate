@@ -8,7 +8,11 @@ commit), changes it the way an owner might, runs template.py from the copy, and 
 with a fresh render. The copy includes uncommitted changes, so the tests check the working tree.
 Like template.py, this file stays behind: bootstrap.sh leaves it out of projects.
 """
+import importlib.util
+import io
+import contextlib
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -214,6 +218,82 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn(".github/workflows/CI.yml", actual)
         self.assertNotIn(".github/README.md", actual)
         self.assertEqual([path for path in actual if path.startswith(".github/docs/")], [])
+
+    def test_update_notes_template_changes_only_for_tracked_files(self):
+        project = self.project("update-untracked", {}, "--library")
+        untracked = self.template / ".kanban" / "board.json"
+        readme = self.template / "README.md"
+        original = readme.read_text()
+        untracked.parent.mkdir(exist_ok=True)
+        untracked.write_text("{}\n")
+        note = "the template has uncommitted changes"
+        try:
+            with_untracked = self.template_py("update", str(project))
+            readme.write_text(original + "\nA tracked change.\n")
+            with_tracked = self.template_py("update", str(project))
+        finally:
+            readme.write_text(original)
+            shutil.rmtree(untracked.parent)
+
+        self.assertNotIn(note, with_untracked.stderr)
+        self.assertIn(note, with_tracked.stderr)
+
+    def bootstrap_stamp(self, label):
+        """A full bootstrap.sh run of a library into the scratch directory, with a stand-in `just` so it
+        neither resolves nor tests; returns the stamp it wrote."""
+        stand_ins = self.scratch / "stand-ins"
+        stand_ins.mkdir(exist_ok=True)
+        just = stand_ins / "just"
+        just.write_text("#!/bin/sh\nexit 0\n")
+        just.chmod(0o755)
+        destination = self.scratch / label
+        environment = dict(os.environ, PATH=f"{stand_ins}{os.pathsep}{os.environ['PATH']}")
+        result = subprocess.run(["bash", str(self.template / "bootstrap.sh"), "--library", "--yes", NAME, str(destination)],
+                                cwd=self.scratch, capture_output=True, text=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return json.loads((destination / ".template.json").read_text())
+
+    def test_bootstrap_stamps_modified_for_changes_that_reach_the_project_alone(self):
+        left_out = self.template / ".kanban" / "board.json"
+        copied = self.template / "PROBE.md"
+        readme = self.template / "README.md"
+        original = readme.read_text()
+        left_out.parent.mkdir(exist_ok=True)
+        left_out.write_text("{}\n")
+        try:
+            with_left_out = self.bootstrap_stamp("stamp-left-out")
+            copied.write_text("probe\n")
+            with_copied = self.bootstrap_stamp("stamp-copied")
+            copied.unlink()
+            readme.write_text(original + "\nA tracked change.\n")
+            with_tracked = self.bootstrap_stamp("stamp-tracked")
+        finally:
+            readme.write_text(original)
+            copied.unlink(missing_ok=True)
+            shutil.rmtree(left_out.parent)
+
+        self.assertNotIn("modified", with_left_out)
+        self.assertTrue(with_copied.get("modified"))
+        self.assertTrue(with_tracked.get("modified"))
+
+    def test_a_conflicted_modules_py_is_reported_as_markers_to_resolve_not_a_traceback(self):
+        spec = importlib.util.spec_from_file_location("template_under_test", self.template / "template.py")
+        template = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(template)
+        report = {name: [] for name in ("updated", "added", "removed", "merged", "conflicted", "duplicated",
+                                        "kept", "skipped", "regenerated")}
+        report["conflicted"].append("scripts/modules.py")
+        failed = subprocess.CompletedProcess([], 1, "", 'Traceback (most recent call last):\n  File "scripts/modules.py", line 9\n    <<<<<<< project\nSyntaxError: invalid syntax\n')
+        printed = io.StringIO()
+
+        with contextlib.redirect_stdout(printed):
+            status = template.print_report(report, failed)
+
+        self.assertEqual(status, 1)
+        self.assertIn("scripts/modules.py still holds conflict markers", printed.getvalue())
+        self.assertIn("`just modules`", printed.getvalue())
+        self.assertNotIn("Traceback", printed.getvalue())
+        self.assertNotIn("SyntaxError", printed.getvalue())
 
     def test_add_ios_refuses_a_type_it_doesnt_apply_to(self):
         project = self.project("add-ios-mcp", {"type": "mcp"}, "--mcp")

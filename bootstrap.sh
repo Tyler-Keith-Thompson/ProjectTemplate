@@ -513,7 +513,17 @@ fi
 # template changes into it (.github/docs/updating.md).
 if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
     MODIFIED=false
-    if [ -n "$(git -C "$TEMPLATE" status --porcelain)" ]; then
+    # A tracked change, or an untracked file the copy brought along, makes the project differ from
+    # the stamped commit. An untracked file the copy leaves out (the board's .kanban/, say) doesn't.
+    UNTRACKED_COPIED=false
+    while IFS= read -r untracked; do
+        relative="${untracked#templates/*/}"
+        if [ -e "$DEST/$untracked" ] || [ -e "$DEST/$relative" ]; then
+            UNTRACKED_COPIED=true
+            break
+        fi
+    done < <(git -C "$TEMPLATE" ls-files --others --exclude-standard)
+    if [ -n "$(git -C "$TEMPLATE" status --porcelain --untracked-files=no)" ] || [ "$UNTRACKED_COPIED" = true ]; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
