@@ -148,7 +148,9 @@ in beside the project's own: keep one definition, holding the project's rows, an
   (`{"<Target>": [("copy", "Fixtures")]}`, paths relative to `Tests/<Target>`), then `just modules`.
   The target gets its own `ProjectName_<Target>.bundle` the same way, in its swift_test, its
   simulator ios_unit_test and its SwiftPM test target, and its tests read the files through
-  `Bundle.module`. Not under `Performance/`, which the target leaves out.
+  `Bundle.module`. Not under `Performance/`, which the target leaves out: the speed-reliant tests
+  of a `PERFORMANCE_TESTS` target list theirs under `<X>PerformanceTests`, paths relative to
+  `Tests/<X>/Performance`, and read them through `Bundle.module` in debug and release alike.
 - Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
   package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
   in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`

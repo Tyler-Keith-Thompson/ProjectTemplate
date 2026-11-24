@@ -139,10 +139,13 @@ def _entry_files(entry):
     """The files of resource entry `entry`: everything under it when it is a directory, else itself."""
     return native.glob([entry + "/**"], allow_empty = True) or [entry]
 
+def _under(directory, entry):
+    return directory + "/" + entry if directory else entry
+
 def _parent(entry):
     return entry.rpartition("/")[0]
 
-def module_resources(name, bundle_name, bundle_id, process = [], copy = [], **kwargs):
+def module_resources(name, bundle_name, bundle_id, process = [], copy = [], directory = "", **kwargs):
     """A module's resources: `<name>` in runfiles, `<name>Bundle` for Apple bundles, and
     `<name>Accessor`, the source of `Bundle.module`.
 
@@ -152,10 +155,13 @@ def module_resources(name, bundle_name, bundle_id, process = [], copy = [], **kw
         bundle_id: `<package>.<Module>.resources`, the identifier SwiftPM gives it.
         process: The `.process` entries, files or directories, relative to the package.
         copy: The `.copy` entries, files or directories, relative to the package.
+        directory: Where the entries sit inside the package, when the SwiftPM target's path is a
+            directory of it (a speed-reliant test target's `Performance`); the entries are written
+            relative to it, as Package.swift writes them.
         **kwargs: Attributes common to all of them (`tags`, `visibility`).
     """
-    processed = [file for entry in process for file in _entry_files(entry)]
-    copied = {file: _parent(entry) for entry in copy for file in _entry_files(entry)}
+    processed = [file for entry in process for file in _entry_files(_under(directory, entry))]
+    copied = {file: _parent(_under(directory, entry)) for entry in copy for file in _entry_files(_under(directory, entry))}
     _module_resources(
         name = name,
         bundle_name = bundle_name,

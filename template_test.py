@@ -292,6 +292,39 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("RESOURCES lists Tests/GreetingsTests/Missing, which doesn't exist", missing.stderr)
 
+    def test_a_speed_reliant_target_lists_its_own_fixtures_and_check_refuses_one_without_performance_tests(self):
+        directory = self.render(self.scratch / "performance-fixtures", "--library")
+        modules = directory / "scripts" / "modules.py"
+        original = modules.read_text()
+        fixtures = directory / "Tests" / "GreetingsTests" / "Performance" / "Fixtures"
+        fixtures.mkdir(parents=True)
+        (fixtures / "input.txt").write_text("speed\n")
+        (fixtures.parent / "SpeedTests.swift").write_text("import Testing\n")
+        listed_tables = original.replace("PERFORMANCE_TESTS = [\n]", 'PERFORMANCE_TESTS = [\n    "GreetingsTests",\n]', 1)
+
+        def generate(tables, resources):
+            modules.write_text(tables.replace("RESOURCES = {}", f"RESOURCES = {resources}", 1))
+            return run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        listed = generate(listed_tables, '{"GreetingsPerformanceTests": [("copy", "Fixtures")]}')
+        manifest = (directory / "Package.swift").read_text()
+        build = (directory / "Tests" / "GreetingsTests" / "BUILD.bazel").read_text()
+        missing = generate(listed_tables, '{"GreetingsPerformanceTests": [("copy", "Missing")]}')
+        unlisted = generate(original, '{"GreetingsPerformanceTests": [("copy", "Fixtures")]}')
+
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        performance_line = manifest.split('.testTarget(name: "GreetingsPerformanceTests"')[1].splitlines()[0]
+        self.assertIn('path: "Tests/GreetingsTests/Performance", resources: [.copy("Fixtures")]),', performance_line)
+        self.assertIn('srcs = glob(["Performance/**/*.swift"]) + [":PerformanceResourcesAccessor"],', build)
+        self.assertIn('data = module_resources_data("PerformanceResources"),', build)
+        self.assertIn('    directory = "Performance",\n', build)
+        self.assertIn(f'bundle_name = "{NAME}_GreetingsPerformanceTests",', build)
+        self.assertNotIn(":ResourcesAccessor", build)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("RESOURCES lists Tests/GreetingsTests/Performance/Missing, which doesn't exist", missing.stderr)
+        self.assertNotEqual(unlisted.returncode, 0)
+        self.assertIn("no test target in PERFORMANCE_TESTS has a speed-reliant target of that name", unlisted.stderr)
+
     def test_a_range_version_reaches_both_manifests_and_a_malformed_one_is_refused(self):
         directory = self.render(self.scratch / "range", "--library")
         modules = directory / "scripts" / "modules.py"
