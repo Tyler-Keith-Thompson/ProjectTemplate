@@ -189,17 +189,20 @@ NON_UMBRELLA_MODULES = []
 # so `import ProjectName` never needs Testing.
 TESTING_MODULES = []
 
-# Modules' resources, by name from MODULES: a list of (rule, path) per module, the path relative to
-# Sources/<name> (a file or a directory) and the rule SwiftPM's: "process" flattens the files into
+# Resources, by module name from MODULES or test target name from TEST_TARGETS: a list of (rule,
+# path) per target, the path relative to Sources/<name> or Tests/<name> (a file or a directory) and
+# the rule SwiftPM's: "process" flattens the files into
 # the bundle's root (keeping a localization's `.lproj`), and processes them on Apple platforms as
 # Xcode does; "copy" keeps the entry whole, by its last path component. Package.swift gets
 # `resources: [.process(path), .copy(path)]`, and Bazel the same `<PROJECT>_<name>.bundle` and a
 # `Bundle.module` that finds it (tools/resources.bzl): in an app's or a test bundle's resources on
 # Apple platforms, in the runfiles of `bazel test` and `bazel run` on macOS and Linux. So the module
-# reads them through `Bundle.module` under either build system. Apple's privacy manifest is
+# reads them through `Bundle.module` under either build system, and a test target its fixtures the
+# same way (in its swift_test, its simulator ios_unit_test and its SwiftPM test target alike). Apple's privacy manifest is
 # ("copy", "PrivacyInfo.xcprivacy"), at the bundle's root where Apple reads it: a module holding one
 # must list it. Firmware modules have none: Embedded Swift has no Foundation and no bundles.
-# {"Greetings": [("process", "Data/greetings.json"), ("copy", "PrivacyInfo.xcprivacy")]}
+# {"Greetings": [("process", "Data/greetings.json"), ("copy", "PrivacyInfo.xcprivacy")],
+#  "GreetingsTests": [("copy", "Fixtures")]}
 RESOURCES = {}
 
 # Compiler plugins holding macros: (name, group, description, dependencies), whose dependencies
@@ -431,23 +434,32 @@ def duplicate_definitions():
 PRIVACY_MANIFEST = "PrivacyInfo.xcprivacy"
 
 
+def resources_directory(name):
+    """Where RESOURCES' paths for target `name` start: Tests/<name> for a test target, else Sources/<name>."""
+    return f"Tests/{name}" if name in [t[0] for t in TEST_TARGETS] else f"Sources/{name}"
+
+
 def check_resources(names):
-    """RESOURCES names modules by `names`, each entry a "process" or "copy" of a path that exists
-    under the module, none listed twice or inside another; and a module holding a privacy manifest
-    lists it."""
+    """RESOURCES names modules by `names` or test targets, each entry a "process" or "copy" of a path
+    that exists under the target, none listed twice or inside another, a test target's none under
+    Performance/; and a module holding a privacy manifest lists it."""
+    tests = [t[0] for t in TEST_TARGETS]
     for name, entries in RESOURCES.items():
-        assert name in names, f"RESOURCES names unknown module {name}"
+        assert name in names or name in tests, f"RESOURCES names {name}, which is neither a module nor a test target"
+        directory = resources_directory(name)
         #| assert name not in FIRMWARE_MODULES, f"{name} is a firmware module, and Embedded Swift has no resource bundles"  # embedded:line
         paths = [path for _, path in entries]
         for rule, path in entries:
-            assert rule in ("process", "copy"), f"RESOURCES gives Sources/{name}/{path} the rule {rule!r}: use \"process\" or \"copy\""
+            assert rule in ("process", "copy"), f"RESOURCES gives {directory}/{path} the rule {rule!r}: use \"process\" or \"copy\""
             assert path == os.path.normpath(path) and not os.path.isabs(path) and not path.startswith(".."), \
-                f"RESOURCES lists {path!r} for {name}: give a path inside Sources/{name}, without ./, ../ or a trailing /"
-            assert os.path.exists(os.path.join(ROOT, "Sources", name, path)), \
-                f"RESOURCES lists Sources/{name}/{path}, which doesn't exist"
-            assert paths.count(path) == 1, f"RESOURCES lists Sources/{name}/{path} more than once"
+                f"RESOURCES lists {path!r} for {name}: give a path inside {directory}, without ./, ../ or a trailing /"
+            assert os.path.exists(os.path.join(ROOT, directory, path)), \
+                f"RESOURCES lists {directory}/{path}, which doesn't exist"
+            assert not (name in tests and (path == "Performance" or path.startswith("Performance/"))), \
+                f"RESOURCES lists {directory}/{path}, in the speed-reliant tests' directory, which the test target leaves out"
+            assert paths.count(path) == 1, f"RESOURCES lists {directory}/{path} more than once"
             outer = [other for other in paths if path.startswith(other + "/")]
-            assert not outer, f"RESOURCES lists Sources/{name}/{path} inside Sources/{name}/{outer[0]}, which it lists too"
+            assert not outer, f"RESOURCES lists {directory}/{path} inside {directory}/{outer[0]}, which it lists too"
     for name in names:
         if os.path.isfile(os.path.join(ROOT, "Sources", name, PRIVACY_MANIFEST)):
             assert PRIVACY_MANIFEST in [path for _, path in RESOURCES.get(name, [])], (
@@ -753,7 +765,7 @@ def swift_string(text):
 
 
 def resources_arg(name):
-    """Module `name`'s `resources:` argument in Package.swift (RESOURCES), or nothing."""
+    """Target `name`'s `resources:` argument in Package.swift (RESOURCES), or nothing."""
     entries = RESOURCES.get(name, [])
     if not entries:
         return ""
@@ -761,12 +773,13 @@ def resources_arg(name):
 
 
 def resources_bazel(name):
-    """Module `name`'s resources in its BUILD.bazel (RESOURCES): the load, the swift_library's `srcs`
+    """Target `name`'s resources in its BUILD.bazel (RESOURCES): the load, the swift_library's `srcs`
     and `data`, and the module_resources call (tools/resources.bzl). Without resources, the plain
     `srcs` and nothing else."""
     entries = RESOURCES.get(name, [])
     if not entries:
         return "", '    srcs = glob(["**/*.swift"]),\n', "", ""
+    what = "tests' fixtures" if resources_directory(name).startswith("Tests/") else "module's resources"
     lists = "".join(
         f"    {rule} = [\n" + "".join(f'        "{path}",\n' for r, path in entries if r == rule) + "    ],\n"
         for rule in ("process", "copy") if any(r == rule for r, _ in entries)
@@ -776,7 +789,7 @@ def resources_bazel(name):
         '    # `Bundle.module`, as SwiftPM generates it, for the resources below.\n'
         '    srcs = glob(["**/*.swift"]) + [":ResourcesAccessor"],\n',
         '    data = module_resources_data("Resources"),\n',
-        "\n# The module's resources (RESOURCES in scripts/modules.py), in the bundle SwiftPM builds for them.\n"
+        f"\n# The {what} (RESOURCES in scripts/modules.py), in the bundle SwiftPM builds for them.\n"
         "module_resources(\n"
         '    name = "Resources",\n'
         f'    bundle_name = "{PROJECT}_{name}",\n'
@@ -917,8 +930,8 @@ def package_swift():
         dl = ", ".join(spm_dep(d) for d in deps)
         files = excluded(f"Tests/{name}")
         ex = "[" + ", ".join(f'"{f}"' for f in files) + "]" if files != ["BUILD.bazel"] else "bazelFiles"
-        lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: testExcludes({ex}, wasi: {exit_test_files(f"Tests/{name}", files)})),')  # wasm:line
-        #| lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: {ex}),')  # !wasm:line
+        lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: testExcludes({ex}, wasi: {exit_test_files(f"Tests/{name}", files)}){resources_arg(name)}),')  # wasm:line
+        #| lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: {ex}{resources_arg(name)}),')  # !wasm:line
     if PERFORMANCE_TESTS:
         lines += [
             "",
@@ -1233,8 +1246,12 @@ def test_targets_bazel(name, deps, size, srcs, tags, simulator=False, environmen
     tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
     # SnapshotTesting finds a reference beside the test file through #filePath, which Bazel makes
     # relative to the workspace, and a test runs from its runfiles: so the references go in them.
-    data_attr = ('    data = glob(["__Snapshots__/**"], allow_empty = True),\n'
-                 if "swift-snapshot-testing/SnapshotTesting" in deps else "")
+    # A test target's fixtures (RESOURCES) are a bundle of their own, found by `Bundle.module`.
+    resources = bool(RESOURCES.get(name))
+    srcs += ' + [":ResourcesAccessor"]' if resources else ""
+    data = (['glob(["__Snapshots__/**"], allow_empty = True)'] if "swift-snapshot-testing/SnapshotTesting" in deps else []) \
+        + (['module_resources_data("Resources")'] if resources else [])
+    data_attr = f"    data = {' + '.join(data)},\n" if data else ""
     compatible_attr = ('    target_compatible_with = select({\n'
                        '        # APPLE_ONLY_TESTS in scripts/modules.py: nothing to run elsewhere.\n'
                        '        "@platforms//os:macos": [],\n'
@@ -1283,9 +1300,11 @@ def test_targets_bazel(name, deps, size, srcs, tags, simulator=False, environmen
 
 def simulator_half_bazel(name, deps, srcs, tags, env_attr):
     """The same tests as test target `name`'s library, built for iOS and run in the simulator as well
-    (SIMULATOR_TESTS): a library of their own, without the Mac's `data`, which rules_apple would
-    flatten into the bundle as resources, and the ios_unit_test."""
+    (SIMULATOR_TESTS): a library of their own, without the Mac's snapshot references, which
+    rules_apple would flatten into the bundle as resources, but with its fixtures' bundle (RESOURCES),
+    which it nests; and the ios_unit_test."""
     tags_attr = f"    tags = {tags},\n".replace("'", '"') if tags else ""
+    data_attr = '    data = module_resources_data("Resources"),\n' if RESOURCES.get(name) else ""
     return (
         "\n# The same tests in the iOS simulator (SIMULATOR_TESTS in scripts/modules.py), where the code\n"
         "# under `#if canImport(UIKit)` compiles. iOS only, so `bazel build //...` builds it through the\n"
@@ -1295,6 +1314,7 @@ def simulator_half_bazel(name, deps, srcs, tags, env_attr):
         "    testonly = True,\n"
         "    alwayslink = True,\n"
         f"    srcs = {srcs},\n"
+        f"{data_attr}"
         f'    module_name = "{name}",\n'
         f"{tags_attr}"
         '    target_compatible_with = ["@platforms//os:ios"],\n'
@@ -1322,19 +1342,24 @@ def simulator_half_bazel(name, deps, srcs, tags, env_attr):
 
 
 def simulator_test_build_bazel(name, deps, size):
-    """A test module run in the iOS simulator: its library, its snapshot references and the ios_unit_test."""
+    """A test module run in the iOS simulator: its library, its snapshot references, its fixtures
+    (RESOURCES) and the ios_unit_test."""
+    resources_load, srcs_attr, _, resources = resources_bazel(name)
+    data_attr = ('    data = [":Snapshots"] + module_resources_data("Resources"),\n' if resources
+                 else '    data = [":Snapshots"],\n')
     return (
         "# GENERATED by scripts/modules.py — edit the table there, then run `just modules`.\n\n"
         'load("@rules_apple//apple:ios.bzl", "ios_unit_test")\n'
         'load("@rules_apple//apple:resources.bzl", "apple_resource_bundle")\n'
+        f"{resources_load}"
         'load("//tools:swift_rules.bzl", "swift_library")\n\n'
         "# The tests, run in the iOS simulator: the target depends on an iOS module (IOS_MODULES in\n"
         f"# scripts/modules.py). Tagged `{RELEASE_EXCLUDED_TAG}`, like every target but the speed-reliant ones.\n"
         "swift_library(\n"
         f'    name = "{name}Library",\n'
         "    testonly = True,\n"
-        '    srcs = glob(["**/*.swift"]),\n'
-        '    data = [":Snapshots"],\n'
+        f"{srcs_attr}"
+        f"{data_attr}"
         f'    module_name = "{name}",\n'
         f'    tags = ["{RELEASE_EXCLUDED_TAG}"],\n'
         '    target_compatible_with = ["@platforms//os:ios"],\n'
@@ -1366,6 +1391,7 @@ def simulator_test_build_bazel(name, deps, size):
         '    visibility = ["//visibility:public"],\n'
         f'    deps = [":{name}Library"],\n'
         ")\n"
+        f"{resources}"
     )
 
 
@@ -1375,11 +1401,13 @@ def test_build_bazel(name, deps):
         # Booting a simulator takes much of a minute on its own.
         return simulator_test_build_bazel(name, deps, TEST_SIZES.get(name, "medium"))
     simulator = name in SIMULATOR_TESTS
+    resources_load, _, _, resources = resources_bazel(name)
     header = (
         "# GENERATED by scripts/modules.py — edit the table there, then run `just modules`.\n\n"
         + ('load("@rules_apple//apple:ios.bzl", "ios_unit_test")\n' if simulator else "")
         + 'load("@rules_apple//apple:macos.bzl", "macos_unit_test")\n'
-        'load("//tools:swift_rules.bzl", "swift_library", "swift_test")\n\n'
+        + resources_load
+        + 'load("//tools:swift_rules.bzl", "swift_library", "swift_test")\n\n'
     )
     excluded_note = (
         f"Tagged `{RELEASE_EXCLUDED_TAG}`: none of these relies on speed, so\n"
@@ -1388,7 +1416,8 @@ def test_build_bazel(name, deps):
     header += "".join(macro_library_bazel(d) for d in deps if is_macro(d))
     if name not in PERFORMANCE_TESTS:
         return (header + "# The tests, built once and linked into two runners.\n# " + excluded_note
-                + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"])', [RELEASE_EXCLUDED_TAG], simulator))
+                + test_targets_bazel(name, deps, size, 'glob(["**/*.swift"])', [RELEASE_EXCLUDED_TAG], simulator)
+                + resources)
     return (
         header
         + "# The tests, built once and linked into two runners; the speed-reliant ones, in Performance/, are\n"
@@ -1398,6 +1427,7 @@ def test_build_bazel(name, deps):
         + "# both run them.\n"
         + test_targets_bazel(performance_target(name), deps, PERFORMANCE_TEST_SIZE, 'glob(["Performance/**/*.swift"])', [],
                              environment=name)
+        + resources
     )
 
 

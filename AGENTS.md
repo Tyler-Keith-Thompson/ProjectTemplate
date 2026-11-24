@@ -143,6 +143,12 @@ in beside the project's own: keep one definition, holding the project's rows, an
   `("copy", "PrivacyInfo.xcprivacy")` so it sits at the bundle's root; `check()` refuses one left
   out, a listed path that doesn't exist, and one inside another listed directory.
   A firmware module can't have resources: Embedded Swift has no bundles. <!-- embedded:line -->
+- Give a test target fixture files (JSON to compare byte for byte, a sample input): put them under
+  `Tests/<Target>/` and list them in `RESOURCES` under the target's name
+  (`{"<Target>": [("copy", "Fixtures")]}`, paths relative to `Tests/<Target>`), then `just modules`.
+  The target gets its own `ProjectName_<Target>.bundle` the same way, in its swift_test, its
+  simulator ios_unit_test and its SwiftPM test target, and its tests read the files through
+  `Bundle.module`. Not under `Performance/`, which the target leaves out.
 - Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
   package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
   in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`

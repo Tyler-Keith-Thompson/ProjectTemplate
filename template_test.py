@@ -254,6 +254,35 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn('"Sources/Screens"', (directory / "tools" / "ios.bzl").read_text())
         self.assertIn('"Tests/ScreensTests"', (directory / "tools" / "ios.bzl").read_text())
 
+    def test_a_test_target_lists_fixtures_in_resources_and_check_refuses_unknown_names_and_missing_paths(self):
+        directory = self.render(self.scratch / "test-fixtures", "--library")
+        modules = directory / "scripts" / "modules.py"
+        original = modules.read_text()
+        fixtures = directory / "Tests" / "GreetingsTests" / "Fixtures"
+        fixtures.mkdir()
+        (fixtures / "sample.json").write_text('{"name":"World"}\n')
+
+        def generate(resources):
+            modules.write_text(original.replace("RESOURCES = {}", f"RESOURCES = {resources}", 1))
+            return run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        listed = generate('{"GreetingsTests": [("copy", "Fixtures")]}')
+        manifest = (directory / "Package.swift").read_text()
+        build = (directory / "Tests" / "GreetingsTests" / "BUILD.bazel").read_text()
+        unknown = generate('{"NoSuchTests": [("copy", "Fixtures")]}')
+        missing = generate('{"GreetingsTests": [("copy", "Missing")]}')
+
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertIn('.testTarget(name: "GreetingsTests"', manifest)
+        self.assertIn('resources: [.copy("Fixtures")]),', manifest.split('.testTarget(name: "GreetingsTests"')[1].splitlines()[0])
+        self.assertIn('srcs = glob(["**/*.swift"]) + [":ResourcesAccessor"],', build)
+        self.assertIn('data = module_resources_data("Resources"),', build)
+        self.assertIn(f'bundle_name = "{NAME}_GreetingsTests",', build)
+        self.assertNotEqual(unknown.returncode, 0)
+        self.assertIn("RESOURCES names NoSuchTests, which is neither a module nor a test target", unknown.stderr)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("RESOURCES lists Tests/GreetingsTests/Missing, which doesn't exist", missing.stderr)
+
     def test_a_range_version_reaches_both_manifests_and_a_malformed_one_is_refused(self):
         directory = self.render(self.scratch / "range", "--library")
         modules = directory / "scripts" / "modules.py"
