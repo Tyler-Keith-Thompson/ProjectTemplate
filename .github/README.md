@@ -102,7 +102,9 @@ Xcode (the device and runtime `.bazelrc` names).
 
 The name must be an UpperCamelCase Swift module name. The destination defaults to
 `~/workspace/<Name>`. Run from a terminal, the script asks for the type and every option not given
-as a flag; otherwise (or with `--yes`) those default to off. It copies the template, renames
+as a flag; otherwise (or with `--yes`) those default to off. It copies the template (leaving out
+its own scaffolding and, in a git checkout, whatever git ignores there, so local tool state such as
+another tool's clones never reaches the project; untracked files git doesn't ignore are copied), renames
 `ProjectName`/`projectname` to the new name, keeps or drops the optional sections, stamps the
 project with `.template.json`, runs `just modules`, `git init`, `just resolve` and `just test`,
 then prints what to fill in.

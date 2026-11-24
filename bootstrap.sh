@@ -301,38 +301,67 @@ fi
 mkdir -p "$DEST"
 DEST="$(cd "$DEST" && pwd)"
 
+# copy_template <directory> <rsync option>...: the template's <directory> ("" for its root) into
+# the project. In a git checkout of its own, whatever git ignores there stays behind too (the
+# checkout's .gitignore, .git/info/exclude and the global excludes file), so local tool state (another
+# tool's clones and worktrees, build output, caches) never reaches a project, whatever its name,
+# while an untracked file git doesn't ignore (a template edit not yet added) still renders.
+# Elsewhere (template.py renders from an archive, which has no .git) the excludes alone keep
+# things out. Rejected: copying only `git ls-files` through --files-from (rsync then checks each
+# listed file against the excludes, so a directory pattern such as /templates no longer covers what
+# is under it, and every exclude would need rewriting); naming each tool's directory (the next
+# tool's breaks a project the same way).
+TEMPLATE_IS_CHECKOUT=false
+if [ "$(git -C "$TEMPLATE" rev-parse --show-toplevel 2>/dev/null)" = "$(cd "$TEMPLATE" && pwd -P)" ]; then
+    TEMPLATE_IS_CHECKOUT=true
+fi
+copy_template() {
+    local prefix="${1:+$1/}"
+    shift
+    if [ "$TEMPLATE_IS_CHECKOUT" = false ]; then
+        rsync -a "$TEMPLATE/$prefix" "$DEST/" "$@"
+        return
+    fi
+    # Each ignored path (a directory once, as path/), anchored at the copied directory.
+    git -C "$TEMPLATE" ls-files -z --others --ignored --exclude-standard --directory -- "${prefix:-.}" |
+        while IFS= read -r -d '' path; do
+            printf '/%s\0' "${path#"$prefix"}"
+        done |
+        rsync -a --from0 --exclude-from=- "$TEMPLATE/$prefix" "$DEST/" "$@"
+}
+
 # Everything but the template's own scaffolding and build output.
 EXTRA_EXCLUDES=()
 if [ "$BENCHMARKS" = false ]; then
     EXTRA_EXCLUDES+=(--exclude '/Benchmarks')
 fi
-rsync -a "$TEMPLATE/" "$DEST/" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
+copy_template "" ${EXTRA_EXCLUDES[@]+"${EXTRA_EXCLUDES[@]}"} \
     --exclude '.git' --exclude 'bazel-*' --exclude '.build' --exclude '.swiftpm' \
     --exclude 'Benchmarks/.build' --exclude 'swift/.build' --exclude '__pycache__' \
     --exclude 'bootstrap.sh' --exclude 'template.py' --exclude '/template_test.py' --exclude '/.github/README.md' --exclude 'user.bazelrc' --exclude '/templates' --exclude '/ci-image' \
     --exclude '.claude/worktrees' --exclude '/.kanban' --exclude '/Fuzz/Corpus' --exclude '/Fuzz/Crashes' --exclude '/Differential/Failures' --exclude '/Explore/dist' --exclude '*.xcodeproj' --exclude '/xcode' --exclude '.DS_Store'
 if [ "$SERVER" = true ]; then
-    rsync -a "$TEMPLATE/templates/server/" "$DEST/" --exclude '.DS_Store'
+    copy_template templates/server --exclude '.DS_Store'
 fi
 if [ "$EMBEDDED" = true ]; then
-    rsync -a "$TEMPLATE/templates/embedded/" "$DEST/" --exclude '.DS_Store' \
+    copy_template templates/embedded --exclude '.DS_Store' \
         --exclude '/Firmware/build' --exclude '/Firmware/managed_components' --exclude '/Firmware/sdkconfig' --exclude '/Firmware/sdkconfig.old'
 fi
 if [ "$MCP" = true ]; then
-    rsync -a "$TEMPLATE/templates/mcp/" "$DEST/" --exclude '.DS_Store'
+    copy_template templates/mcp --exclude '.DS_Store'
 fi
 if [ "$APP" = true ]; then
-    rsync -a "$TEMPLATE/templates/app/" "$DEST/" --exclude '.DS_Store'
+    copy_template templates/app --exclude '.DS_Store'
 fi
 if [ "$VIEWS" = true ]; then
-    rsync -a "$TEMPLATE/templates/views/" "$DEST/" --exclude '.DS_Store'
+    copy_template templates/views --exclude '.DS_Store'
 fi
 if [ "$EXAMPLES" = true ]; then
-    rsync -a "$TEMPLATE/templates/examples/" "$DEST/" --exclude '.DS_Store' --exclude '.build' --exclude '.swiftpm'
+    copy_template templates/examples --exclude '.DS_Store' --exclude '.build' --exclude '.swiftpm'
 fi
 # The workflows live outside .github/workflows here, so the template repository runs none itself.
 if [ "$CI" = true ]; then
-    rsync -a "$TEMPLATE/templates/ci/" "$DEST/" --exclude '.DS_Store'
+    copy_template templates/ci --exclude '.DS_Store'
 fi
 
 # Whole files and directories that belong to one optional piece.

@@ -203,6 +203,60 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn("defines MACROS more than once", actual.stderr)
         self.assertEqual((project / "tools" / "macros.bzl").read_bytes(), generated)
 
+    def test_bootstrap_leaves_out_what_git_ignores_in_the_template_and_keeps_untracked_files(self):
+        # Another tool's state, ignored only by this checkout's own exclude file: a nested template
+        # copy whose BUILD.bazel files would become packages of the project.
+        exclude = self.template / ".git" / "info" / "exclude"
+        stock_exclude = exclude.read_text()
+        exclude.write_text(stock_exclude + ".delta/\n")
+        nested = self.template / ".delta" / "worktrees" / "f5" / "ProjectTemplate" / "Benchmarks"
+        nested.mkdir(parents=True)
+        (nested / "BUILD.bazel").write_text('load("//tools:benchmarks.bzl", "benchmarks")\n')
+        untracked = self.template / "Untracked.md"
+        untracked.write_text("Not yet added.\n")
+        # The checkout this copy came from may hold a board already.
+        board = self.template / ".kanban" / "template-test-board.json"
+        board.parent.mkdir(exist_ok=True)
+        board.write_text("{}\n")
+
+        def restore():
+            exclude.write_text(stock_exclude)
+            shutil.rmtree(self.template / ".delta")
+            untracked.unlink()
+            board.unlink()
+        self.addCleanup(restore)
+        directory = self.scratch / "ignored-library"
+
+        result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", "--library", NAME,
+                     str(directory), cwd=self.scratch)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((directory / ".delta").exists())
+        self.assertEqual((directory / "Untracked.md").read_text(), "Not yet added.\n")
+        for left_out in ("bootstrap.sh", "template.py", "template_test.py", "templates", "ci-image", ".kanban"):
+            self.assertFalse((directory / left_out).exists(), left_out)
+
+    def test_bootstrap_leaves_out_what_git_ignores_in_a_type_directory(self):
+        exclude = self.template / ".git" / "info" / "exclude"
+        stock_exclude = exclude.read_text()
+        exclude.write_text(stock_exclude + ".delta/\n")
+        nested = self.template / "templates" / "server" / ".delta" / "clone"
+        nested.mkdir(parents=True)
+        (nested / "BUILD.bazel").write_text("\n")
+
+        def restore():
+            exclude.write_text(stock_exclude)
+            shutil.rmtree(self.template / "templates" / "server" / ".delta")
+        self.addCleanup(restore)
+        directory = self.scratch / "ignored-server"
+
+        result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", "--server", "--ci", NAME,
+                     str(directory), cwd=self.scratch)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((directory / ".delta").exists())
+        self.assertTrue((directory / "Sources" / "App" / "Routes.swift").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()
