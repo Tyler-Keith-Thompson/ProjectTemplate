@@ -172,6 +172,10 @@ A table or function the template adds to `scripts/modules.py` (`MACROS = []`, sa
 without markers when the project already defines it elsewhere in the file. `just modules` refuses a
 name defined twice, so the report lists it among the conflicts: keep one definition, holding the
 project's rows, and delete the other.
+Any other file merges the same way when the project had copied a piece of the template by hand
+(a `load`, a recipe, a table row) somewhere the template doesn't put it: both copies land. The
+report lists every line the merge holds more often than both the project and the template did,
+under DUPLICATES, by file; keep one copy of each.
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
 
 The Swift a project builds with is declared once, `SWIFT` and `SWIFT_TOOLCHAIN` in

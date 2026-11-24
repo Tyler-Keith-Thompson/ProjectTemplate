@@ -10,7 +10,8 @@ build --compilation_mode=dbg
 
 # simulator:begin
 #| # The iOS app and the simulator tests (IOS_MODULES in scripts/modules.py), on the device and runtime
-#| # `just run` and `bazel test` boot: Apple silicon simulators, the default on an Apple silicon Mac.
+#| # `just run` and `bazel test` boot: Apple silicon simulators, the default on an Apple silicon Mac.  # !server:line
+#| # `just run-app` and `bazel test` boot: Apple silicon simulators, the default on an Apple silicon Mac.  # server:line
 #| # Naming sim_arm64 here would keep it in a device build too, since --ios_multi_cpus adds to the
 #| # list rather than replacing it. Keep --ios_minimum_os in step with IOS_MINIMUM there.
 #| build --ios_minimum_os=18.0

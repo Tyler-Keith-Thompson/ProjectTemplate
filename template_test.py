@@ -188,6 +188,24 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn("tools/ios.bzl", actual)
         self.assertTrue(json.loads((project / ".template.json").read_text())["ios"])
 
+    def test_add_ios_reports_what_the_project_had_already_copied_by_hand_as_duplicates(self):
+        project = self.project("add-ios-by-hand", {"type": "server"}, "--server")
+        load = 'load("//tools:ios.bzl", "IOS_PACKAGES", "SIMULATOR_TEST_PACKAGES")'
+        build = project / "BUILD.bazel"
+        build.write_text(load + "\n" + build.read_text())
+        justfile = project / "justfile"
+        justfile.write_text(justfile.read_text() + "\n[doc('Launch the iOS app')]\nrun-app:\n    {{BAZEL}} run //Apps/Demo\n")
+        git("commit", "-q", "-am", "iOS pieces copied by hand", cwd=project)
+
+        result = self.template_py("add", str(project), "--ios")
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("DUPLICATES", result.stdout)
+        self.assertIn(f"BUILD.bazel: {load}", result.stdout)
+        self.assertIn("justfile: run-app:", result.stdout)
+        self.assertIn("justfile: {{BAZEL}} run //Apps/Demo", result.stdout)
+        self.assertEqual(build.read_text().count(load), 2)
+
     def test_add_ios_refuses_a_type_it_doesnt_apply_to(self):
         project = self.project("add-ios-mcp", {"type": "mcp"}, "--mcp")
 

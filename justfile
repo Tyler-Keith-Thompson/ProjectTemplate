@@ -109,11 +109,11 @@ test:
 #|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "{{udid}}"
 # app:end
 # ios:begin
+#|
 #| [doc('Launch the iOS app in the simulator')]
 #| run:  # library:line
 #| run-app:  # server:line
 #|     {{BAZEL}} run //Apps/ProjectName
-#|
 # ios:end
 
 [doc('Run one test target, e.g. just test-one //Tests/GreetingsTests')]
