@@ -15,7 +15,10 @@ location, so a link that doesn't resolve would pass `--warnings-as-errors` unsee
     symbol-graph MODULE ROOT IN OUT
         Copies each `.symbols.json` with locations rooted at ROOT (the `--checkout-path` given to
         `docc convert`), so the archives are the same on every machine, and fails when a symbol
-        the module documents has no location, naming the first few.
+        the module documents has no location, naming the first few. The `Mock<Protocol>` doubles
+        `@Mockable` generates (under MOCKING, defined in the debug builds `//:docs` extracts from)
+        are left out with their members: they are test doubles, not API, and code a macro expands
+        has no location to check.
 """
 
 import json
@@ -79,6 +82,47 @@ def documented_without_location(graph, module):
     return missing
 
 
+def generated_mocks(graphs):
+    """The precise identifiers of the `@Mockable` doubles in `graphs`, and of their members.
+
+    A double is a top-level type with no location (a macro expanded it) named `Mock` and the name
+    of a protocol it conforms to, as Mockable names the one it generates for a protocol. A
+    hand-written `MockX` has a location, so it stays in the docs.
+    """
+    symbols = [symbol for graph in graphs for symbol in graph.get("symbols", [])]
+    protocols = {
+        symbol["identifier"]["precise"]: symbol["pathComponents"][-1]
+        for symbol in symbols
+        if symbol.get("kind", {}).get("identifier") == "swift.protocol"
+    }
+    roots = {
+        symbol["identifier"]["precise"]: symbol["pathComponents"][0]
+        for symbol in symbols
+        if len(symbol.get("pathComponents", [])) == 1 and "location" not in symbol
+    }
+    mocks = {
+        roots[relationship["source"]]
+        for graph in graphs
+        for relationship in graph.get("relationships", [])
+        if relationship.get("kind") == "conformsTo"
+        and relationship.get("source") in roots
+        and roots[relationship["source"]] == "Mock" + protocols.get(relationship.get("target"), "")
+    }
+    return {symbol["identifier"]["precise"] for symbol in symbols if symbol.get("pathComponents", [None])[0] in mocks}
+
+
+def without(graph, identifiers):
+    """`graph` without the symbols of `identifiers` and the relationships that name one."""
+    return dict(
+        graph,
+        symbols=[symbol for symbol in graph.get("symbols", []) if symbol["identifier"]["precise"] not in identifiers],
+        relationships=[
+            relationship for relationship in graph.get("relationships", [])
+            if relationship.get("source") not in identifiers and relationship.get("target") not in identifiers
+        ],
+    )
+
+
 def _source_info(arguments):
     source, output, *sources = arguments
     with open(source, "rb") as f:
@@ -90,13 +134,20 @@ def _source_info(arguments):
 
 def _symbol_graph(arguments):
     module, root, source, output = arguments
-    missing = []
+    texts = {}
     for name in sorted(os.listdir(source)):
-        if not name.endswith(".json"):
-            continue
-        with open(os.path.join(source, name)) as f:
-            text = f.read()
-        missing += documented_without_location(json.loads(text), module)
+        if name.endswith(".json"):
+            with open(os.path.join(source, name)) as f:
+                texts[name] = f.read()
+    graphs = {name: json.loads(text) for name, text in texts.items()}
+    mocks = generated_mocks(graphs.values())
+    missing = []
+    for name, text in texts.items():
+        graph = without(graphs[name], mocks) if mocks else graphs[name]
+        # Rewritten only when a double was there, so every other graph is copied byte for byte.
+        if graph != graphs[name]:
+            text = json.dumps(graph)
+        missing += documented_without_location(graph, module)
         with open(os.path.join(output, name), "w") as f:
             f.write(relocated(text, root))
     if missing:
