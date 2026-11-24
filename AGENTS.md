@@ -26,7 +26,7 @@ Apps/ProjectNameSmokeTests/      The one XCUITest, against the built app (`just 
 tools/snapshots/                 assertBazelSnapshot: snapshot references read from the test bundle under Bazel <!-- app:line -->
 Apps/ProjectName/                The iOS app: the composition root, Info.plist and the ios_application (`manual`) <!-- ios:line -->
 tools/test_host/                 The empty app every simulator test runs inside, so windows get a scene <!-- simulator:line -->
-tools/ui_test/                   The runner every UI test (`ios_ui_test`) takes: it uninstalls the app first <!-- simulator:line -->
+tools/ui_test/                   The runner every UI test (`ios_ui_test`) takes, or its pre-action for one's own: it uninstalls the app first <!-- simulator:line -->
 tools/iphone/                    The scripts `just phone-install` and `just phone-provision` run, and their test <!-- app:line -->
 Sources/GreetingsUI/             GreetingCard, a SwiftUI view of a Greeting for macOS and iOS <!-- views:line -->
 Tests/GreetingsUITests/          Its ViewInspector and snapshot tests, run on the Mac; __Snapshots__ the references <!-- views:line -->
@@ -467,7 +467,8 @@ modules, which build on services, which hold no UI (Seams and composition, below
   XCTest: launch the app, do the main thing, see the result. Everything else is proved by view and
   snapshot tests, which are fast and deterministic. `just smoke` after a change to the app target or
   to how screens connect. Its runner, `//tools/ui_test:runner`, uninstalls the app first, since an
-  install over an earlier one can keep the old binary; any other `ios_ui_test` takes it too.
+  install over an earlier one can keep the old binary; any other `ios_ui_test` takes it too, and a
+  runner of the project's own takes `pre_action = "//tools/ui_test:uninstall_apps"`.
 - **On an iPhone**: `just phone-provision` once per new iPhone (Developer Mode on, the Mac trusted),
   then `just phone-install` (debug, with the debug drawer) or `just phone-install-release`. A device
   build (`--config=device`) signs with the development profile Xcode's automatic signing makes,
