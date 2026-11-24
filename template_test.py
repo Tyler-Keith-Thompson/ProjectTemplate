@@ -236,6 +236,29 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn('"Sources/Screens"', (directory / "tools" / "ios.bzl").read_text())
         self.assertIn('"Tests/ScreensTests"', (directory / "tools" / "ios.bzl").read_text())
 
+    def test_a_range_version_reaches_both_manifests_and_a_malformed_one_is_refused(self):
+        directory = self.render(self.scratch / "range", "--library")
+        modules = directory / "scripts" / "modules.py"
+        original = modules.read_text()
+        row = '    ("swift-syntax", "https://github.com/swiftlang/swift-syntax", "{}"),\n'
+        uses = original.replace("PACKAGES = [\n", "PACKAGES = [\n" + row.format("range:603.0.0..<605.0.0"), 1) \
+            .replace('("GreetingsTests", ["Greetings", ', '("GreetingsTests", ["Greetings", "swift-syntax/SwiftSyntax", ', 1)
+        modules.write_text(uses)
+        expected = '.package(url: "https://github.com/swiftlang/swift-syntax", "603.0.0"..<"605.0.0"),'
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(expected, (directory / "Package.swift").read_text())
+        self.assertIn(expected, (directory / "swift" / "Package.swift").read_text())
+        for version in ("range:603.0.0", "range:605.0.0..<603.0.0", "range:603..<605.0.0"):
+            modules.write_text(uses.replace("range:603.0.0..<605.0.0", version))
+
+            result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+            self.assertNotEqual(result.returncode, 0, version)
+            self.assertIn(f"PACKAGES gives swift-syntax {version!r}", result.stderr)
+
     def test_update_reports_a_table_the_project_already_defines_and_never_leaves_the_empty_one_in_effect(self):
         # The template before it had MACROS: the stock file without its assignment.
         modules = self.template / "scripts" / "modules.py"

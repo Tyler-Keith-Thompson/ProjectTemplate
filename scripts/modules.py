@@ -28,7 +28,10 @@ TEST_SUPPORT = f"{PROJECT}TestSupport"
 # in the tables below refers to a product of one of these. A version written "exact:1.2.3" pins
 # that release, for a package whose later releases resolve differently on different toolchains
 # (Bazel resolves on each machine with its own swift). One written "minor:0.1.3" takes patch
-# releases only, for a 0.x package whose minor releases break its API. After adding one:
+# releases only, for a 0.x package whose minor releases break its API. One written
+# "range:603.0.0..<605.0.0" admits every release from the first version up to, not including, the
+# second, for a package whose next major releases still work (swift-syntax for a macro, beside a
+# package capped below its newest major). After adding one:
 # `just modules`, add `swiftpkg_<identity>` (hyphens as underscores) to use_repo in MODULE.bazel,
 # `just resolve`.
 PACKAGES = [
@@ -488,6 +491,14 @@ def check():
             "--local_resources=simulator=1) that the app type and the --ios option ship: from the project "
             "template's checkout, ./template.py add <project> --ios")
     packages = [p[0] for p in PACKAGES]
+    for name, _, version in PACKAGES:
+        if version.startswith("range:"):
+            lower, upper = version_range(version)
+            assert "..<" in version and semantic_version(lower) and semantic_version(upper), (
+                f"PACKAGES gives {name} {version!r}: write a range as range:<lower>..<<upper>, two versions "
+                "such as range:603.0.0..<605.0.0")
+            assert semantic_version(lower) < semantic_version(upper), \
+                f"PACKAGES gives {name} {version!r}, whose lower bound isn't below its upper"
     # wasi:begin
     for name in NON_WASI_PACKAGES:
         assert name in packages, f"NON_WASI_PACKAGES names unknown package {name}"
@@ -618,12 +629,29 @@ def spm_dep(d):
 
 def requirement(version):
     """A package's version requirement in a manifest: `from:` the minimum, `exact:` a pinned release,
-    or `.upToNextMinor(from:)` for `minor:`, patch releases only."""
+    `.upToNextMinor(from:)` for `minor:`, patch releases only, or a half-open range
+    (`"603.0.0"..<"605.0.0"`) for `range:603.0.0..<605.0.0`. check() refuses a malformed range."""
     if version.startswith("exact:"):
         return f'exact: "{version.removeprefix("exact:")}"'
     if version.startswith("minor:"):
         return f'.upToNextMinor(from: "{version.removeprefix("minor:")}")'
+    if version.startswith("range:"):
+        lower, upper = version_range(version)
+        return f'"{lower}"..<"{upper}"'
     return f'from: "{version}"'
+
+
+def version_range(version):
+    """The (lower, upper) bounds of a `range:<lower>..<<upper>` version, as written."""
+    lower, _, upper = version.removeprefix("range:").partition("..<")
+    return lower, upper
+
+
+def semantic_version(text):
+    """`text`'s (major, minor, patch) when it is a semantic version (a pre-release or build suffix
+    allowed), else None."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", text)
+    return tuple(int(part) for part in match.groups()) if match else None
 
 
 def umbrella():
