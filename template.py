@@ -3,7 +3,8 @@
 
   ./template.py status [--root DIR]...
       Every project under ~/workspace (or each --root): the template commit it is stamped with and
-      how many template commits it is behind, or that it has no stamp yet.
+      how many template commits it is behind, or that it has no stamp yet, and any option whose
+      files it holds though its stamp has the option off.
 
   ./template.py update PROJECT [--to REVISION]
       Merge the template's changes since the project's stamp into PROJECT. The template is rendered
@@ -11,7 +12,9 @@
       every file that changed between the two is merged three ways into the project with
       `git merge-file`. Conflicts are left marked in the files; the files scripts/modules.py
       generates are regenerated instead of merged. Nothing is committed. PROJECT must be a git
-      checkout with no uncommitted changes, so `git diff` shows exactly what the update did.
+      checkout with no uncommitted changes, so `git diff` shows exactly what the update did. When
+      PROJECT holds a file only an option renders (Fuzz/, say) and its stamp has that option off,
+      a note names the option and the `stamp` or `add` command that records it; the update goes on.
 
   ./template.py stamp PROJECT [--type library|server|embedded|mcp|app] [--benchmarks] [--mutation] [--fuzz]
                               [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--no-ci]
@@ -119,6 +122,64 @@ def options(stamp):
         elif not enabled(stamp, feature) and feature in ON_BY_DEFAULT:
             flags.append(f"--no-{feature}")
     return flags
+
+
+# A file only the option renders, for each option whose files can be told apart: a manifest or
+# script by the template's name rather than a directory a project might make for itself. A stamp
+# written before an option existed has it off, so updates render without it and never reach the
+# copy of its files a project made by hand; `unstamped_options` finds those.
+SIGNATURES = {
+    "benchmarks": "Benchmarks/Package.swift",
+    "mutation": "scripts/mutate.py",
+    "fuzz": "Fuzz/Package.swift",
+    "differential": "Differential/Package.swift",
+    "wasm": "scripts/wasi_test.py",
+    "explore": "Explore/build.sh",
+    # The app type renders the same lint, but views applies only to libraries.
+    "views": "tools/lint.bzl",
+    "examples": "Examples/Package.swift",
+    "ios": "Apps/{name}/BUILD.bazel",
+    "simulator": "tools/test_host/BUILD.bazel",
+    "fly": "fly.toml",
+    "database": "Sources/App/Database",
+    "ci": ".github/workflows/CI.yml",
+    "trunk": ".trunk/trunk.yaml",
+}
+
+
+def present(root, relative):
+    """Whether `relative` exists under `root`, spelled as given: macOS's file system ignores case, so
+    a project's own .github/workflows/ci.yml would otherwise pass for the template's CI.yml."""
+    directory = root
+    for part in pathlib.PurePosixPath(relative).parts:
+        if not directory.is_dir() or part not in os.listdir(directory):
+            return False
+        directory = directory / part
+    return True
+
+
+def unstamped_options(project, stamp):
+    """The options the stamp has off though the project holds a file only that option renders."""
+    return [feature for feature, signature in SIGNATURES.items()
+            if not has(stamp, feature)
+            and (feature not in TYPE_ONLY or stamp["type"] in TYPE_ONLY[feature])
+            and present(project, signature.format(name=stamp["name"]))]
+
+
+def unstamped_note(project, stamp):
+    """A note naming the options `unstamped_options` finds and the commands that fix the stamp, or None."""
+    found = unstamped_options(project, stamp)
+    if not found:
+        return None
+    flags = " ".join(f"--{feature}" for feature in found)
+    corrected = dict(stamp, **{feature: True for feature in found})
+    command = ["./template.py", "stamp", str(project), *options(corrected), "--name", stamp["name"],
+               "--commit", stamp["commit"][:12]]
+    them = "it" if len(found) == 1 else "them"
+    return (f"Note: {project.name} has the files of {flags}, but its stamp has {them} off, so updates render "
+            f"without {them} and never reach those files. If they match the template at the stamped commit, "
+            f"record {them}: `{' '.join(command)}`. Otherwise `./template.py add {project} {flags}` and "
+            f"resolve what differs.")
 
 
 def bootstrap_source(commit, scratch):
@@ -316,6 +377,9 @@ def update(arguments):
     # untracked file there (the board's .kanban/, say) changes nothing.
     if git("status", "--porcelain", "--untracked-files=no"):
         print("Note: the template has uncommitted changes, which the update leaves out.", file=sys.stderr)
+    note = unstamped_note(project, stamp)
+    if note:
+        print(note, file=sys.stderr)
     old_commit, new_commit = resolve(stamp["commit"]), resolve(arguments.to)
     if old_commit == new_commit:
         print(f"{project.name} is already at {new_commit[:12]}.")
@@ -536,6 +600,8 @@ def stamp_command(arguments):
         "explore": arguments.explore,
         "views": arguments.views,
         "examples": arguments.examples,
+        "ios": arguments.ios,
+        "simulator": arguments.simulator,
         "fly": arguments.fly,
         "database": arguments.database,
         "ci": arguments.ci,
@@ -556,6 +622,9 @@ def status(arguments):
                 stamp = json.loads((project / STAMP).read_text())
                 behind = git("rev-list", "--count", f"{stamp['commit']}..{head}", check=False) or "?"
                 state = "current" if behind == "0" else f"{behind} behind"
+                found = unstamped_options(project, stamp) if {"name", "type"} <= stamp.keys() else []
+                if found:
+                    state += f"; has {' '.join('--' + feature for feature in found)}'s files, stamped without"
                 rows.append((project.name, stamp["commit"][:12], state))
             elif (project / "scripts" / "modules.py").is_file() and (project / "AGENTS.md").is_file():
                 rows.append((project.name, "-", "not stamped"))

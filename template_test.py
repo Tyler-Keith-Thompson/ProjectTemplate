@@ -284,6 +284,83 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotIn(note, with_untracked.stderr)
         self.assertIn(note, with_tracked.stderr)
 
+    def test_update_notes_an_option_whose_files_the_project_has_but_its_stamp_lacks_and_still_updates(self):
+        project = self.project("update-unstamped-fuzz", {}, "--library", "--fuzz")
+        readme = self.template / "README.md"
+        readme.write_text(readme.read_text() + "\nA later template change.\n")
+        git("commit", "-q", "-am", "later", cwd=self.template)
+        later = git("rev-parse", "HEAD", cwd=self.template)
+        try:
+            result = self.template_py("update", str(project))
+        finally:
+            git("reset", "-q", "--hard", self.commit, cwd=self.template)
+        stamp = json.loads((project / ".template.json").read_text())
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("has the files of --fuzz, but its stamp has it off", result.stderr)
+        self.assertIn(f"./template.py stamp {project.resolve()} --type library --fuzz --name {NAME} "
+                      f"--commit {self.commit[:12]}", result.stderr)
+        self.assertIn(f"./template.py add {project.resolve()} --fuzz", result.stderr)
+        self.assertEqual(stamp["commit"], later)
+        self.assertFalse(stamp["fuzz"])
+        self.assertIn("A later template change.", (project / "README.md").read_text())
+        self.assertTrue((project / "Fuzz").is_dir())
+
+    def test_the_noted_stamp_command_records_the_option_and_status_flags_it_until_then(self):
+        project = self.project("stamp-unstamped-ios", {"type": "server"}, "--server", "--ios")
+        before = self.template_py("status", "--root", str(project.parent))
+
+        restamp = self.template_py("stamp", str(project), "--type", "server", "--ios", "--name", NAME,
+                                   "--commit", self.commit)
+        after = self.template_py("status", "--root", str(project.parent))
+        stamp = json.loads((project / ".template.json").read_text())
+
+        self.assertEqual(restamp.returncode, 0, restamp.stderr)
+        self.assertRegex(before.stdout, r"stamp-unstamped-ios .*has --ios --simulator's files, stamped without")
+        self.assertNotRegex(after.stdout, r"stamp-unstamped-ios .*stamped without")
+        self.assertTrue(stamp["ios"])
+
+    def test_no_option_is_noted_for_a_fresh_render_of_any_type_stamped_as_rendered(self):
+        spec = importlib.util.spec_from_file_location("template_under_test", self.template / "template.py")
+        template = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(template)
+        everywhere = ["benchmarks", "mutation", "fuzz", "differential"]
+        every_option = {
+            "library": everywhere + ["wasm", "explore", "views", "examples", "ios", "simulator", "trunk"],
+            "server": everywhere + ["ios", "simulator", "fly", "database", "trunk"],
+            "embedded": everywhere + ["wasm", "trunk"],
+            "mcp": everywhere + ["trunk"],
+            "app": everywhere,
+        }
+        found = {}
+
+        for kind, chosen in every_option.items():
+            for label, on in (("plain", []), ("every-option", chosen)):
+                directory = self.scratch / f"fresh-{kind}-{label}"
+                result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", f"--{kind}",
+                             *(f"--{feature}" for feature in on), NAME, str(directory), cwd=self.scratch)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                stamp = {"commit": self.commit, "name": NAME, "type": kind,
+                         **{feature: feature in on for feature in template.FEATURES if feature != "ci"},
+                         "ci": kind != "app"}
+                found[f"{kind} {label}"] = template.unstamped_options(directory, stamp)
+
+        self.assertEqual(found, {name: [] for name in found})
+
+    def test_an_own_file_spelled_like_an_options_in_another_case_or_an_own_directory_is_not_noted(self):
+        spec = importlib.util.spec_from_file_location("template_under_test", self.template / "template.py")
+        template = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(template)
+        directory = self.scratch / "own-workflow"
+        (directory / ".github" / "workflows").mkdir(parents=True)
+        (directory / ".github" / "workflows" / "ci.yml").write_text("name: ci\n")
+        (directory / "Examples" / "Bootstrap").mkdir(parents=True)
+        stamp = {"commit": self.commit, "name": NAME, "type": "library", "ci": False}
+
+        actual = template.unstamped_options(directory, stamp)
+
+        self.assertEqual(actual, [])
+
     def bootstrap_stamp(self, label):
         """A full bootstrap.sh run of a library into the scratch directory, with a stand-in `just` so it
         neither resolves nor tests; returns the stamp it wrote."""

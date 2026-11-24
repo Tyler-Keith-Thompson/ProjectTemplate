@@ -36,6 +36,13 @@ Any other file merges the same way when the project had copied a piece of the te
 (a `load`, a recipe, a table row) somewhere the template doesn't put it: both copies land. The
 report lists every line the merge holds more often than both the project and the template did,
 under DUPLICATES, by file; keep one copy of each.
+A stamp written before an option existed has that option off, so `update` renders without it and
+never reaches the option's files in a project that copied them in by hand. When the project holds
+a file only an off option renders (`Fuzz/` for `--fuzz`, `scripts/mutate.py` for `--mutation`,
+`tools/test_host` for `--simulator`, `Apps/<Name>` for `--ios`), `update` prints a note naming the
+option, then updates as usual, and `status` flags the project. If the files match the template at
+the stamped commit, record the option with the `stamp` command the note prints (the stamped
+commit, the project's options and the new one). Otherwise `add` it and resolve what differs.
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
 
 The Swift a project builds with is declared once, `SWIFT` and `SWIFT_TOOLCHAIN` in
