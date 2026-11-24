@@ -49,8 +49,18 @@ PACKAGE = os.path.join(ROOT, "Differential")
 FAILURES = os.path.join(PACKAGE, "Failures")
 EXECUTABLE = f"{PROJECT}Differential"
 BAZEL_TARGET = f"//Differential:{EXECUTABLE}"
-# The justfile's BAZEL_RELEASE: optimized builds keep their own output base.
-BAZEL_RELEASE = ["bazel", f"--output_base={os.path.expanduser('~/Library/Caches')}/bazel-{PROJECT.lower()}-release"]
+
+
+def bazel_release():
+    """The justfile's BAZEL_RELEASE: optimized builds keep their own output base, the one
+    `just test-release` uses. Asked of the justfile rather than computed here, so the two can't
+    name different bases (a second one would get a server and a sweep of its own)."""
+    output_base = subprocess.run(["just", "--justfile", os.path.join(ROOT, "justfile"), "--working-directory", ROOT,
+                                  "--evaluate", "BAZEL_RELEASE_OUTPUT_BASE"],
+                                 capture_output=True, text=True, check=True, timeout=60).stdout.strip()
+    return ["bazel", f"--output_base={output_base}"]
+
+
 SWIFT = ["env", "-u", "TOOLCHAINS", "xcrun", "--toolchain", "default", "swift"]
 
 # Cases per library process. Every run is bounded, so a library bug that never terminates fails
@@ -78,12 +88,13 @@ def build_library(swiftpm):
         return os.path.join(PACKAGE, ".build", "release", EXECUTABLE)
     # The workspace's bazel-bin and bazel-out links stay on the debug output base.
     flags = ["--config=release", "--experimental_convenience_symlinks=ignore"]
-    build = subprocess.run(BAZEL_RELEASE + ["build", *flags, BAZEL_TARGET], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    bazel = bazel_release()
+    build = subprocess.run(bazel + ["build", *flags, BAZEL_TARGET], cwd=ROOT, capture_output=True, text=True, timeout=1800)
     if build.returncode != 0:
         sys.exit("The differential build failed:\n" + build.stderr[-6000:])
-    where = subprocess.run(BAZEL_RELEASE + ["cquery", *flags, "--output=files", BAZEL_TARGET], cwd=ROOT,
+    where = subprocess.run(bazel + ["cquery", *flags, "--output=files", BAZEL_TARGET], cwd=ROOT,
                            capture_output=True, text=True, timeout=600)
-    root = subprocess.run(BAZEL_RELEASE + ["info", *flags, "execution_root"], cwd=ROOT, capture_output=True, text=True, timeout=600)
+    root = subprocess.run(bazel + ["info", *flags, "execution_root"], cwd=ROOT, capture_output=True, text=True, timeout=600)
     if where.returncode != 0 or root.returncode != 0 or not where.stdout.strip():
         sys.exit("Could not find the differential executable:\n" + where.stderr[-3000:] + root.stderr[-3000:])
     return os.path.join(root.stdout.strip(), where.stdout.split()[0])
