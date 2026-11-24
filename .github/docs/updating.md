@@ -43,6 +43,25 @@ a file only an off option renders (`Fuzz/` for `--fuzz`, `scripts/mutate.py` for
 option, then updates as usual, and `status` flags the project. If the files match the template at
 the stamped commit, record the option with the `stamp` command the note prints (the stamped
 commit, the project's options and the new one). Otherwise `add` it and resolve what differs.
+
+`add` on a project that already holds the option's files reports four things that need work:
+
+- The option's sample content, written for the template's `Greetings` module, arrives under
+  Added: `Fuzz/Sources/FuzzGreetings`, `Differential/Sources/<Name>Differential/Greetings.swift`,
+  `scripts/differential_greetings.py`, `scripts/mutants/Greetings.py`, and the explorer's
+  greetings page (`Explore/web/pages/greetings.html`, `Explore/Sources/Explore/Pages/Greetings`).
+  Delete it.
+- Each file both the project and the option have conflicts against an empty base, since the
+  stamped render has no copy. The markers can't tell the template's improvements apart from its
+  sample code, so keep the project's version and port the improvements from the template's
+  history for those paths: `git log -p -- <paths>` in the template's checkout, from the commit the
+  project copied them at, or from the option's first commit when that isn't known.
+- AGENTS.md's Commands table gets a second row for each of the option's recipes, worded as the
+  template words it. DUPLICATES doesn't report these, because the lines differ, so read the table
+  and keep one row per recipe.
+- `.gitignore` gets the option's lines a second time. Where they match the project's copies,
+  DUPLICATES lists them; keep one copy of each.
+
 Projects find the template at `~/workspace/ProjectTemplate`, or `$PROJECT_TEMPLATE`.
 
 The Swift a project builds with is declared once, `SWIFT` and `SWIFT_TOOLCHAIN` in
