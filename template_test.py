@@ -588,6 +588,36 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertEqual(partial.returncode, 0, partial.stderr)
         self.assertEqual(partial.stdout.strip(), f"['GreetingsTests-test-runner.wasm'] ['{NAME}Tests']")
 
+    def test_bench_simulated_rewrites_an_entry_measured_over_other_iterations_and_keeps_one_within_the_threshold(self):
+        directory = self.render(self.scratch / "bench-iterations", "--library", "--benchmarks")
+        spec = importlib.util.spec_from_file_location("bench_simulated_under_test", directory / "scripts" / "bench_simulated.py")
+        bench_simulated = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bench_simulated)
+
+        def entry(instructions, iterations, cache_misses):
+            # HdrHistogram with 2048 sub-buckets: a value below 1024 sits at its own index.
+            def histogram(value):
+                return {"subBucketHalfCountMagnitude": 10, "unitMagnitude": 0, "maxValue": value,
+                        "counts": [0] * value + [iterations]}
+            return [{"metric": {"instructions": {}}, "scalingFactor": 1, "statistics": {"histogram": histogram(instructions)}},
+                    {"metric": {"cacheMisses": {}}, "scalingFactor": 1, "statistics": {"histogram": histogram(cache_misses)}}]
+
+        def baseline(**entries):
+            results = []
+            for name, value in entries.items():
+                results += [{"target": "GreetingsBenchmarks", "name": name}, value]
+            return {"machine": {}, "results": results}
+
+        recorded = baseline(cold=entry(1000, 1, 900), steady=entry(1000, 3, 900))
+        measured = baseline(cold=entry(1000, 3, 300), steady=entry(1010, 3, 300))
+
+        actual = bench_simulated.keep_unmoved(recorded, measured)["results"]
+
+        self.assertEqual(actual[0]["name"], "cold")
+        self.assertEqual(actual[1], measured["results"][1])
+        self.assertEqual(actual[2]["name"], "steady")
+        self.assertEqual(actual[3], recorded["results"][3])
+
     def test_a_speed_reliant_target_lists_its_own_fixtures_and_check_refuses_one_without_performance_tests(self):
         directory = self.render(self.scratch / "performance-fixtures", "--library")
         modules = directory / "scripts" / "modules.py"
