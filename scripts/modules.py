@@ -558,7 +558,9 @@ def swift_srcs(name, pattern='glob(["**/*.swift"])'):
     sources = GENERATED_SOURCES.get(name, [])
     if not sources:
         return pattern
-    return pattern[:-1] + ', exclude = ["Generated/**"])' + " + [" + ", ".join(f'":{s}"' for s, _, _, _ in sources) + "]"
+    # allow_empty: a target whose only sources are generated (a test target of the docs' examples)
+    # has nothing left once its copies are excluded.
+    return pattern[:-1] + ', exclude = ["Generated/**"], allow_empty = True)' + " + [" + ", ".join(f'":{s}"' for s, _, _, _ in sources) + "]"
 
 
 def check():

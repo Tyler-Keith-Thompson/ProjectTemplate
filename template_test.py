@@ -566,9 +566,26 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertEqual(listed.returncode, 0, listed.stderr)
         self.assertIn('load("//tools:generated_sources.bzl", "generated_swift_source")', build)
         self.assertIn('generated_swift_source(\n    name = "Phrases",\n    generator = "//tools:phrases",\n', build)
-        self.assertIn('srcs = glob(["**/*.swift"], exclude = ["Generated/**"]) + [":Phrases"],', build)
+        self.assertIn('srcs = glob(["**/*.swift"], exclude = ["Generated/**"], allow_empty = True) + [":Phrases"],', build)
         self.assertNotEqual(unknown.returncode, 0)
         self.assertIn("GENERATED_SOURCES names NoSuchModule, which is neither a module nor a test target", unknown.stderr)
+
+    def test_a_target_whose_only_sources_are_generated_copies_globs_with_allow_empty(self):
+        directory = self.render(self.scratch / "generated-only", "--library")
+        modules = directory / "scripts" / "modules.py"
+        target = directory / "Tests" / f"{NAME}Tests"
+        for source in target.glob("*.swift"):
+            source.unlink()
+        (target / "Generated").mkdir()
+        (target / "Generated" / "Examples.swift").write_text("")
+        declared = f'{{"{NAME}Tests": [("Examples", "//tools:examples", [], [])]}}'
+        modules.write_text(modules.read_text().replace("GENERATED_SOURCES = {}", f"GENERATED_SOURCES = {declared}", 1))
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('srcs = glob(["**/*.swift"], exclude = ["Generated/**"], allow_empty = True) + [":Examples"],',
+                      (target / "BUILD.bazel").read_text())
 
     def test_wasi_test_refuses_an_unknown_target_before_building_and_fails_a_target_without_its_runner(self):
         directory = self.render(self.scratch / "wasi-targets", "--library", "--wasm")
