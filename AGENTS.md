@@ -156,6 +156,16 @@ in beside the project's own: keep one definition, holding the project's rows, an
   `Bundle.module`. Not under `Performance/`, which the target leaves out: the speed-reliant tests
   of a `PERFORMANCE_TESTS` target list theirs under `<X>PerformanceTests`, paths relative to
   `Tests/<X>/Performance`, and read them through `Bundle.module` in debug and release alike.
+- Generate a Swift source at build time (overloads for each arity, tables from a data file): the
+  generator is a Bazel executable that writes the source to standard output, or, given output
+  names, gets their paths before a `--`. List it in `GENERATED_SOURCES` under the module or test
+  target (`{"<Module>": [("<Name>", "//tools/<generator>", [<input labels>], [])]}`), create an
+  empty `Generated/<Name>.swift` in the target's directory, then `just modules` and `just sources`.
+  Bazel compiles the generator's output; SwiftPM compiles the copy under `Generated/`, which
+  `just sources` rewrites and `<Name>_test` fails on while it differs from what the generator
+  writes. Commit the copy, and run `just sources` after a change to the generator or its inputs.
+  `check()` refuses a copy that doesn't exist, and a speed-reliant, iOS or firmware target.
+  Simulated benchmarks measure the generator's output, at the copy's path. <!-- benchmarks:line -->
 - Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
   package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
   in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`
@@ -230,6 +240,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just test-release` | `--config=release`: builds and runs only the `XPerformanceTests` targets |
 | `just spm-test`, `just verify` | SwiftPM tests; both build systems |
 | `just modules` | Regenerate build files from `scripts/modules.py` |
+| `just sources` | Rewrite the checked-in copies of generated sources (`GENERATED_SOURCES`) that SwiftPM compiles |
 | `just resolve` | Re-resolve Bazel's SwiftPM dependencies after editing `PACKAGES` |
 | `just bench [--target X]` | Benchmarks; `just bench-compare` against the `main` baseline <!-- benchmarks:line --> |
 | `just bench-simulated-compare [--target X]` | Simulated counts (Callgrind in a Linux VM, from `~/workspace/BenchmarkHarness`) against the committed `simulated` baseline; `just bench-simulated [--target X]` re-records it. Both measure only targets whose code changed <!-- benchmarks:line --> |

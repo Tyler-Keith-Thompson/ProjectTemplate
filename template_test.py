@@ -542,6 +542,34 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("RESOURCES lists Tests/GreetingsTests/Missing, which doesn't exist", missing.stderr)
 
+    def test_a_generated_source_compiles_the_generators_output_and_check_refuses_a_missing_copy(self):
+        directory = self.render(self.scratch / "generated-sources", "--library")
+        modules = directory / "scripts" / "modules.py"
+        original = modules.read_text()
+        copy = directory / "Sources" / "Greetings" / "Generated" / "Phrases.swift"
+
+        def generate(sources):
+            modules.write_text(original.replace("GENERATED_SOURCES = {}", f"GENERATED_SOURCES = {sources}", 1))
+            return run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        declared = '{"Greetings": [("Phrases", "//tools:phrases", [], [])]}'
+        missing = generate(declared)
+        copy.parent.mkdir()
+        copy.write_text("")
+        listed = generate(declared)
+        build = (directory / "Sources" / "Greetings" / "BUILD.bazel").read_text()
+        unknown = generate('{"NoSuchModule": [("Phrases", "//tools:phrases", [], [])]}')
+
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("GENERATED_SOURCES declares Sources/Greetings/Generated/Phrases.swift, SwiftPM's copy, which doesn't exist",
+                      missing.stderr)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertIn('load("//tools:generated_sources.bzl", "generated_swift_source")', build)
+        self.assertIn('generated_swift_source(\n    name = "Phrases",\n    generator = "//tools:phrases",\n', build)
+        self.assertIn('srcs = glob(["**/*.swift"], exclude = ["Generated/**"]) + [":Phrases"],', build)
+        self.assertNotEqual(unknown.returncode, 0)
+        self.assertIn("GENERATED_SOURCES names NoSuchModule, which is neither a module nor a test target", unknown.stderr)
+
     def test_a_speed_reliant_target_lists_its_own_fixtures_and_check_refuses_one_without_performance_tests(self):
         directory = self.render(self.scratch / "performance-fixtures", "--library")
         modules = directory / "scripts" / "modules.py"
