@@ -297,7 +297,9 @@ with `wasmtime run --dir . --dir <checkout>::<checkout> --argv0 <binary's path> 
 --testing-library swift-testing`, logs in `.build/wasm/logs`. The checkout at its own path and the
 binary's path as `argv[0]` are where SwiftPM's `Bundle.module` looks for a module's resource bundle
 (an absolute build path with the `.xctest`, beside `Bundle.main` with the per-target runners, which
-WASI's Foundation takes from `argv[0]`).
+WASI's Foundation takes from `argv[0]`). `-c release` builds with `-enable-testing`, so suites that
+`@testable import` build in release too. A `--targets` name that isn't a test target is refused
+before anything builds, and a group fails when its build wrote no runner for one of its targets.
 Needs swiftly's 6.3.3 toolchain, its WebAssembly SDK (`swift sdk list`; swift.org's "Getting
 Started with Swift SDKs for WebAssembly" has the install command) and `brew install wasmtime`. If
 the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode

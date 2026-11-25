@@ -570,6 +570,24 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotEqual(unknown.returncode, 0)
         self.assertIn("GENERATED_SOURCES names NoSuchModule, which is neither a module nor a test target", unknown.stderr)
 
+    def test_wasi_test_refuses_an_unknown_target_before_building_and_fails_a_target_without_its_runner(self):
+        directory = self.render(self.scratch / "wasi-targets", "--library", "--wasm")
+        products = directory / "products"
+        products.mkdir()
+        (products / "GreetingsTests-test-runner.wasm").write_text("")
+        probe = ("import sys; sys.path.insert(0, 'scripts'); import wasi_test; "
+                 "found = wasi_test.test_binaries('products', ['GreetingsTests', 'ProjectNameTests']); "
+                 "print([p.split('/')[-1] for p in found.binaries], found.missing)")
+
+        unknown = run(sys.executable, "scripts/wasi_test.py", "--targets", "GreetingsTests,NoSuchTests", cwd=directory)
+        partial = run(sys.executable, "-c", probe.replace("ProjectName", NAME), cwd=directory)
+
+        self.assertEqual(unknown.returncode, 2, unknown.stdout + unknown.stderr)
+        self.assertIn("Unknown test targets: NoSuchTests", unknown.stdout)
+        self.assertFalse((directory / ".build" / "wasm" / "logs").exists())
+        self.assertEqual(partial.returncode, 0, partial.stderr)
+        self.assertEqual(partial.stdout.strip(), f"['GreetingsTests-test-runner.wasm'] ['{NAME}Tests']")
+
     def test_a_speed_reliant_target_lists_its_own_fixtures_and_check_refuses_one_without_performance_tests(self):
         directory = self.render(self.scratch / "performance-fixtures", "--library")
         modules = directory / "scripts" / "modules.py"
