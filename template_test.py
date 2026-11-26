@@ -265,6 +265,47 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotIn(".github/README.md", actual)
         self.assertEqual([path for path in actual if path.startswith(".github/docs/")], [])
 
+    def test_a_missing_buildbuddy_key_warns_in_both_workflows_and_leaves_the_build_uncached(self):
+        directory = self.render(self.scratch / "buildbuddy-warning", "--library")
+        expected_warning = ("::warning::BUILDBUDDY_API_KEY is not set; Bazel runs without the remote cache "
+                            "(run just ci-secrets)")
+
+        for workflow in ("CI.yml", "docc.yml"):
+            lines = (directory / ".github" / "workflows" / workflow).read_text().splitlines()
+            start = lines.index("      - name: Configure the remote cache")
+            run_line = next(i for i in range(start, len(lines)) if lines[i].strip() == "run: |")
+            body = []
+            for line in lines[run_line + 1:]:
+                if line.strip() and not line.startswith(" " * 10):
+                    break
+                body.append(line[10:])
+            script = "\n".join(body) + "\n"
+            for key in ("", "secret-key"):
+                with self.subTest(workflow=workflow, key=bool(key)):
+                    home = pathlib.Path(tempfile.mkdtemp(dir=self.scratch))
+                    environment = {**os.environ, "HOME": str(home), "BUILDBUDDY_API_KEY": key}
+
+                    result = subprocess.run(["bash", "-e", "-c", script], cwd=home, env=environment,
+                                            capture_output=True, text=True)
+
+                    actual = (home / "user.bazelrc").read_text()
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if key:
+                        self.assertNotIn("::warning::", result.stdout)
+                        self.assertIn("build --remote_cache=grpcs://remote.buildbuddy.io", actual)
+                        self.assertIn("common --remote_header=x-buildbuddy-api-key=secret-key", actual)
+                    else:
+                        self.assertEqual(result.stdout.strip(), expected_warning)
+                        self.assertNotIn("remote_cache=", actual)
+                        self.assertNotIn("buildbuddy", actual)
+
+    def test_a_render_without_ci_has_no_workflows(self):
+        directory = self.render(self.scratch / "no-ci-workflows", "--library", "--no-ci")
+
+        actual = tree(directory)
+
+        self.assertEqual([path for path in actual if path.startswith(".github/workflows/")], [])
+
     def test_a_render_leaves_out_the_template_only_ignore_line_and_ends_on_content(self):
         found = {}
 

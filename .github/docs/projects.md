@@ -8,8 +8,8 @@
   `just generate`, `just bench`.
 - A remote cache with no setup per project: store a BuildBuddy API key in the Keychain once
   (`just buildbuddy-key`) and every project's builds use BuildBuddy's cache and build results;
-  `just ci-secrets` gives a repository's CI the same key with `gh`. The key is never written to
-  a file.
+  `just ci-secrets` gives a repository's CI the same key with `gh`; without it, CI's Bazel jobs
+  build uncached and each run carries a warning that says so. The key is never written to a file.
 - Strict defaults: Swift 6 language mode, first-party warnings as errors, a debug and a release
   configuration that don't throw away each other's cache.
 - Tests with Swift Testing, including an example module (`Greetings`) that shows the house
