@@ -275,6 +275,11 @@ Every shell command gets a timeout. macOS has no `timeout`; use
   `Tests/X/Performance/`.
 - Release builds use their own output base (see the justfile). Don't create other output bases
   or copies of the repo, and shut down any extra Bazel server you start.
+- Before a Bash command that builds or tests, Claude Code runs `tools/load-gate` (a hook in
+  `.claude/settings.json`). While the machine is busy (a one-minute load average above one per
+  core) the command waits, up to 10 minutes, and two heavy commands start at least 20 seconds
+  apart, so agents in other worktrees don't all build at once. A held command says how long it
+  waited. `LOAD_GATE=off` turns it off; the script's docstring lists the other settings.
 - Run suites through Bazel, not `swift test --filter`.
 - First-party warnings are errors (`tools/swift_rules.bzl`); dependencies build quietly. Fix the
   warning, never suppress it. DocC's are too: `just docs` fails on a link that doesn't resolve.
