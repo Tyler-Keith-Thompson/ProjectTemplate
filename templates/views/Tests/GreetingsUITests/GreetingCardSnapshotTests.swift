@@ -14,7 +14,8 @@ import Testing
 struct GreetingCardSnapshotTests {
     @Test(arguments: [ColorScheme.light, .dark])
     func aCasualGreeting(colorScheme: ColorScheme) throws {
-        let sut = GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!"))
+        let sut = try GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!")) // !performance:line
+        //| let sut = GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!")) // performance:line
         let renderer = ImageRenderer(content: sut.background(.background).environment(\.colorScheme, colorScheme))
         renderer.scale = 2
 
@@ -25,7 +26,8 @@ struct GreetingCardSnapshotTests {
 
     @Test(arguments: [ColorScheme.light, .dark])
     func aFormalGreeting(colorScheme: ColorScheme) throws {
-        let sut = GreetingCard(greeting: Greeting(name: "Ada").formal().punctuated(with: "!"))
+        let sut = try GreetingCard(greeting: Greeting(name: "Ada").formal().punctuated(with: "!")) // !performance:line
+        //| let sut = GreetingCard(greeting: Greeting(name: "Ada").formal().punctuated(with: "!")) // performance:line
         let renderer = ImageRenderer(content: sut.background(.background).environment(\.colorScheme, colorScheme))
         renderer.scale = 2
 

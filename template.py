@@ -16,15 +16,18 @@
       PROJECT holds a file only an option renders (Fuzz/, say) and its stamp has that option off,
       a note names the option and the `stamp` or `add` command that records it (for an option newer
       than the stamped commit, an `update --to` its first commit, then `add`); the update goes on.
+      A library or server stamped before --performance existed gets a note that the template now
+      renders the throwing error convention, and how to keep trap and `checked:` spellings.
 
   ./template.py stamp PROJECT [--type library|server|embedded|mcp|app] [--benchmarks] [--mutation] [--fuzz]
-                              [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--no-ci]
+                              [--differential] [--wasm] [--explore] [--views] [--examples] [--ios] [--simulator] [--performance]
+                              [--fly] [--database] [--no-ci]
                               [--trunk] [--name NAME] [--commit REVISION]
       Record that PROJECT matches the template at REVISION (default HEAD) with these options, for a
       project made before bootstrap.sh wrote stamps. Later updates merge only what changed after it.
 
   ./template.py add PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                            [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--ci] [--trunk]
+                            [--views] [--examples] [--ios] [--simulator] [--performance] [--fly] [--database] [--ci] [--trunk]
       Turn options on in a project made without them. The template is rendered at the stamped commit
       with the stamp's options and again with the new ones added, and every file that differs is
       merged three ways into the project, as `update` does; the stamp then records the options. It
@@ -33,7 +36,8 @@
       uncommitted changes.
 
   ./template.py remove PROJECT [--benchmarks] [--mutation] [--fuzz] [--differential] [--wasm] [--explore]
-                               [--views] [--examples] [--ios] [--simulator] [--fly] [--database] [--ci] [--trunk]
+                               [--views] [--examples] [--ios] [--simulator] [--performance] [--fly] [--database] [--ci]
+                               [--trunk]
       Turn options off, the mirror of `add`. The template is rendered at the stamped commit with the
       stamp's options and again with these turned off, and every file that differs is merged three
       ways into the project, as `add` does: what the options brought is removed where the project
@@ -93,7 +97,7 @@ def write_stamp(project, stamp):
     (project / STAMP).write_text(json.dumps(stamp, indent=2) + "\n")
 
 
-FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "views", "examples", "ios", "simulator", "fly", "database", "ci", "trunk")
+FEATURES = ("benchmarks", "mutation", "fuzz", "differential", "wasm", "explore", "views", "examples", "ios", "simulator", "performance", "fly", "database", "ci", "trunk")
 # Options on unless the stamp says otherwise: a stamp from before the option had it.
 ON_BY_DEFAULT = ("ci",)
 
@@ -208,6 +212,19 @@ def unstamped_note(project, stamp):
                  f"`./template.py update {project}{to}` (or later), then `./template.py add {project} {unknown_flags}` "
                  f"and resolve what differs.")
     return note
+
+
+def performance_note(project, stamp):
+    """A note for a library or server stamped before --performance existed, or None. Its updates
+    render without the option, which from then on means the throwing error convention."""
+    if "performance" in stamp or stamp["type"] not in TYPE_ONLY["performance"]:
+        return None
+    return (f"Note: {project.name}'s stamp predates --performance. The template now renders the throwing "
+            f"error convention by default: plain spellings throw a typed error, with no `checked:` spellings "
+            f"and no traps that can fire at run time, so this update brings that to AGENTS.md's Errors section "
+            f"and the Greetings example. A high-performance library keeps trap and `checked:` spellings with "
+            f"`./template.py add {project} --performance` once the update is committed (or "
+            f"`./template.py stamp` with --performance, if it already matches that render).")
 
 
 def bootstrap_source(commit, scratch):
@@ -408,6 +425,9 @@ def update(arguments):
     note = unstamped_note(project, stamp)
     if note:
         print(note, file=sys.stderr)
+    note = performance_note(project, stamp)
+    if note:
+        print(note, file=sys.stderr)
     old_commit, new_commit = resolve(stamp["commit"]), resolve(arguments.to)
     if old_commit == new_commit:
         print(f"{project.name} is already at {new_commit[:12]}.")
@@ -423,6 +443,8 @@ def update(arguments):
         report = merge(project, base, new, f"template {old_commit[:12]}", f"template {new_commit[:12]}")
     regenerate = regenerate_modules(project)
     stamp.update(commit=new_commit)
+    if performance_note(project, stamp):
+        stamp["performance"] = False
     stamp.pop("modified", None)
     write_stamp(project, stamp)
 
@@ -477,7 +499,9 @@ def print_report(report, regenerate, swift_note=None):
 
 
 # Options that apply to some types only: the types each applies to.
-TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "views": ("library",), "examples": ("library",), "ios": ("library", "server"), "simulator": ("library", "server"), "fly": ("server",), "database": ("server",),
+TYPE_ONLY = {"wasm": ("library", "embedded"), "explore": ("library",), "views": ("library",), "examples": ("library",), "ios": ("library", "server"), "simulator": ("library", "server"),
+             # Firmware, MCP servers and apps throw rather than trap.
+             "performance": ("library", "server"), "fly": ("server",), "database": ("server",),
              # The workflows run in Linux containers; an iOS app's tests need a Mac.
              "ci": ("library", "server", "embedded", "mcp"), "trunk": ("library", "server", "embedded", "mcp")}
 
@@ -630,6 +654,7 @@ def stamp_command(arguments):
         "examples": arguments.examples,
         "ios": arguments.ios,
         "simulator": arguments.simulator,
+        "performance": arguments.performance,
         "fly": arguments.fly,
         "database": arguments.database,
         "ci": arguments.ci,

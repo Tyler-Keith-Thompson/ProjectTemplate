@@ -15,7 +15,15 @@
   <pre id="code" aria-label="Swift code"></pre>
 </section>
 
+<!-- !performance:begin -->
+<section class="prose">
+  <h2><small>Errors</small>An empty name throws</h2>
+  <p><code>Greeting(name:)</code> throws <code>EmptyName</code> on an empty name, so a name that comes from outside the program can't stop it. <code>try?</code> turns the error into <code>nil</code>.</p>
+</section>
+<!-- !performance:end -->
+<!-- performance:begin -->
 <section class="prose">
   <h2><small>Two spellings</small>Plain and checked</h2>
   <p><code>Greeting(name:)</code> stops the program on an empty name, like an array subscript out of range. <code>Greeting(checkedName:)</code> throws <code>EmptyName</code> instead, for names that come from outside the program.</p>
 </section>
+<!-- performance:end -->

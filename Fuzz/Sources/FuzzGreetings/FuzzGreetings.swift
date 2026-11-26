@@ -1,6 +1,7 @@
 // Greeting against a model of its parts written out: after every modifier the text must be the
 // salutation, ", ", the name and the punctuation; a copy taken earlier must be unaffected by later
-// modifiers; the checked initializer must throw exactly for an empty name; and the value must
+// modifiers; the initializer must throw exactly for an empty name; and the value must // !performance:line
+//| // modifiers; the checked initializer must throw exactly for an empty name; and the value must // performance:line
 // equal, with the same hash, one rebuilt from the model.
 
 import FuzzSupport
@@ -16,14 +17,27 @@ enum FuzzGreetings {
 
     static func fuzz(_ input: inout FuzzInput) {
         let name = String((0 ..< input.int(in: 0 ... 6)).map { _ in alphabet[input.int(below: alphabet.count)] })
-        let checked = Result { () throws(EmptyName) in try Greeting(checkedName: name) }
+        // !performance:begin
+        let made = Result { () throws(EmptyName) in try Greeting(name: name) }
         guard !name.isEmpty else {
-            check((try? checked.get()) == nil, "checked init of an empty name did not throw")
+            check((try? made.get()) == nil, "init of an empty name did not throw")
             return
         }
-        check((try? checked.get()) == Greeting(name: name), "checked init of \(name.debugDescription)")
-
-        var greeting = Greeting(name: name)
+        guard var greeting = try? made.get() else {
+            check(false, "init of \(name.debugDescription) threw")
+            return
+        }
+        // !performance:end
+        // performance:begin
+        //| let checked = Result { () throws(EmptyName) in try Greeting(checkedName: name) }
+        //| guard !name.isEmpty else {
+        //|     check((try? checked.get()) == nil, "checked init of an empty name did not throw")
+        //|     return
+        //| }
+        //| check((try? checked.get()) == Greeting(name: name), "checked init of \(name.debugDescription)")
+//|
+        //| var greeting = Greeting(name: name)
+        // performance:end
         var formal = false
         var punctuation: Character?
         var snapshot: (Greeting, String)?
@@ -56,7 +70,14 @@ enum FuzzGreetings {
             }
         }
 
-        var rebuilt = formal ? Greeting(name: name).formal() : Greeting(name: name)
+        // !performance:begin
+        guard var rebuilt = try? Greeting(name: name) else {
+            check(false, "init of \(name.debugDescription) threw on the second call")
+            return
+        }
+        if formal { rebuilt = rebuilt.formal() }
+        // !performance:end
+        //| var rebuilt = formal ? Greeting(name: name).formal() : Greeting(name: name) // performance:line
         if let punctuation { rebuilt = rebuilt.punctuated(with: punctuation) }
         check(rebuilt == greeting && rebuilt.hashValue == greeting.hashValue, "equal greetings are equal values")
     }

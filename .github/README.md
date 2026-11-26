@@ -43,6 +43,7 @@ app's tests need a Mac, and the workflows run on Linux.
 | `--examples` | Example apps in a package of their own (library) |
 | `--ios` | An iOS app beside a library or server |
 | `--simulator` | Tests in the iOS simulator without an app (library, server; `--ios` brings it too) |
+| `--performance` | The high-performance error convention: plain spellings trap, `checked:` spellings throw (library, server; see below) |
 | `--fly`, `--database` | Fly.io deployment; a SQLite database, replicated with Litestream when both are on (server) |
 | `--no-ci` | No GitHub Actions |
 | `--trunk` | Pull requests merge through Trunk's merge queue (with CI) |
@@ -52,6 +53,25 @@ app's tests need a Mac, and the workflows run on Linux.
 ./bootstrap.sh --server --fly --database MyService
 ./bootstrap.sh --app MyApp
 ```
+
+### When to use `--performance`
+
+Without it, a project's API throws a typed error wherever it can fail, and nothing traps at run
+time. `--performance` swaps that for plain spellings that trap on a bad argument, like `Array`'s
+subscript, beside `checked:` spellings that throw, with exit tests for every trap and AGENTS.md's
+performance patterns.
+
+Use it only for a library whose public API runs in its callers' hot loops, where a bad argument
+is a programmer's error and a trap costs less than an error path on every call: data structures
+and graph algorithms (Grafluent, GrafluentCollections), numeric kernels such as seeded random draws
+(SwiftPRNG), and per-frame engines such as an ECS. Such a project has benchmarks and treats speed
+as a requirement.
+
+Don't use it anywhere else: apps, servers, MCP servers, firmware, SDKs that run inside someone
+else's app (analytics, debug tools, integrations), tools and harnesses, and libraries that parse
+or model data. It doesn't fit wherever bad input can come from users, the network, files or
+configuration either. If in doubt, leave it off: a caller can ignore a thrown error with `try?`,
+but nobody can recover from a crash inside their app.
 
 ## Keeping projects current
 

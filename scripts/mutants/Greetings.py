@@ -12,8 +12,11 @@ TESTS = ["GreetingsTests"]
 G = "Greeting.swift"
 
 MUTANTS = [
-    Mutant("noprecondition", G, 'precondition(!name.isEmpty, "A greeting needs a name")', "", mode="stmt"),
-    Mutant("checkedaccepts", G, "!name.isEmpty", "true", nth=1),
+    Mutant("emptyaccepted", G, "!name.isEmpty", "true"),  # !performance:line
+    # The mutant before this one leaves the guard's test in its else branch, which this one finds. # !performance:line
+    Mutant("onecharrefused", G, "!name.isEmpty", "name.count > 1"),  # !performance:line
+    #| Mutant("noprecondition", G, 'precondition(!name.isEmpty, "A greeting needs a name")', "", mode="stmt"),  # performance:line
+    #| Mutant("checkedaccepts", G, "!name.isEmpty", "true", nth=1),  # performance:line
     Mutant("startsformal", G, "self.register = .casual", "self.register = .formal", mode="stmt"),
     Mutant("startspunctuated", G, "self.punctuation = nil", 'self.punctuation = "."', mode="stmt"),
     Mutant("formalstayscasual", G, "copy.register = .formal", "copy.register = .casual", mode="stmt"),

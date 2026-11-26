@@ -25,7 +25,8 @@ list, `DIFFERENTIAL_DEPENDENCIES`. The SwiftPM package serves `--swiftpm`.
 
 | Area | Library | Reference |
 |---|---|---|
-| `greetings` | `Greeting(checkedName:)`, the modifiers in sequence, `text` and its `count` | The text written out in Python; extended grapheme clusters from the `regex` package (`\X`) for the character count, on names with combining accents, emoji sequences and flags |
+| `greetings` | `Greeting(name:)`, the modifiers in sequence, `text` and its `count` | The text written out in Python; extended grapheme clusters from the `regex` package (`\X`) for the character count, on names with combining accents, emoji sequences and flags <!-- !performance:line --> |
+| `greetings` | `Greeting(checkedName:)`, the modifiers in sequence, `text` and its `count` | The text written out in Python; extended grapheme clusters from the `regex` package (`\X`) for the character count, on names with combining accents, emoji sequences and flags <!-- performance:line --> |
 
 ## Adding an area
 

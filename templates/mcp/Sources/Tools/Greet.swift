@@ -46,7 +46,7 @@ extension ToolHandler {
     ) { (arguments) throws(GreetFailure) -> GreetResult in
         let greeting: Greeting
         do {
-            greeting = try Greeting(checkedName: arguments.name)
+            greeting = try Greeting(name: arguments.name)
         } catch {
             throw .emptyName
         }

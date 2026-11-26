@@ -8,7 +8,12 @@ import SwiftUI
 struct ProjectNameApp: App {
     var body: some Scene {
         WindowGroup {
-            Text(Greeting(name: "World").text)
+            // !performance:begin
+            if let greeting = try? Greeting(name: "World") {
+                Text(greeting.text)
+            }
+            // !performance:end
+            //| Text(Greeting(name: "World").text) // performance:line
         }
     }
 }

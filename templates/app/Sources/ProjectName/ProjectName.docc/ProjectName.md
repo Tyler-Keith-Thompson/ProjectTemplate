@@ -12,7 +12,7 @@ imported on its own.
 ```swift
 import ProjectName
 
-let greeting = Greeting(name: "Ada").formal().punctuated(with: "!")
+let greeting = try Greeting(name: "Ada").formal().punctuated(with: "!")
 print(greeting.text)  // Good day, Ada!
 ```
 

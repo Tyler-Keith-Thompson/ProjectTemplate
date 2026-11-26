@@ -60,11 +60,18 @@ struct GreetingsLab {
                     span(.class("label")) { "What happened" }
                     p(.class("narration")) {
                         if text == nil {
+                            // !performance:begin
                             "The name is empty, so "
-                            b { "Greeting(checkedName:)" }
-                            " throws EmptyName. The plain "
                             b { "Greeting(name:)" }
-                            " would stop the program instead."
+                            " throws EmptyName."
+                            // !performance:end
+                            // performance:begin
+                            //| "The name is empty, so "
+                            //| b { "Greeting(checkedName:)" }
+                            //| " throws EmptyName. The plain "
+                            //| b { "Greeting(name:)" }
+                            //| " would stop the program instead."
+                            // performance:end
                         } else {
                             "Each modifier returns a new greeting and leaves the one it was called on as it was. "
                             model.formal ? "Formal says “Good day”; " : "Casual says “Hi”; "
@@ -86,10 +93,10 @@ struct GreetingsCodePanel {
         let bindings = ["let name = \(model.name.debugDescription)"]
             + (punctuation.map { ["let punctuation: Character = \(String($0).debugDescription)"] } ?? [])
         if text == nil {
-            CodePanel(snippets: [.greetingsImports, Snippet(lines: bindings), .greetingsChecked, Snippet(lines: ["// throws EmptyName"])])
+            CodePanel(snippets: [.greetingsImports, Snippet(lines: bindings), .greetingsGreeting, Snippet(lines: ["// throws EmptyName"])])
         } else {
             CodePanel(
-                snippets: [.greetingsImports, Snippet(lines: bindings), .greetingsChecked]
+                snippets: [.greetingsImports, Snippet(lines: bindings), .greetingsGreeting]
                     + (model.formal ? [.greetingsFormal] : [])
                     + (punctuation == nil ? [] : [.greetingsPunctuated])
                     + [.greetingsText],

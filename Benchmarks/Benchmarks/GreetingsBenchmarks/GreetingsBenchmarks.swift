@@ -19,7 +19,8 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("Greetings: Greeting(name:).formal().punctuated(with:).text") { benchmark in
         for _ in benchmark.scaledIterations {
             for name in names {
-                blackHole(Greeting(name: name).formal().punctuated(with: "!").text)
+                blackHole(try Greeting(name: name).formal().punctuated(with: "!").text) // !performance:line
+                //| blackHole(Greeting(name: name).formal().punctuated(with: "!").text) // performance:line
             }
         }
     }

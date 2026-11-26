@@ -4,7 +4,10 @@ import Greetings
 /// log once a second, forever.
 @_cdecl("app_main")
 func appMain() {
-    let greeting = Greeting(name: "ProjectName").formal().punctuated(with: "!")
+    guard let greeting = try? Greeting(name: "ProjectName").formal().punctuated(with: "!") else {
+        print("No greeting: the name is empty")
+        return
+    }
     var count = 0
     while true {
         count += 1

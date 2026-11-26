@@ -39,7 +39,7 @@ struct GreetingViewTests {
                 let mockGreetingService = MockGreetingService()
                 given(mockGreetingService)
                     .greeting(for: .value("Ada"))
-                    .willReturn(DeferredTask { Greeting(name: "Ada").formal().punctuated(with: "!") })
+                    .willReturn(DeferredTask { try Greeting(name: "Ada").formal().punctuated(with: "!") })
                 Container.greetingService.register { mockGreetingService }
                 Container.clock.register { AnyClock(clock) }
 
@@ -67,7 +67,7 @@ struct GreetingViewTests {
                 let mockGreetingService = MockGreetingService()
                 given(mockGreetingService)
                     .greeting(for: .value("Ada"))
-                    .willReturn(DeferredTask { Greeting(name: "Ada").formal().punctuated(with: "!") })
+                    .willReturn(DeferredTask { try Greeting(name: "Ada").formal().punctuated(with: "!") })
                 Container.greetingService.register { mockGreetingService }
                 Container.clock.register { AnyClock(clock) }
 

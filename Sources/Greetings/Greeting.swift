@@ -4,13 +4,18 @@
 /// was, so a greeting can be declared in one expression and shared without copying rules.
 ///
 /// ```swift
-/// let greeting = Greeting(name: "Ada").formal().punctuated(with: "!")
+// !performance:begin
+/// let greeting = try Greeting(name: "Ada").formal().punctuated(with: "!")
+// !performance:end
+// performance:begin
+//| /// let greeting = Greeting(name: "Ada").formal().punctuated(with: "!")
+// performance:end
 /// greeting.text  // "Good day, Ada!"
 /// ```
-@frozen
+//| @frozen // performance:line
 public struct Greeting: Hashable, Sendable {
     /// How a greeting addresses its name.
-    @frozen
+    //| @frozen // performance:line
     public enum Register: Hashable, Sendable {
         /// "Hi, name".
         case casual
@@ -27,28 +32,38 @@ public struct Greeting: Hashable, Sendable {
 
     /// A casual, unpunctuated greeting of `name`.
     ///
-    /// - Parameter name: The name to address. Traps when empty; use ``init(checkedName:)`` to
-    ///   throw instead.
-    @inlinable
-    public init(name: String) {
-        precondition(!name.isEmpty, "A greeting needs a name")
+    // !performance:begin
+    /// - Parameter name: The name to address.
+    /// - Throws: ``EmptyName`` when `name` is empty.
+    public init(name: String) throws(EmptyName) {
+        guard !name.isEmpty else { throw EmptyName() }
+    // !performance:end
+    // performance:begin
+    //| /// - Parameter name: The name to address. Traps when empty; use ``init(checkedName:)`` to
+    //| ///   throw instead.
+    //| @inlinable
+    //| public init(name: String) {
+    //|     precondition(!name.isEmpty, "A greeting needs a name")
+    // performance:end
         self.name = name
         self.register = .casual
         self.punctuation = nil
     }
-
-    /// A casual, unpunctuated greeting of `name`.
-    ///
-    /// - Parameter name: The name to address.
-    /// - Throws: ``EmptyName`` when `name` is empty.
-    @inlinable
-    public init(checkedName name: String) throws(EmptyName) {
-        guard !name.isEmpty else { throw EmptyName() }
-        self.init(name: name)
-    }
+    // performance:begin
+//|
+    //| /// A casual, unpunctuated greeting of `name`.
+    //| ///
+    //| /// - Parameter name: The name to address.
+    //| /// - Throws: ``EmptyName`` when `name` is empty.
+    //| @inlinable
+    //| public init(checkedName name: String) throws(EmptyName) {
+    //|     guard !name.isEmpty else { throw EmptyName() }
+    //|     self.init(name: name)
+    //| }
+    // performance:end
 
     /// The same greeting in the formal register.
-    @inlinable
+    //| @inlinable // performance:line
     public func formal() -> Greeting {
         var copy = self
         copy.register = .formal
@@ -56,7 +71,7 @@ public struct Greeting: Hashable, Sendable {
     }
 
     /// The same greeting in the casual register.
-    @inlinable
+    //| @inlinable // performance:line
     public func casual() -> Greeting {
         var copy = self
         copy.register = .casual
@@ -64,7 +79,7 @@ public struct Greeting: Hashable, Sendable {
     }
 
     /// The same greeting ending in `character`.
-    @inlinable
+    //| @inlinable // performance:line
     public func punctuated(with character: Character) -> Greeting {
         var copy = self
         copy.punctuation = character
@@ -74,7 +89,7 @@ public struct Greeting: Hashable, Sendable {
     /// The greeting as text: the register's salutation, a comma, the name and the punctuation.
     ///
     /// - Complexity: O(*n*), where *n* is the length of the name.
-    @inlinable
+    //| @inlinable // performance:line
     public var text: String {
         let salutation = switch register {
         case .casual: "Hi"
@@ -88,9 +103,14 @@ public struct Greeting: Hashable, Sendable {
     }
 }
 
-/// The error ``Greeting/init(checkedName:)`` throws for an empty name.
-@frozen
+// !performance:begin
+/// The error ``Greeting/init(name:)`` throws for an empty name.
+// !performance:end
+// performance:begin
+//| /// The error ``Greeting/init(checkedName:)`` throws for an empty name.
+//| @frozen
+// performance:end
 public struct EmptyName: Error, Hashable, Sendable {
-    @inlinable
+    //| @inlinable // performance:line
     public init() {}
 }

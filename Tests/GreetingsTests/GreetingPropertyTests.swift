@@ -17,7 +17,8 @@ struct GreetingPropertyTests {
         let punctuate = Gen.bool()
         let mark = Gen.element(of: ["!", "?", "."] as [Character]).map { $0! }
         await propertyCheck(count: 500, input: name, formal, punctuate, mark) { name, formal, punctuate, mark in
-            var greeting = Greeting(name: name)
+            var greeting = try Greeting(name: name) // !performance:line
+            //| var greeting = Greeting(name: name) // performance:line
             if formal { greeting = greeting.formal() }
             if punctuate { greeting = greeting.punctuated(with: mark) }
             let salutation = formal ? "Good day" : "Hi"
@@ -30,7 +31,8 @@ struct GreetingPropertyTests {
     func registerLaws() async {
         let name = Gen.letter.array(of: 1 ... 12).map { String($0) }
         await propertyCheck(count: 200, input: name) { name in
-            let greeting = Greeting(name: name)
+            let greeting = try Greeting(name: name) // !performance:line
+            //| let greeting = Greeting(name: name) // performance:line
             #expect(greeting.formal().formal() == greeting.formal())
             #expect(greeting.casual().casual() == greeting.casual())
             #expect(greeting.formal().casual() == greeting)
@@ -38,13 +40,28 @@ struct GreetingPropertyTests {
     }
 
     @Test("A seeded generator reproduces the same names", .tags(.randomized))
-    func seededReproducibility() {
+    // !performance:begin
+    func seededReproducibility() throws {
         var first = Xoshiro256StarStar(seed: 42)
         var second = Xoshiro256StarStar(seed: 42)
         let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
         let firstNames = (0 ..< 20).map { _ in String(alphabet[first.integer(in: 0 ..< alphabet.count)]) }
         let secondNames = (0 ..< 20).map { _ in String(alphabet[second.integer(in: 0 ..< alphabet.count)]) }
+        let expected = firstNames.map { "Hi, \($0)" }
+        let actual = try firstNames.map { try Greeting(name: $0).text }
         #expect(firstNames == secondNames)
-        #expect(firstNames.allSatisfy { Greeting(name: $0).text == "Hi, \($0)" })
+        #expect(actual == expected)
     }
+    // !performance:end
+    // performance:begin
+    //| func seededReproducibility() {
+    //|     var first = Xoshiro256StarStar(seed: 42)
+    //|     var second = Xoshiro256StarStar(seed: 42)
+    //|     let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
+    //|     let firstNames = (0 ..< 20).map { _ in String(alphabet[first.integer(in: 0 ..< alphabet.count)]) }
+    //|     let secondNames = (0 ..< 20).map { _ in String(alphabet[second.integer(in: 0 ..< alphabet.count)]) }
+    //|     #expect(firstNames == secondNames)
+    //|     #expect(firstNames.allSatisfy { Greeting(name: $0).text == "Hi, \($0)" })
+    //| }
+    // performance:end
 }

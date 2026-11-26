@@ -11,7 +11,8 @@ import ViewInspector
 struct GreetingCardTests {
     @Test func theCardShowsTheGreetingInItsOwnRegister() async throws {
         let expected = "Good day, Ada!"
-        let sut = GreetingCard(greeting: Greeting(name: "Ada").formal().punctuated(with: "!"))
+        let sut = try GreetingCard(greeting: Greeting(name: "Ada").formal().punctuated(with: "!")) // !performance:line
+        //| let sut = GreetingCard(greeting: Greeting(name: "Ada").formal().punctuated(with: "!")) // performance:line
 
         try await ViewHosting.host(sut) {
             try await sut.inspection.inspect { view in
@@ -24,7 +25,8 @@ struct GreetingCardTests {
 
     @Test func tappingFormalSwitchesTheGreetingToTheFormalRegister() async throws {
         let expected = "Good day, Ada!"
-        let sut = GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!"))
+        let sut = try GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!")) // !performance:line
+        //| let sut = GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!")) // performance:line
 
         try await ViewHosting.host(sut) {
             try await sut.inspection.inspect { view in
@@ -41,7 +43,8 @@ struct GreetingCardTests {
 
     @Test func tappingTheButtonTwiceSwitchesTheGreetingBack() async throws {
         let expected = "Hi, Ada!"
-        let sut = GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!"))
+        let sut = try GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!")) // !performance:line
+        //| let sut = GreetingCard(greeting: Greeting(name: "Ada").punctuated(with: "!")) // performance:line
 
         try await ViewHosting.host(sut) {
             try await sut.inspection.inspect { view in
@@ -61,7 +64,8 @@ struct GreetingCardTests {
 
     @Test func theButtonIsLabelledWithTheRegisterItSwitchesTo() async throws {
         let expected = "Switch to the casual greeting"
-        let sut = GreetingCard(greeting: Greeting(name: "Ada").formal())
+        let sut = try GreetingCard(greeting: Greeting(name: "Ada").formal()) // !performance:line
+        //| let sut = GreetingCard(greeting: Greeting(name: "Ada").formal()) // performance:line
 
         try await ViewHosting.host(sut) {
             try await sut.inspection.inspect { view in

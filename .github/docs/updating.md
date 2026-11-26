@@ -46,6 +46,12 @@ commit, the project's options and the new one). Otherwise `add` it and resolve w
 An option newer than the stamped commit can be neither stamped nor added there, so for it the note
 names the commit that brought the option: `update --to` that commit or a later one, then `add`.
 
+A library or server stamped before `--performance` existed gets a note too: the template now
+renders the throwing error convention by default, so the update brings it to AGENTS.md's Errors
+section and the Greetings example. A high-performance library keeps trap and `checked:` spellings
+with `./template.py add <project> --performance` after the update; the update records the option
+off in the stamp, so the note comes once.
+
 `add` on a project that already holds the option's files reports four things that need work:
 
 - The option's sample content, written for the template's `Greetings` module, arrives under

@@ -9,7 +9,7 @@ and `templates/` stay behind.
 
 ## Optional pieces
 
-Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `views`, `examples`, `ios`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `swiftui`, `simulator`, `wasi`, `ci`, `trunk`) keeps
+Every optional piece (`benchmarks`, `mutation`, `fuzz`, `differential`, `wasm`, `explore`, `views`, `examples`, `ios`, `performance`, `library`, `server`, `embedded`, `mcp`, `app`, `fly`, `database`, `litestream`, `swiftui`, `simulator`, `wasi`, `ci`, `trunk`) keeps
 or drops the sections marked for it, in any text file. `litestream` is on with `fly` and `database`
 together, `swiftui` with `app` or `views` (the lint stack and view-test packages they share), `simulator`
 with `app`, `ios` or the `--simulator` option (the test host, `.bazelrc`'s simulator settings and `tools/ios.bzl`), and
@@ -69,7 +69,7 @@ numbering intact.
 | App type | `templates/app/`, `IOS_MODULES` in `scripts/modules.py` | iOS modules get `target_compatible_with` iOS and no docs; Package.swift declares only the packages its own targets use; a test target depending on one becomes an `ios_unit_test` hosted by `tools/test_host` (a logic test can't give a window a scene) on rules_apple's default runner, which drives `xcodebuild`, with a `Snapshots` resource bundle; `tools/ios.bzl` (generated) tells the root BUILD which packages to leave out of the docs and `//:package_swift_test`. Lint is an aspect (`tools/lint.bzl`) over `swift_library` targets with no external workspace |
 | Views option | `templates/views/`, `APPLE_ONLY_PACKAGES` and `APPLE_ONLY_TESTS` in `scripts/modules.py` | A library's SwiftUI modules: `#if canImport(SwiftUI)` sources, tests on the Mac under `#if os(macOS)`; a test target on SnapshotTesting gets `__Snapshots__` as `data` (Bazel) and excluded (SwiftPM). Lint (`tools/lint.bzl`, `third_party/`, `.swiftlint*.yml`) is shared with the app type, marked `swiftui` |
 | Embedded type | `templates/embedded/`, `FIRMWARE_MODULES` in `scripts/modules.py` | `embedded_swift_module` per firmware module and `embedded_swift_firmware` (`tools/embedded.bzl`); the ESP-IDF build runs Bazel before compiling the app, checks the modules' architecture against the chip's, and keeps the GOT that Swift's position-independent code needs (`Firmware/main/swift.lf`) |
-| Example module | `Sources/Greetings`, `Tests/GreetingsTests` | The house style: composable value type, plain/checked spellings, hand-worked, edge, exit and property tests |
+| Example module | `Sources/Greetings`, `Tests/GreetingsTests` | The house style: composable value type, a plain spelling that throws (trap and `checked:` spellings with exit tests under `performance`, dormant `//|` lines here, so the template's own build tests the throwing one), hand-worked, edge and property tests |
 | Agent instructions | `AGENTS.md` (`CLAUDE.md` includes it) | Layout, commands, building blocks, feature checklist, house rules, API conventions |
 | Claude permissions | `.claude/settings.json` | `just`, `bazel build/test/query`, read-only git |
 
@@ -87,7 +87,10 @@ The template repository runs no CI, so these local checks are all that stands be
    - `--embedded` alone and with `--wasm`;
    - `--mcp`;
    - `--app` alone and with `--benchmarks --mutation`;
-   - `--library --views`, `--library --ios`, `--server --ios` and `--library --simulator`.
+   - `--library --views`, `--library --ios`, `--server --ios` and `--library --simulator`;
+   - after touching anything marked `performance` (the Greetings example and every sample that
+     calls it), `--library --performance` and `--server --performance`, with
+     `--benchmarks --mutation --fuzz --differential --explore` on the library.
 3. Run what the change touches in the bootstrapped project:
 
 | Change | Also run |

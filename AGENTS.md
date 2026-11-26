@@ -566,8 +566,9 @@ dependencies as `"<identity>/<Product>"` (`"swiftprng/Generators"`), as the rows
 | [Afluent](https://github.com/Tyler-Keith-Thompson/Afluent) | Reactive operators over async/await: `DeferredTask` (a unit of work that yields one value) and `AsyncSequence` extensions with Combine's names (`map`, `flatMap`, `catch`, `retry`, `debounce`, `share`, …), plus `AfluentTesting` | Pipelines over async work where Combine would once have been used; a Combine replacement in new code. Products `"afluent/Afluent"` and, for test targets, `"afluent/AfluentTesting"`. |
 | [DebugDrawer](https://github.com/Tyler-Keith-Thompson/DebugDrawer) | A plugin-based debug drawer for SwiftUI apps on iOS and macOS: a slide-in panel attached at the root view (`.debugDrawer()`), opened by `DebugDrawer.shared.toggle()`, with a library per plugin (console, performance, network, UserDefaults, app info, …) and local plugins tied to a view's lifetime (`.debugLocalPlugin(_:)`). It compiles to no-ops in release builds | Any debug-only tool an app needs (a switch, a fake response, a state dump): write a DebugDrawer plugin, installed from the composition root, instead of a one-off debug screen or gesture. Products are per plugin (`"debugdrawer/DebugDrawerConsolePlugin"`, …); the core is `"debugdrawer/DebugDrawer"`. | <!-- swiftui:line -->
 
-Their conventions carry over: value types, typed errors, `checked:` spellings that throw where
-the plain spelling traps, tests with Swift Testing.
+Their conventions carry over: value types, typed errors, `checked:` spellings that throw where <!-- performance:line -->
+the plain spelling traps, tests with Swift Testing. <!-- performance:line -->
+Their conventions carry over: value types, typed errors, tests with Swift Testing. <!-- !performance:line -->
 
 ## Workflow
 
@@ -582,8 +583,9 @@ have.
 2. **Tests** in `Tests/<Module>Tests`:
    - hand-worked cases;
    - edge cases: empty input, one element, the boundaries of every range;
-   - `checked:` spellings and their errors;
-   - exit tests for every trap;
+   - every error the code throws, each from the input that causes it; <!-- !performance:line -->
+   - `checked:` spellings and their errors; <!-- performance:line -->
+   - exit tests for every trap; <!-- performance:line -->
    - a property test against a naive reference (`swift-property-based`).
 <!-- mutation:begin -->
    - planted bugs in `scripts/mutants/<Module>.py` for the new code, then `just mutate <Module>`:
@@ -787,7 +789,8 @@ library with none of that can skip this section.
 - Each test is self-contained and portable: no assertion or setup helpers, not DRY; a test
   copied to another file still works. Shared fixture data in `ProjectNameTestSupport` is tolerated;
   shared assertions are not.
-- Test names state the rule they pin ("The checked spelling throws EmptyName for an empty name").
+- Test names state the rule they pin ("An empty name throws EmptyName"). <!-- !performance:line -->
+- Test names state the rule they pin ("The checked spelling throws EmptyName for an empty name"). <!-- performance:line -->
 - **Sociable.** A test runs the real code under test and its real collaborators wherever they are
   fast and deterministic, and mocks only the seams that reach out (network, disk, clock) or that
   it must steer. Inside `withTestContainer { }`, `Container.x.useProduction()` resolves the real
@@ -844,10 +847,21 @@ library with none of that can skip this section.
 
 ### Errors
 
+<!-- !performance:begin -->
+- **Everything that can fail throws** a typed, payload-free error from its one spelling
+  (`Greeting(name:)` throws `EmptyName`). There are no second throwing spellings, no nil-returning
+  variants and no traps that can fire at run time; `try?` gives `nil`. Spellings that trap, each
+  with a throwing twin, suit only a benchmarked library whose API runs in its callers' hot loops
+  (graphs, collections, numeric kernels), which the project template renders with
+  `--performance`; its README says when that fits. Anywhere else, and wherever input comes from
+  users, the network or files, keep throwing: a caller can ignore an error, but not a crash.
+<!-- !performance:end -->
+<!-- performance:begin -->
 - **Plain spellings trap** on a precondition failure, like an `Array` subscript. They are the
   fast path.
 - **`checked:` spellings throw** a typed, payload-free error (`Greeting(checkedName:)` throws
   `EmptyName`). There are no nil-returning variants; `try?` gives `nil`.
+<!-- performance:end -->
 - **Invariant-breaking mutations throw on the plain spelling** and change nothing, with one typed
   error per invariant whose cases make a single `catch` exhaustive.
 - **Queries whose failure is the answer return a witness** (`findCycle() -> Cycle?`), not an
@@ -859,6 +873,7 @@ library with none of that can skip this section.
 - Lazy views end in `View`; the materialized form drops the suffix.
 - Materializing operations are static factories on a target the caller picks.
 
+<!-- performance:begin -->
 ### Performance patterns
 
 - Public types are copy-on-write structs, `@frozen`, with `@usableFromInline` internals.
@@ -870,3 +885,4 @@ library with none of that can skip this section.
   class property (copies and retains); lazy maps capturing `self`.
 - Write overflow guards as comparisons (`x <= Int.max / 4`), not a discarded
   `multipliedReportingOverflow` result.
+<!-- performance:end -->

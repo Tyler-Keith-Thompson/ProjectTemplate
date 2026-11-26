@@ -5,9 +5,16 @@ import Greetings
 /// The greeting the page shows: `name` greeted in the chosen register, ending in `punctuation`.
 /// The snippets are what the code panel shows.
 func greetingText(name: String, formal: Bool, punctuation: Character?) throws(EmptyName) -> String {
-    // snippet: greetings-checked
-    var greeting = try Greeting(checkedName: name)
+    // !performance:begin
+    // snippet: greetings-greeting
+    var greeting = try Greeting(name: name)
     // snippet end
+    // !performance:end
+    // performance:begin
+    //| // snippet: greetings-greeting
+    //| var greeting = try Greeting(checkedName: name)
+    //| // snippet end
+    // performance:end
     if formal {
         // snippet: greetings-formal
         greeting = greeting.formal()

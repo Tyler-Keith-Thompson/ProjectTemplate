@@ -33,7 +33,8 @@ Every example here is a test in `Tests/ProjectNameTests`, so it cannot drift fro
 ```swift
 import ProjectName
 
-let greeting = Greeting(name: "Ada").formal().punctuated(with: "!")
+let greeting = try Greeting(name: "Ada").formal().punctuated(with: "!") <!-- !performance:line -->
+let greeting = Greeting(name: "Ada").formal().punctuated(with: "!") <!-- performance:line -->
 print(greeting.text)  // Good day, Ada!
 ```
 <!-- library:end -->

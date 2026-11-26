@@ -6,8 +6,14 @@ import Testing
 @Suite("README examples")
 struct READMEExamplesTests {
     @Test("Usage")
-    func usage() {
-        let greeting = Greeting(name: "Ada").formal().punctuated(with: "!")
+    // !performance:begin
+    func usage() throws {
+        let greeting = try Greeting(name: "Ada").formal().punctuated(with: "!")
+    // !performance:end
+    // performance:begin
+    //| func usage() {
+    //|     let greeting = Greeting(name: "Ada").formal().punctuated(with: "!")
+    // performance:end
         #expect(greeting.text == "Good day, Ada!")
     }
 }

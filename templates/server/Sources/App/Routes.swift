@@ -14,7 +14,8 @@ func routes(_ app: Application) throws {
     // A formal greeting of the name in the path: GET /hello/Ada answers "Good day, Ada!".
     app.get("hello", ":name") { request async throws in
         let name = try request.parameters.require("name")
-        let greeting = Greeting(name: name).formal().punctuated(with: "!")
+        let greeting = try Greeting(name: name).formal().punctuated(with: "!") // !performance:line
+        //| let greeting = Greeting(name: name).formal().punctuated(with: "!") // performance:line
         // database:begin
         try await GreetingRecord(name: name).save(on: request.db)
         // database:end

@@ -80,7 +80,8 @@ class TemplateCommandTests(unittest.TestCase):
         directory = self.render(self.scratch / label, *flags)
         stamp = {"commit": self.commit, "name": NAME, "type": "library", "benchmarks": False, "mutation": False,
                  "fuzz": False, "differential": False, "wasm": False, "explore": False, "views": False,
-                 "examples": False, "fly": False, "database": False, "ci": True, "trunk": False, **stamp}
+                 "examples": False, "performance": False, "fly": False, "database": False, "ci": True, "trunk": False,
+                 **stamp}
         (directory / ".template.json").write_text(json.dumps(stamp, indent=2) + "\n")
         git("init", "-q", "-b", "main", cwd=directory)
         git("add", "-A", cwd=directory)
@@ -256,6 +257,106 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn("justfile: {{BAZEL}} run //Apps/Demo", result.stdout)
         self.assertEqual(build.read_text().count(load), 2)
 
+    # The bullets every variant of AGENTS.md's Errors section keeps word for word.
+    INVARIANT_BULLETS = (
+        "- **Invariant-breaking mutations throw on the plain spelling** and change nothing, with one typed\n"
+        "  error per invariant whose cases make a single `catch` exhaustive.\n"
+        "- **Queries whose failure is the answer return a witness** (`findCycle() -> Cycle?`), not an\n"
+        "  error.\n")
+    TRAP_BULLETS = (
+        "- **Plain spellings trap** on a precondition failure, like an `Array` subscript. They are the\n"
+        "  fast path.\n"
+        "- **`checked:` spellings throw** a typed, payload-free error (`Greeting(checkedName:)` throws\n"
+        "  `EmptyName`). There are no nil-returning variants; `try?` gives `nil`.\n")
+
+    def test_a_library_without_performance_throws_where_it_can_fail_and_never_traps(self):
+        directory = self.render(self.scratch / "throwing-library", "--library")
+
+        agents = (directory / "AGENTS.md").read_text()
+        greeting = (directory / "Sources" / "Greetings" / "Greeting.swift").read_text()
+
+        for phrase in ("checked:", "Plain spellings trap", "exit tests for every trap", "Performance patterns"):
+            self.assertNotIn(phrase, agents)
+        self.assertIn("- **Everything that can fail throws** a typed, payload-free error from its one spelling", agents)
+        self.assertIn("`--performance`", agents)
+        self.assertIn("   - every error the code throws, each from the input that causes it;\n", agents)
+        self.assertIn("Their conventions carry over: value types, typed errors, tests with Swift Testing.\n", agents)
+        self.assertIn("### Errors\n\n- **Everything that can fail throws**", agents)
+        self.assertIn(self.INVARIANT_BULLETS, agents)
+        self.assertIn("public init(name: String) throws(EmptyName) {", greeting)
+        for absent in ("checkedName", "precondition(", "@inlinable", "@frozen"):
+            self.assertNotIn(absent, greeting)
+        self.assertFalse((directory / "Tests" / "GreetingsTests" / "GreetingExitTests.swift").exists())
+        self.assertNotIn("precondition", (directory / "Tests" / "DemoTestSupport" / "Tags.swift").read_text())
+
+    def test_a_library_with_performance_keeps_trap_and_checked_spellings_and_the_performance_patterns(self):
+        directory = self.render(self.scratch / "performance-library", "--library", "--performance")
+        template_agents = git("show", "HEAD~0:AGENTS.md", cwd=self.template)
+
+        agents = (directory / "AGENTS.md").read_text()
+        greeting = (directory / "Sources" / "Greetings" / "Greeting.swift").read_text()
+
+        self.assertIn("### Errors\n\n" + self.TRAP_BULLETS + self.INVARIANT_BULLETS, agents)
+        self.assertIn("   - `checked:` spellings and their errors;\n   - exit tests for every trap;\n", agents)
+        self.assertIn("Their conventions carry over: value types, typed errors, `checked:` spellings that throw where\n"
+                      "the plain spelling traps, tests with Swift Testing.\n", agents)
+        self.assertIn('("The checked spelling throws EmptyName for an empty name")', agents)
+        self.assertNotIn("Everything that can fail throws", agents)
+        patterns = agents[agents.index("### Performance patterns"):]
+        self.assertIn("- Write overflow guards as comparisons (`x <= Int.max / 4`), not a discarded\n"
+                      "  `multipliedReportingOverflow` result.\n", patterns)
+        self.assertTrue(agents.endswith("`multipliedReportingOverflow` result.\n"))
+        self.assertNotIn("performance:", agents)
+        self.assertIn("### Performance patterns", template_agents)
+        self.assertIn('precondition(!name.isEmpty, "A greeting needs a name")', greeting)
+        self.assertIn("public init(checkedName name: String) throws(EmptyName) {", greeting)
+        self.assertTrue((directory / "Tests" / "GreetingsTests" / "GreetingExitTests.swift").is_file())
+
+    def test_performance_is_refused_for_a_type_that_doesnt_take_it(self):
+        refused = {}
+        for kind in ("mcp", "app", "embedded"):
+            result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", f"--{kind}", "--performance",
+                         NAME, str(self.scratch / f"performance-{kind}"), cwd=self.scratch)
+            refused[kind] = (result.returncode != 0, "--performance applies to the library and server types only" in result.stderr)
+        project = self.project("add-performance-mcp", {"type": "mcp"}, "--mcp")
+
+        added = self.template_py("add", str(project), "--performance")
+
+        self.assertEqual(refused, {kind: (True, True) for kind in refused})
+        self.assertNotEqual(added.returncode, 0)
+        self.assertIn("--performance doesn't apply to the mcp type", added.stderr)
+
+    def test_update_notes_the_throwing_default_once_for_a_library_or_server_stamped_before_performance(self):
+        notes = {}
+        stamps = {}
+        for kind in ("library", "server", "mcp"):
+            project = self.project(f"update-before-performance-{kind}", {"type": kind}, f"--{kind}")
+            path = project / ".template.json"
+            stamp = json.loads(path.read_text())
+            del stamp["performance"]
+            path.write_text(json.dumps(stamp, indent=2) + "\n")
+            git("commit", "-q", "-am", "a stamp from before --performance", cwd=project)
+            readme = self.template / "README.md"
+            readme.write_text(readme.read_text() + "\nA later template change.\n")
+            git("commit", "-q", "-am", "later", cwd=self.template)
+            try:
+                first = self.template_py("update", str(project))
+                git("add", "-A", cwd=project)
+                git("commit", "-q", "-m", "update", cwd=project)
+                readme.write_text(readme.read_text() + "\nAnother.\n")
+                git("commit", "-q", "-am", "later still", cwd=self.template)
+                second = self.template_py("update", str(project))
+            finally:
+                git("reset", "-q", "--hard", self.commit, cwd=self.template)
+            notes[kind] = ("stamp predates --performance" in first.stderr, "stamp predates --performance" in second.stderr)
+            stamps[kind] = json.loads(path.read_text()).get("performance")
+            if kind == "library":
+                self.assertIn("renders the throwing error convention by default", first.stderr)
+                self.assertIn(f"./template.py add {project.resolve()} --performance", first.stderr)
+
+        self.assertEqual(notes, {"library": (True, False), "server": (True, False), "mcp": (False, False)})
+        self.assertEqual(stamps, {"library": False, "server": False, "mcp": None})
+
     def test_a_render_leaves_out_the_templates_own_readme_and_docs(self):
         directory = self.render(self.scratch / "own-docs", "--library")
 
@@ -382,8 +483,8 @@ class TemplateCommandTests(unittest.TestCase):
         spec.loader.exec_module(template)
         everywhere = ["benchmarks", "mutation", "fuzz", "differential"]
         every_option = {
-            "library": everywhere + ["wasm", "explore", "views", "examples", "ios", "simulator", "trunk"],
-            "server": everywhere + ["ios", "simulator", "fly", "database", "trunk"],
+            "library": everywhere + ["wasm", "explore", "views", "examples", "ios", "simulator", "performance", "trunk"],
+            "server": everywhere + ["ios", "simulator", "performance", "fly", "database", "trunk"],
             "embedded": everywhere + ["wasm", "trunk"],
             "mcp": everywhere + ["trunk"],
             "app": everywhere,

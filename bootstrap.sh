@@ -36,6 +36,15 @@
 #   --simulator             Library or server: what simulator tests need (tools/test_host, the
 #                           simulator settings in .bazelrc, tools/ios.bzl), without an app. --ios
 #                           brings it too.
+#   --performance           Library or server: the error convention of a high-performance library.
+#                           Plain spellings trap on a precondition failure and `checked:` spellings
+#                           throw, with exit tests for every trap and AGENTS.md's Performance
+#                           patterns. Without it, plain spellings throw a typed error and nothing
+#                           traps at run time. Only for an API that runs in its callers' hot loops
+#                           (data structures, graph algorithms, numeric kernels, per-frame engines),
+#                           benchmarked, with speed a requirement. Not for apps, servers, SDKs inside
+#                           someone else's app, tools, or code that parses data or takes input from
+#                           users, the network or files. If in doubt, leave it off.
 #   --fly                   Server only: deploy to Fly.io (fly.toml; with CI, a deploy job in
 #                           Release deploys every push to main, else `just deploy` only).
 #   --database              Server only: SQLite through Fluent. With --fly, Litestream replicates
@@ -47,7 +56,8 @@
 #                           (--ci), and the only option asked as [Y/n]. The app type has none: the
 #                           workflows run in Linux containers, and its tests need a Mac.
 #   --no-benchmarks, --no-mutation, --no-fuzz,
-#                           --no-differential, --no-wasm, --no-explore, --no-views, --no-examples, --no-ios, --no-simulator, --no-fly,
+#                           --no-differential, --no-wasm, --no-explore, --no-views, --no-examples, --no-ios, --no-simulator,
+#                           --no-performance, --no-fly,
 #                           --no-database, --no-trunk
 #   --yes, -y               Ask nothing.
 #   --render-only           Copy, rename and keep or drop the optional sections, then stop: no
@@ -61,7 +71,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '3,54p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '3,64p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "${1:-1}"
 }
 
@@ -76,6 +86,7 @@ VIEWS=""
 EXAMPLES=""
 IOS=""
 SIMULATOR_OPTION=""
+PERFORMANCE=""
 FLY=""
 DATABASE=""
 CI=""
@@ -112,6 +123,8 @@ while [ $# -gt 0 ]; do
         --no-ios) IOS=false ;;
         --simulator) SIMULATOR_OPTION=true ;;
         --no-simulator) SIMULATOR_OPTION=false ;;
+        --performance) PERFORMANCE=true ;;
+        --no-performance) PERFORMANCE=false ;;
         --fly) FLY=true ;;
         --no-fly) FLY=false ;;
         --database) DATABASE=true ;;
@@ -220,6 +233,10 @@ if { [ "$TYPE" != library ] && [ "$TYPE" != server ]; } && [ "$SIMULATOR_OPTION"
     echo "--simulator applies to the library and server types only (the app type has the simulator already)" >&2
     exit 1
 fi
+if { [ "$TYPE" != library ] && [ "$TYPE" != server ]; } && [ "$PERFORMANCE" = true ]; then
+    echo "--performance applies to the library and server types only (firmware, MCP servers and apps throw rather than trap)" >&2
+    exit 1
+fi
 if [ "$TYPE" = app ]; then
     if [ "$CI" = true ] || [ "$TRUNK" = true ]; then
         echo "The app type has no CI (--ci, --trunk): the workflows run in Linux containers, and its tests need a Mac" >&2
@@ -254,6 +271,9 @@ ask_simulator() {  # --simulator, asked only without --ios, which brings the sim
         SIMULATOR_OPTION="$(ask_unset "$SIMULATOR_OPTION" "Tests in the iOS simulator, without an app?")"
     fi
 }
+ask_performance() {  # --performance, asked of the library and server types alone
+    PERFORMANCE="$(ask_unset "$PERFORMANCE" "High-performance library (trap + checked: spellings; only for hot-path code like graph or collection libraries)?")"
+}
 CI="$(ask_unset_yes "$CI" "GitHub Actions (CI, releases, published docs)?")"
 if [ "$CI" = true ]; then
     TRUNK="$(ask_unset "$TRUNK" "Merge pull requests through Trunk's merge queue?")"
@@ -276,6 +296,7 @@ if [ "$TYPE" = server ]; then
     EXAMPLES=false
     IOS="$(ask_unset "$IOS" "An iOS app (and iOS modules tested in the simulator)?")"
     ask_simulator
+    ask_performance
 elif [ "$TYPE" = embedded ]; then
     FLY=false
     DATABASE=false
@@ -301,9 +322,11 @@ else
     EXAMPLES="$(ask_unset "$EXAMPLES" "Example apps for iOS, macOS, visionOS and watchOS?")"
     IOS="$(ask_unset "$IOS" "An iOS app (and iOS modules tested in the simulator)?")"
     ask_simulator
+    ask_performance
 fi
-# Only the library and server types take --simulator; elsewhere the type decides.
+# Only the library and server types take --simulator and --performance; elsewhere the type decides.
 [ -n "$SIMULATOR_OPTION" ] || SIMULATOR_OPTION=false
+[ -n "$PERFORMANCE" ] || PERFORMANCE=false
 BENCHMARKS="$(ask_unset "$BENCHMARKS" "Benchmarks package?")"
 MUTATION="$(ask_unset "$MUTATION" "Mutation testing?")"
 FUZZ="$(ask_unset "$FUZZ" "Fuzzing with libFuzzer?")"
@@ -335,7 +358,7 @@ SIMULATOR=false
 { [ "$APP" = true ] || [ "$IOS" = true ] || [ "$SIMULATOR_OPTION" = true ]; } && SIMULATOR=true
 
 if [ "$RENDER_ONLY" = false ]; then
-    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, views: $VIEWS, examples: $EXAMPLES, ios: $IOS, simulator: $SIMULATOR_OPTION, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
+    echo "Creating $NAME ($TYPE; benchmarks: $BENCHMARKS, mutation: $MUTATION, fuzz: $FUZZ, differential: $DIFFERENTIAL, wasm: $WASM, explore: $EXPLORE, views: $VIEWS, examples: $EXAMPLES, ios: $IOS, simulator: $SIMULATOR_OPTION, performance: $PERFORMANCE, fly: $FLY, database: $DATABASE, ci: $CI, trunk: $TRUNK) at $DEST"
 fi
 
 mkdir -p "$DEST"
@@ -425,6 +448,7 @@ remove_unless "$WASM" scripts/wasi_test.py
 remove_unless "$EXPLORE" Explore
 remove_unless "$SWIFTUI" tools/lint.bzl third_party .swiftlint.yml .swiftlint-tests.yml
 remove_unless "$DIFFERENTIAL" Differential scripts/differential.py scripts/differential_greetings.py
+remove_unless "$PERFORMANCE" Tests/GreetingsTests/GreetingExitTests.swift
 remove_unless "$FLY" fly.toml
 remove_unless "$DATABASE" Sources/App/Database
 remove_unless "$LITESTREAM" litestream.yml scripts/docker-entrypoint.sh
@@ -456,7 +480,7 @@ done
 #                                                       it stops the render, naming file and line
 #
 # <comment> is #, // or <!--. Blocks nest; a line is kept when every enclosing block is.
-python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "ios=$IOS" "simulator=$SIMULATOR" "swiftui=$SWIFTUI" "wasi=$WASI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
+python3 - "$DEST" "benchmarks=$BENCHMARKS" "mutation=$MUTATION" "fuzz=$FUZZ" "differential=$DIFFERENTIAL" "wasm=$WASM" "explore=$EXPLORE" "views=$VIEWS" "examples=$EXAMPLES" "ios=$IOS" "simulator=$SIMULATOR" "performance=$PERFORMANCE" "swiftui=$SWIFTUI" "wasi=$WASI" "library=$LIBRARY" "server=$SERVER" "embedded=$EMBEDDED" "mcp=$MCP" "app=$APP" "fly=$FLY" \
     "database=$DATABASE" "litestream=$LITESTREAM" "ci=$CI" "trunk=$TRUNK" "template=false" <<'PY'
 import pathlib, re, sys
 
@@ -550,14 +574,14 @@ if COMMIT="$(git -C "$TEMPLATE" rev-parse --verify HEAD 2>/dev/null)"; then
         MODIFIED=true
         echo "Note: the template has uncommitted changes, so the stamp in .template.json is approximate." >&2
     fi
-    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$VIEWS" "$EXAMPLES" "$IOS" "$SIMULATOR_OPTION" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
+    python3 - "$DEST/.template.json" "$COMMIT" "$NAME" "$TYPE" "$BENCHMARKS" "$MUTATION" "$FUZZ" "$DIFFERENTIAL" "$WASM" "$EXPLORE" "$VIEWS" "$EXAMPLES" "$IOS" "$SIMULATOR_OPTION" "$PERFORMANCE" "$FLY" "$DATABASE" "$CI" "$TRUNK" "$MODIFIED" <<'PY'
 import json, sys
 
-path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, views, examples, ios, simulator, fly, database, ci, trunk, modified = sys.argv[1:]
+path, commit, name, kind, benchmarks, mutation, fuzz, differential, wasm, explore, views, examples, ios, simulator, performance, fly, database, ci, trunk, modified = sys.argv[1:]
 stamp = {"commit": commit, "name": name, "type": kind, "benchmarks": benchmarks == "true",
          "mutation": mutation == "true", "fuzz": fuzz == "true",
          "differential": differential == "true", "wasm": wasm == "true",
-         "explore": explore == "true", "views": views == "true", "examples": examples == "true", "ios": ios == "true", "simulator": simulator == "true", "fly": fly == "true", "database": database == "true",
+         "explore": explore == "true", "views": views == "true", "examples": examples == "true", "ios": ios == "true", "simulator": simulator == "true", "performance": performance == "true", "fly": fly == "true", "database": database == "true",
          "ci": ci == "true", "trunk": trunk == "true"}
 if modified == "true":
     stamp["modified"] = True

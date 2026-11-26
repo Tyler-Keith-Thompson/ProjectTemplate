@@ -8,7 +8,12 @@ import SwiftUI
 struct ExampleApp: App {
     var body: some Scene {
         WindowGroup {
-            ExampleView(greeting: .example)
+            // !performance:begin
+            if let greeting = try? Greeting.example() {
+                ExampleView(greeting: greeting)
+            }
+            // !performance:end
+            //| ExampleView(greeting: .example) // performance:line
         }
     }
 }

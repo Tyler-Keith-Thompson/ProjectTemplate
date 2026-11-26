@@ -20,7 +20,7 @@ public protocol GreetingService: Sendable {
 struct _GreetingService: GreetingService {
     func greeting(for name: String) -> any AsynchronousUnitOfWork<Greeting> {
         DeferredTask {
-            try Greeting(checkedName: name.trimmingCharacters(in: .whitespaces))
+            try Greeting(name: name.trimmingCharacters(in: .whitespaces))
                 .formal()
                 .punctuated(with: "!")
         }
