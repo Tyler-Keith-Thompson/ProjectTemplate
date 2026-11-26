@@ -90,7 +90,9 @@ changes files in the project).
 `add` turns options on later (`--wasm`, `--explore`, `--fuzz`, any of `bootstrap.sh`'s options for
 the project's type). It renders the template at the stamped commit twice, with the project's
 options and with the new ones too, and merges every file that differs the same way, so the result
-matches a project made with those options from the start. It refuses an option the stamped commit
+matches a project made with those options from the start. A file the option adds to a directory
+the project deleted (the `Greetings` sample it replaced) is skipped and reported, not installed;
+in a new directory, or one the project kept, it is added. It refuses an option the stamped commit
 doesn't know yet (run `update` first) or one that doesn't fit the project's type, needs a clean
 worktree, records the options in the stamp, and never commits.
 

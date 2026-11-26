@@ -239,6 +239,39 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--simulator doesn't apply to the mcp type", result.stderr)
 
+    def test_add_skips_a_file_the_option_adds_to_a_sample_module_the_project_removed(self):
+        project = self.project("add-performance-without-greetings", {}, "--library")
+        shutil.rmtree(project / "Sources" / "Greetings")
+        shutil.rmtree(project / "Tests" / "GreetingsTests")
+        git("add", "-A", cwd=project)
+        git("commit", "-q", "-m", "the Greetings sample replaced", cwd=project)
+
+        result = self.template_py("add", str(project), "--performance")
+
+        self.assertIn("Tests/GreetingsTests/GreetingExitTests.swift (the template added it to Tests/GreetingsTests, "
+                      "which this project removed)", result.stdout)
+        # scripts/modules.py still lists Greetings here, so its generated files (BUILD.bazel, a stub
+        # source) return; none of the template's own does.
+        self.assertFalse((project / "Tests" / "GreetingsTests" / "GreetingExitTests.swift").exists())
+        self.assertFalse((project / "Sources" / "Greetings" / "Greeting.swift").exists())
+
+    def test_add_installs_a_file_the_option_adds_to_a_kept_directory_or_a_new_one(self):
+        project = self.project("add-performance-and-benchmarks", {}, "--library")
+        shutil.rmtree(project / "Sources" / "Greetings")
+        git("add", "-A", cwd=project)
+        git("commit", "-q", "-m", "the Greetings module replaced, its tests kept", cwd=project)
+
+        performance = self.template_py("add", str(project), "--performance")
+        git("add", "-A", cwd=project)
+        git("commit", "-q", "-m", "performance", cwd=project)
+        benchmarks = self.template_py("add", str(project), "--benchmarks")
+
+        self.assertIn("Tests/GreetingsTests/GreetingExitTests.swift", performance.stdout)
+        self.assertNotIn("which this project removed", performance.stdout)
+        self.assertTrue((project / "Tests" / "GreetingsTests" / "GreetingExitTests.swift").is_file())
+        self.assertNotIn("which this project removed", benchmarks.stdout)
+        self.assertTrue((project / "Benchmarks" / "Package.swift").is_file())
+
     def test_add_ios_reports_what_the_project_had_already_copied_by_hand_as_duplicates(self):
         project = self.project("add-ios-by-hand", {"type": "server"}, "--server")
         load = 'load("//tools:ios.bzl", "IOS_PACKAGES", "SIMULATOR_TEST_PACKAGES")'

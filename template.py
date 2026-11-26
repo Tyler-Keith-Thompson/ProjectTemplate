@@ -346,7 +346,8 @@ def merge(project, base, new, base_label, new_label):
                                     "kept", "skipped", "regenerated")}
     empty = base.parent / "empty"
     empty.write_text("")
-    for relative in sorted(files(base) | files(new)):
+    base_files = files(base)
+    for relative in sorted(base_files | files(new)):
         if relative == STAMP:
             continue
         old, current, theirs = base / relative, project / relative, new / relative
@@ -373,6 +374,8 @@ def merge(project, base, new, base_label, new_label):
         if not current.is_file():
             if old.is_file():
                 report["skipped"].append(f"{relative} (the template changed it; this project removed it)")
+            elif removed := removed_directory(project, base_files, relative):
+                report["skipped"].append(f"{relative} (the template added it to {removed}, which this project removed)")
             else:
                 install(theirs, current)
                 report["added"].append(relative)
@@ -397,6 +400,21 @@ def merge(project, base, new, base_label, new_label):
             report["duplicated"].extend(f"{relative}: {line.strip()}"
                                         for line in duplicated_lines(before, theirs.read_text(), current.read_text()))
     return report
+
+
+def removed_directory(project, base_files, relative):
+    """The directory a new file lands in that the project deleted, or None.
+
+    That is the nearest directory above `relative` that holds files in the base render: when none of
+    them is left in the project (the sample module it replaced, say), the project removed it, and a
+    file the template adds there belongs to what it removed. The project's root never counts."""
+    for folder in pathlib.PurePosixPath(relative).parents:
+        if folder == pathlib.PurePosixPath("."):
+            return None
+        inside = [path for path in base_files if pathlib.PurePosixPath(path).is_relative_to(folder)]
+        if inside:
+            return None if any((project / path).is_file() for path in inside) else folder.as_posix()
+    return None
 
 
 def duplicated_lines(project, template, merged):
