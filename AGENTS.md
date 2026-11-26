@@ -309,7 +309,9 @@ the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
   groups (`<PROJECT>_WASI_TESTS`, the project's name in capitals, makes `Package.swift` declare
   only those).
 - Not run on WASI: files with exit tests (no child processes; the manifest leaves them out), and
-  anything needing threads (`#if !os(WASI)`).
+  anything needing threads (`#if !os(WASI)`). `//:package_swift_test` fails when a target's
+  `wasi: [...]` list names a file that no longer holds an exit test, or misses one that does; run
+  `just modules` after adding, renaming or deleting one.
 - WASI runs every task on one thread, and a sleep that is cancelled still holds it until its
   deadline. A time limit's timer is such a sleep: the body runs, but the timer then holds the
   thread for the whole limit, so every `.timeLimit` test reports its limit exceeded. The script
