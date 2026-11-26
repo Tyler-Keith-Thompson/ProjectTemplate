@@ -61,4 +61,13 @@ struct ToolServerTests {
         await client.disconnect()
         await server.stop()
     }
+
+    @Test("Two tools sharing a name throw DuplicateToolName")
+    func duplicateNameThrows() {
+        let tools: [ToolHandler] = [.greet, .greet]
+
+        #expect(throws: DuplicateToolName()) {
+            try ToolServer(name: "projectname", version: "0", tools: tools)
+        }
+    }
 }

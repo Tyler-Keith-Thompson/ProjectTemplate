@@ -16,8 +16,10 @@ struct Command: AsyncParsableCommand {
     /// The version the server reports to clients.
     static let version = "0.1.0"
 
+    // A thrown error (DuplicateToolName, or the transport's) reaches ArgumentParser, which prints it
+    // on standard error, never standard output, and exits non-zero.
     func run() async throws {
-        let tools = ToolServer(name: "projectname", version: Self.version, tools: [.greet])
+        let tools = try ToolServer(name: "projectname", version: Self.version, tools: [.greet])
         let server = try await tools.start(on: StdioTransport())
         await server.waitUntilCompleted()
     }

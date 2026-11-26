@@ -13,9 +13,9 @@ public struct ToolServer: Sendable {
 
     /// A server reporting `name` and `version` and offering `tools`.
     ///
-    /// - Precondition: No two tools share a name.
-    public init(name: String, version: String, tools: [ToolHandler]) {
-        precondition(Set(tools.map(\.name)).count == tools.count, "Two tools share a name.")
+    /// - Throws: ``DuplicateToolName`` when two of `tools` share a name.
+    public init(name: String, version: String, tools: [ToolHandler]) throws(DuplicateToolName) {
+        guard Set(tools.map(\.name)).count == tools.count else { throw DuplicateToolName() }
         self.name = name
         self.version = version
         self.tools = tools
@@ -30,6 +30,7 @@ public struct ToolServer: Sendable {
     public func start(on transport: some Transport) async throws -> Server {
         let server = Server(name: name, version: version, capabilities: .init(tools: .init(listChanged: false)))
         let definitions = tools.map(\.definition)
+        // Can't trap on a repeated key: init refuses tools that share a name, and `tools` is a let.
         let toolsByName = Dictionary(uniqueKeysWithValues: tools.map { ($0.name, $0) })
         await server.withMethodHandler(ListTools.self) { _ in
             ListTools.Result(tools: definitions)
