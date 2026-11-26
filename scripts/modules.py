@@ -216,8 +216,9 @@ RESOURCES = {}
 # for each. `just sources` refreshes the copies, and <name>_test fails while one differs from what
 # the generator writes (tools/generated_sources.bzl). The generator gets the inputs' paths as
 # arguments; with no output names it writes the one source to standard output, with them it gets
-# the outputs' paths first, before a `--`. Simulated benchmarks stage the generator's output at the
-# copy's path (tools/benchmarks.bzl).  # benchmarks:line
+# the outputs' paths first, before a `--`.
+# Simulated benchmarks stage the generator's output at the copy's path  # benchmarks:line
+# (tools/benchmarks.bzl).  # benchmarks:line
 # {"Greetings": [("Phrases", "//tools/phrases", ["//Sources/Greetings:phrases.txt"], [])]}
 GENERATED_SOURCES = {}
 
