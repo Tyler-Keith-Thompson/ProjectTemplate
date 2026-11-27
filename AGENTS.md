@@ -93,7 +93,9 @@ in beside the project's own: keep one definition, holding the project's rows, an
   `#if canImport(UIKit)`, and its exit tests under `#if !os(iOS)`, as iOS has none. At least one
   test must run on the Mac, since Bazel's runner fails a run of none; a target whose Mac tests are
   Apple's alone goes in `APPLE_ONLY_TESTS` too. A target that depends on an iOS module or a Bazel
-  label runs in the simulator alone already, so it isn't listed.
+  label runs in the simulator alone already, so it isn't listed. A target in `PERFORMANCE_TESTS`
+  too takes only its debug tests into the simulator; its `Performance/` tests stay on the Mac and
+  Linux. A target that runs in the simulator alone can't be in `PERFORMANCE_TESTS`.
   It needs the test host and the simulator settings in `.bazelrc`, which the app type and the <!-- !simulator:line -->
   `--simulator` and `--ios` options ship (`just modules` refuses the table without them). <!-- !simulator:line -->
   From the project template's checkout, `./template.py add <project> --simulator` brings them <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->

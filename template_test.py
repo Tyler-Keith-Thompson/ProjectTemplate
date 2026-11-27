@@ -707,6 +707,48 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn('"Sources/Screens"', (directory / "tools" / "ios.bzl").read_text())
         self.assertIn('"Tests/ScreensTests"', (directory / "tools" / "ios.bzl").read_text())
 
+    def test_a_simulator_test_target_in_performance_tests_takes_only_its_debug_tests_into_the_simulator(self):
+        directory = self.render(self.scratch / "simulator-performance", "--library", "--simulator")
+        modules = directory / "scripts" / "modules.py"
+        performance = directory / "Tests" / "GreetingsTests" / "Performance"
+        performance.mkdir()
+        (performance / "GreetingSpeedTests.swift").write_text("import Testing\n")
+        modules.write_text(modules.read_text()
+                           .replace("SIMULATOR_TESTS = []", 'SIMULATOR_TESTS = ["GreetingsTests"]', 1)
+                           .replace("PERFORMANCE_TESTS = [\n", 'PERFORMANCE_TESTS = [\n    "GreetingsTests",\n', 1))
+        expected_debug_srcs = 'glob(["**/*.swift"], exclude = ["Performance/**"])'
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        build = (directory / "Tests" / "GreetingsTests" / "BUILD.bazel").read_text()
+        debug, speed = build.split("# The speed-reliant tests")
+        self.assertIn(expected_debug_srcs, debug)
+        self.assertIn('name = "GreetingsTestsSimulator",', debug)
+        self.assertIn("ios_unit_test(", debug)
+        self.assertIn('glob(["Performance/**/*.swift"])', speed)
+        self.assertIn('name = "GreetingsPerformanceTests",', speed)
+        self.assertNotIn("ios_unit_test(", speed)
+        self.assertNotIn("Simulator", speed)
+
+    def test_check_refuses_a_simulator_only_test_target_in_performance_tests(self):
+        directory = self.render(self.scratch / "simulator-only-performance", "--library", "--ios")
+        modules = directory / "scripts" / "modules.py"
+        modules.write_text(modules.read_text()
+                           .replace("IOS_MODULES = []", 'IOS_MODULES = ["Screens"]', 1)
+                           .replace("MODULES = [\n", 'MODULES = [\n    ("Screens", "App", "Screens.", ["Greetings"]),\n', 1)
+                           .replace("TEST_TARGETS = [\n", 'TEST_TARGETS = [\n    ("ScreensTests", ["Screens"]),\n', 1)
+                           .replace("PERFORMANCE_TESTS = [\n", 'PERFORMANCE_TESTS = [\n    "ScreensTests",\n', 1))
+        for path in ("Sources/Screens/Screens.swift", "Tests/ScreensTests/ScreensTests.swift",
+                     "Tests/ScreensTests/Performance/ScreensSpeedTests.swift"):
+            (directory / path).parent.mkdir(parents=True, exist_ok=True)
+            (directory / path).write_text("import Foundation\n")
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ScreensTests runs in the simulator alone, which PERFORMANCE_TESTS doesn't support", result.stderr)
+
     def test_language_features_reach_both_build_systems_merged_with_mocking_and_a_speed_reliant_target_inherits_them(self):
         directory = self.render(self.scratch / "language-features", "--library")
         modules = directory / "scripts" / "modules.py"
