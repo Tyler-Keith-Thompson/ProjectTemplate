@@ -1037,6 +1037,44 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn(expected_manifest, (directory / "Package.swift").read_text())
         self.assertIn(expected_label, (directory / "Sources" / "GreetingsMacros" / "BUILD.bazel").read_text())
 
+    def test_a_compile_failure_test_passes_its_copts_to_the_compiler_and_pins_the_error_count(self):
+        directory = self.render(self.scratch / "compile-failure", "--library")
+        rule = (directory / "tools" / "compile_failure_test.bzl").read_text()
+        script = re.search(r'_SCRIPT = """(.*?)"""', rule, re.S).group(1)
+        bin_directory = directory / "fake-bin"
+        bin_directory.mkdir()
+        recorded = directory / "arguments"
+        # Stands in for xcrun and swiftc: records its arguments, then reports two errors.
+        stand_in = (f'#!/bin/sh\nprintf "%s\\n" "$@" > "{recorded}"\n'
+                    'echo "Fixture.swift:1:1: error: first" >&2\n'
+                    'echo "Fixture.swift:2:1: note: not an error" >&2\n'
+                    'echo "Fixture.swift:3:1: error: second" >&2\nexit 1\n')
+        for name in ("xcrun", "swiftc"):
+            (bin_directory / name).write_text(stand_in)
+            (bin_directory / name).chmod(0o755)
+        environment = {**os.environ, "PATH": f"{bin_directory}:{os.environ['PATH']}", "TEST_TMPDIR": str(directory)}
+
+        def run_script(error_count):
+            # The arguments _swift_compile_failure_test_impl formats it with, in its order.
+            expected = ["error: first"]
+            text = script % ("-I 'Sources/X' '-default-isolation' 'MainActor'", "Fixture.swift", "".join(expected),
+                             "Fixture.swift", "Fixture.swift", "\n".join(expected), error_count, error_count, error_count)
+            return subprocess.run(["sh", "-c", text], cwd=directory, env=environment, capture_output=True, text=True)
+
+        matching = run_script(2)
+        differing = run_script(1)
+        unchecked = run_script(0)
+
+        self.assertEqual(matching.returncode, 0, matching.stdout)
+        self.assertEqual(differing.returncode, 1, differing.stdout)
+        self.assertIn("The compiler reported 2 errors, not 1.", differing.stdout)
+        self.assertEqual(unchecked.returncode, 0, unchecked.stdout)
+        arguments = recorded.read_text().splitlines()
+        self.assertEqual(arguments[arguments.index("-I") + 1:arguments.index("-I") + 4], ["Sources/X", "-default-isolation", "MainActor"])
+        self.assertIn("arguments + ctx.attr.copts]", rule)
+        self.assertIn('"copts": attr.string_list(', rule)
+        self.assertIn('"error_count": attr.int(', rule)
+
     def test_check_refuses_a_plugin_on_a_plugin_an_ios_or_testing_module_one_reaching_a_plugin_or_an_example(self):
         directory = self.render(self.scratch / "plugin-refusals", "--library", "--ios")
         modules = directory / "scripts" / "modules.py"

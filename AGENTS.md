@@ -207,6 +207,8 @@ in beside the project's own: keep one definition, holding the project's rows, an
   code. A source that must not compile (a macro's diagnostic as the compiler reports it) is a
   `swift_compile_failure_test` (`tools/compile_failure_test.bzl`) in `Tests/CompileFailures`, a
   hand-written BUILD.bazel no Package.swift target holds, with a control that compiles.
+  `copts` type-checks a fixture under the flags of the target it stands for
+  (`["-default-isolation", "MainActor"]`), and `error_count` pins how many errors it reports.
   Expansion code that several plugins share (the package's own and adopters' `.macro` targets)
   lives in a library module in `MODULES` that the plugins list among their dependencies; it keeps
   its product, so adopters' plugins can depend on it. It runs inside the compiler (SwiftPM builds it
