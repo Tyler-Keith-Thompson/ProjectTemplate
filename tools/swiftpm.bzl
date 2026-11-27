@@ -19,6 +19,11 @@ else would notice. They come from the graph, like the dependencies, rather than 
 so a BUILD.bazel left stale fails the test as a stale Package.swift does.
 # wasm:begin
 
+Each target's language features (EXPERIMENTAL_FEATURES and UPCOMING_FEATURES in scripts/modules.py)
+are compared too: its swiftSettings' `.enableExperimentalFeature` and `.enableUpcomingFeature`
+entries with the `-enable-experimental-feature` and `-enable-upcoming-feature` pairs in the
+swift_library's `copts`. A feature one build system lacks compiles differently there, or not at all.
+
 Each test target's `wasi: [...]` list (the files `just wasi-test` leaves out, exit_test_files in
 scripts/modules.py) is compared with that module's sources that hold an exit test
 (`processExitsWith`): the aspect gathers a testonly module's sources, a generated one under its
@@ -36,6 +41,7 @@ _ModuleDependencies = provider(
         "name": "The module name, or for an external package's product, `identity/Product`.",
         "lines": "depset of `Module: Dependency Dependency` lines, one per first-party module.",
         "resources": "depset of `Module: .rule(\"path\")` lines, one per resource entry of a first-party module.",
+        "features": "depset of `Module: .enableExperimentalFeature(\"Name\")` lines, one per language feature of a first-party module.",
         "sources": "depset of `Module<tab>path<tab>file` lines, one per Swift source of a first-party testonly module: its path from the workspace root as SwiftPM sees it, and the file Bazel compiles.",  # wasm:line
         "source_files": "depset of the Files the `sources` lines name, for the test's runfiles.",  # wasm:line
     },
@@ -53,6 +59,7 @@ def _module_dependencies_aspect_impl(target, ctx):
             name = _external_name(target.label),
             lines = depset(),
             resources = depset(),
+            features = depset(),
             sources = depset(),  # wasm:line
             source_files = depset(),  # wasm:line
         )]
@@ -69,6 +76,17 @@ def _module_dependencies_aspect_impl(target, ctx):
         for data in getattr(ctx.rule.attr, "data", [])
         if ModuleResourcesInfo in data
         for rule, path in data[ModuleResourcesInfo].entries
+    ]
+    # Language features, spelled as Package.swift's swiftSettings spell them.
+    copts = getattr(ctx.rule.attr, "copts", [])
+    spellings = {
+        "-enable-experimental-feature": "enableExperimentalFeature",
+        "-enable-upcoming-feature": "enableUpcomingFeature",
+    }
+    features = [
+        "{}: .{}(\"{}\")".format(name, spellings[copts[index]], copts[index + 1])
+        for index in range(len(copts) - 1)
+        if copts[index] in spellings
     ]
     # wasm:begin
     # Only test modules have `wasi:` lists, and test modules are testonly. A generated source
@@ -87,6 +105,7 @@ def _module_dependencies_aspect_impl(target, ctx):
         name = name,
         lines = depset([line], transitive = [dep[_ModuleDependencies].lines for dep in deps]),
         resources = depset(resources, transitive = [dep[_ModuleDependencies].resources for dep in deps]),
+        features = depset(features, transitive = [dep[_ModuleDependencies].features for dep in deps]),
         sources = depset(sources, transitive = [dep[_ModuleDependencies].sources for dep in deps]),  # wasm:line
         source_files = depset(files, transitive = [dep[_ModuleDependencies].source_files for dep in deps]),  # wasm:line
     )]
@@ -155,10 +174,26 @@ grep -E '^ *\\.(target|executableTarget|testTarget|macro)\\(name: "' "$manifest"
     fi
     printf '%s\\n' "$list" | grep -oE "$entry" | awk -v name="$name" '{ print name ": " $0 }'
 done | LC_ALL=C sort > "$bundled"
+# One `Target: .enableExperimentalFeature("Name")` line per language feature among a target's
+# swiftSettings.
+features="$5"
+enabled="${TEST_TMPDIR:-/tmp}/enabled.txt"
+settings="${TEST_TMPDIR:-/tmp}/settings.txt"
+LC_ALL=C sort "$features" > "$enabled"
+grep -E '^ *\\.(target|executableTarget|testTarget|macro)\\(name: "' "$manifest" | while IFS= read -r line; do
+    case "$line" in
+        *"swiftSettings: ["*) ;;
+        *) continue ;;
+    esac
+    name="${line#*name: \\"}"
+    name="${name%%\\"*}"
+    printf '%s\\n' "${line#*swiftSettings: [}" | grep -oE '\\.enable(Experimental|Upcoming)Feature\\("[^"]*"\\)' \\
+        | awk -v name="$name" '{ print name ": " $0 }' || true
+done | LC_ALL=C sort > "$settings"
 # wasm:begin
 # Each test target's `wasi: [...]` entries, and the files of its directory (`path:`, else
 # Tests/<name>) among its Bazel sources that hold an exit test, as `Target: file` lines.
-sources="$5"
+sources="$6"
 declared="${TEST_TMPDIR:-/tmp}/declared.txt"
 found="${TEST_TMPDIR:-/tmp}/found.txt"
 tab=$(printf '\\t')
@@ -207,6 +242,11 @@ if ! diff -u "$resources" "$bundled"; then
     echo "Package.swift's resources differ from the module_resources targets (- Bazel, + Package.swift)."
     status=1
 fi
+if ! diff -u "$enabled" "$settings"; then
+    echo
+    echo "Package.swift's language features differ from the swift_library copts (- Bazel, + Package.swift)."
+    status=1
+fi
 # wasm:begin
 if ! diff -u "$found" "$declared"; then
     echo
@@ -230,6 +270,9 @@ def _swiftpm_manifest_test_impl(ctx):
     resources = ctx.actions.declare_file(ctx.label.name + ".resources.txt")
     entries = depset(transitive = [module[_ModuleDependencies].resources for module in ctx.attr.modules])
     ctx.actions.write(resources, "".join([entry + "\n" for entry in entries.to_list()]))
+    features = ctx.actions.declare_file(ctx.label.name + ".features.txt")
+    enabled = depset(transitive = [module[_ModuleDependencies].features for module in ctx.attr.modules])
+    ctx.actions.write(features, "".join([feature + "\n" for feature in enabled.to_list()]))
     # wasm:begin
     sources = ctx.actions.declare_file(ctx.label.name + ".sources.txt")
     listing = depset(transitive = [module[_ModuleDependencies].sources for module in ctx.attr.modules])
@@ -241,20 +284,20 @@ def _swiftpm_manifest_test_impl(ctx):
     runner = ctx.actions.declare_file(ctx.label.name + ".sh")
     ctx.actions.write(
         runner,
-        '#!/bin/sh\nexec "{}" "{}" "{}" "{}" "{}" "{}"\n'.format(checker.short_path, ctx.file.manifest.short_path, expected.short_path, products.short_path, resources.short_path, sources.short_path),  # wasm:line
-        #| '#!/bin/sh\nexec "{}" "{}" "{}" "{}" "{}"\n'.format(checker.short_path, ctx.file.manifest.short_path, expected.short_path, products.short_path, resources.short_path),  # !wasm:line
+        '#!/bin/sh\nexec "{}" "{}" "{}" "{}" "{}" "{}" "{}"\n'.format(checker.short_path, ctx.file.manifest.short_path, expected.short_path, products.short_path, resources.short_path, features.short_path, sources.short_path),  # wasm:line
+        #| '#!/bin/sh\nexec "{}" "{}" "{}" "{}" "{}" "{}"\n'.format(checker.short_path, ctx.file.manifest.short_path, expected.short_path, products.short_path, resources.short_path, features.short_path),  # !wasm:line
         is_executable = True,
     )
     return [DefaultInfo(
         executable = runner,
-        runfiles = ctx.runfiles(files = [checker, expected, products, resources, sources, ctx.file.manifest], transitive_files = source_files),  # wasm:line
-        #| runfiles = ctx.runfiles(files = [checker, expected, products, resources, ctx.file.manifest]),  # !wasm:line
+        runfiles = ctx.runfiles(files = [checker, expected, products, resources, features, sources, ctx.file.manifest], transitive_files = source_files),  # wasm:line
+        #| runfiles = ctx.runfiles(files = [checker, expected, products, resources, features, ctx.file.manifest]),  # !wasm:line
     )]
 
 swiftpm_manifest_test = rule(
     implementation = _swiftpm_manifest_test_impl,
-    doc = "Fails when Package.swift's targets, dependencies, resources, library products or exit-test exclusions differ from the Bazel graph's.",  # wasm:line
-    #| doc = "Fails when Package.swift's targets, dependencies, resources or library products differ from the Bazel graph's.",  # !wasm:line
+    doc = "Fails when Package.swift's targets, dependencies, resources, language features, library products or exit-test exclusions differ from the Bazel graph's.",  # wasm:line
+    #| doc = "Fails when Package.swift's targets, dependencies, resources, language features or library products differ from the Bazel graph's.",  # !wasm:line
     attrs = {
         "manifest": attr.label(allow_single_file = True, mandatory = True),
         "modules": attr.label_list(aspects = [_module_dependencies_aspect], mandatory = True),

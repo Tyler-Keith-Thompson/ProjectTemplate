@@ -71,6 +71,9 @@ def _embedded_swift_module_impl(ctx):
     arguments.add_all(_FLAGS)
     arguments.add("-package-name", ctx.attr.package_name)
     arguments.add("-module-name", module)
+    # The module's language features (EXPERIMENTAL_FEATURES, UPCOMING_FEATURES in scripts/modules.py),
+    # as its host swift_library has them.
+    arguments.add_all(ctx.attr.copts)
     # Each dependency's .swiftmodule sits in a directory of its own.
     arguments.add_all(imported, map_each = _directory, before_each = "-I", uniquify = True)
     arguments.add("-emit-module-path", swiftmodule)
@@ -102,6 +105,7 @@ embedded_swift_module = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = [".swift"], mandatory = True),
         "module_name": attr.string(mandatory = True),
+        "copts": attr.string_list(doc = "Language-feature flags, the same as the host swift_library's `copts`."),
         "deps": attr.label_list(providers = [EmbeddedSwiftInfo]),
         # As tools/swift_rules.bzl names the package, so `package` access works across modules.
         "package_name": attr.string(mandatory = True),

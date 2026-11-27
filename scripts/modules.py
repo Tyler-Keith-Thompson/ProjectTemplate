@@ -130,6 +130,20 @@ SIMULATOR_TESTS = []
 # {"GreetingsTests": ["TEST_DATABASE_URL"]}
 TEST_ENVIRONMENT = {}
 
+# Swift language features a target compiles with, by name from MODULES or TEST_TARGETS (a test
+# target's speed-reliant target, PERFORMANCE_TESTS, takes its features too). EXPERIMENTAL_FEATURES
+# are the compiler's `-enable-experimental-feature` names, UPCOMING_FEATURES its
+# `-enable-upcoming-feature` ones (a future language mode's, early). Package.swift gets
+# `swiftSettings: [.enableExperimentalFeature(name)]` or `.enableUpcomingFeature(name)`, which,
+# unlike `unsafeFlags`, a package that depends on this one still accepts; Bazel gets the same flags
+# as the swift_library's `copts`, and //:package_swift_test compares the two. Only the target named
+# compiles with the feature: a module that uses it in its implementation alone needs nothing in
+# its dependents. A release compiler refuses an experimental feature not marked as available in
+# production, so build with Xcode's toolchain, not only a development snapshot, after adding one.
+# {"Greetings": ["Extern"]}, {"GreetingsTests": ["ExistentialAny"]}
+EXPERIMENTAL_FEATURES = {}
+UPCOMING_FEATURES = {}
+
 # The product whose macro generates mocks. A module that depends on it is compiled with the
 # MOCKING condition in debug builds only (SwiftPM's debug configuration, Bazel's
 # --compilation_mode=dbg), so `@Mockable` emits Mock<Protocol> types for tests and release
@@ -564,6 +578,58 @@ def swift_srcs(name, pattern='glob(["**/*.swift"])'):
     return pattern[:-1] + ', exclude = ["Generated/**"], allow_empty = True)' + " + [" + ", ".join(f'":{s}"' for s, _, _, _ in sources) + "]"
 
 
+def language_features(name):
+    """Target `name`'s (kind, feature) pairs, kind "experimental" or "upcoming", in table order: its
+    own (EXPERIMENTAL_FEATURES, UPCOMING_FEATURES), or a speed-reliant target's parent's."""
+    name = performance_parent(name) or name
+    return ([("experimental", f) for f in EXPERIMENTAL_FEATURES.get(name, [])]
+            + [("upcoming", f) for f in UPCOMING_FEATURES.get(name, [])])
+
+
+def check_language_features(names):
+    tests = [t[0] for t in TEST_TARGETS]
+    for table, features in [("EXPERIMENTAL_FEATURES", EXPERIMENTAL_FEATURES), ("UPCOMING_FEATURES", UPCOMING_FEATURES)]:
+        for name, listed in features.items():
+            assert name in names + tests, f"{table} names {name}, which is neither a module nor a test target"
+            assert listed, f"{table} gives {name} no features: list at least one, or leave {name} out"
+            for feature in listed:
+                # A name the compiler knows, optionally with a mode (Name=mode).
+                assert re.fullmatch(r"[A-Za-z][A-Za-z0-9]*(=[A-Za-z0-9]+)?", feature), \
+                    f"{table} gives {name} {feature!r}, which isn't a feature's name"
+                base = feature.split("=")[0]
+                assert [f.split("=")[0] for f in listed].count(base) == 1, \
+                    f"{table} lists {base} for {name} more than once"
+    for name in sorted(set(EXPERIMENTAL_FEATURES) & set(UPCOMING_FEATURES)):
+        both = sorted(set(EXPERIMENTAL_FEATURES[name]) & set(UPCOMING_FEATURES[name]))
+        assert not both, f"{name} lists {', '.join(both)} as both experimental and upcoming: a feature is one or the other"
+
+
+def features_setting(name):
+    """Target `name`'s language features as Package.swift's swiftSettings entries."""
+    spelling = {"experimental": "enableExperimentalFeature", "upcoming": "enableUpcomingFeature"}
+    return [f".{spelling[kind]}({swift_string(feature)})" for kind, feature in language_features(name)]
+
+
+def swift_settings_arg(name, mocking=False):
+    """Target `name`'s `swiftSettings:` argument in Package.swift: the MOCKING condition in debug
+    builds (with `mocking`), then its language features; or nothing."""
+    settings = ['.define("MOCKING", .when(configuration: .debug))'] if mocking else []
+    settings += features_setting(name)
+    return f", swiftSettings: [{', '.join(settings)}]" if settings else ""
+
+
+def copts_attr(name):
+    """The `copts` lines enabling target `name`'s language features in its swift_library, or nothing."""
+    flag = {"experimental": "-enable-experimental-feature", "upcoming": "-enable-upcoming-feature"}
+    features = language_features(name)
+    if not features:
+        return ""
+    return (
+        "    # Language features (EXPERIMENTAL_FEATURES, UPCOMING_FEATURES in scripts/modules.py).\n"
+        "    copts = [\n" + "".join(f'        "{flag[kind]}",\n        "{feature}",\n' for kind, feature in features) + "    ],\n"
+    )
+
+
 def check():
     names = [m[0] for m in MODULES]
     # A plugin is a dependency like a module, but no list of modules below may name one.
@@ -582,6 +648,7 @@ def check():
             assert re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", variable), \
                 f"TEST_ENVIRONMENT gives {name} {variable!r}, which isn't an environment variable's name"
             assert variables.count(variable) == 1, f"TEST_ENVIRONMENT lists {variable} for {name} more than once"
+    check_language_features(names)
     # !simulator:begin
     # The root BUILD.bazel leaves iOS modules out of the docs and //:package_swift_test through
     # tools/ios.bzl, which only the app type, --ios and --simulator write.
@@ -994,13 +1061,13 @@ def package_swift():
             lines.append(f"    // {g}")
             group = g
         ex = exclude_arg(f"Sources/{name}")
-        settings = ', swiftSettings: [.define("MOCKING", .when(configuration: .debug))]' if MOCKING in deps else ""
+        settings = swift_settings_arg(name, mocking=MOCKING in deps)
         resources = resources_arg(name)
         if deps:
             dl = ", ".join(spm_dep(d) for d in deps)
             lines.append(f'    .target(name: "{name}", dependencies: [{dl}]{ex}{resources}{settings}),')
         else:
-            lines.append(f'    .target(name: "{name}"{ex}{resources}),')
+            lines.append(f'    .target(name: "{name}"{ex}{resources}{settings}),')
     for name, g, _, deps in MACROS:
         lines.append(f"    // {g}: compiler plugin")
         dl = ", ".join(spm_dep(d) for d in deps)
@@ -1035,8 +1102,8 @@ def package_swift():
         dl = ", ".join(spm_dep(d) for d in deps)
         files = excluded(f"Tests/{name}")
         ex = "[" + ", ".join(f'"{f}"' for f in files) + "]" if files != ["BUILD.bazel"] else "bazelFiles"
-        lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: testExcludes({ex}, wasi: {exit_test_files(f"Tests/{name}", files)}){resources_arg(name)}),')  # wasm:line
-        #| lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: {ex}{resources_arg(name)}),')  # !wasm:line
+        lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: testExcludes({ex}, wasi: {exit_test_files(f"Tests/{name}", files)}){resources_arg(name)}{swift_settings_arg(name)}),')  # wasm:line
+        #| lines.append(f'    .testTarget(name: "{name}", dependencies: [{dl}], exclude: {ex}{resources_arg(name)}{swift_settings_arg(name)}),')  # !wasm:line
     if PERFORMANCE_TESTS:
         lines += [
             "",
@@ -1045,8 +1112,8 @@ def package_swift():
         for name, deps in TEST_TARGETS:
             if name in PERFORMANCE_TESTS:
                 dl = ", ".join(spm_dep(d) for d in deps)
-                lines.append(f'    .testTarget(name: "{performance_target(name)}", dependencies: [{dl}], path: "Tests/{name}/Performance", exclude: testExcludes([], wasi: {exit_test_files(f"Tests/{name}/Performance", [])}){resources_arg(performance_target(name))}),')  # wasm:line
-                #| lines.append(f'    .testTarget(name: "{performance_target(name)}", dependencies: [{dl}], path: "Tests/{name}/Performance"{resources_arg(performance_target(name))}),')  # !wasm:line
+                lines.append(f'    .testTarget(name: "{performance_target(name)}", dependencies: [{dl}], path: "Tests/{name}/Performance", exclude: testExcludes([], wasi: {exit_test_files(f"Tests/{name}/Performance", [])}){resources_arg(performance_target(name))}{swift_settings_arg(performance_target(name))}),')  # wasm:line
+                #| lines.append(f'    .testTarget(name: "{performance_target(name)}", dependencies: [{dl}], path: "Tests/{name}/Performance"{resources_arg(performance_target(name))}{swift_settings_arg(performance_target(name))}),')  # !wasm:line
     lines += [
         "]",
         "",
@@ -1096,6 +1163,7 @@ def build_bazel(name, description, deps, linked=()):
     #|         '    srcs = glob(["**/*.swift"]),\n'
     #|         f'    module_name = "{name}",\n'
     #|         f'    package_name = "{PROJECT.lower()}",\n'
+    #|         f"{copts_attr(name)}"
     #|         f"{embedded_deps_attr}"
     #|         '    visibility = ["//visibility:public"],\n'
     #|         ")\n"
@@ -1108,6 +1176,7 @@ def build_bazel(name, description, deps, linked=()):
         "    # Mock<Protocol> types from @Mockable, in debug builds only (MOCKING in scripts/modules.py).\n"
         '    defines = select({"//tools:debug": ["MOCKING"], "//conditions:default": []}),\n'
     ) if MOCKING in deps else ""
+    copts = copts_attr(name)
     testing_attr = (
         "    # Imports Testing, found on the developer search paths (TESTING_MODULES in scripts/modules.py).\n"
         "    always_include_developer_search_paths = True,\n"
@@ -1126,6 +1195,7 @@ def build_bazel(name, description, deps, linked=()):
             f"{data_attr}"
             f'    module_name = "{name}",\n'
             f"{defines_attr}"
+            f"{copts}"
             f"{deps_attr}"
             '    target_compatible_with = ["@platforms//os:ios"],\n'
             '    visibility = ["//visibility:public"],\n'
@@ -1147,6 +1217,7 @@ def build_bazel(name, description, deps, linked=()):
             f"{data_attr}"
             f'    module_name = "{name}",\n'
             f"{defines_attr}"
+            f"{copts}"
             f"{deps_attr}"
             f"{testing_attr}"
             '    visibility = ["//visibility:public"],\n'
@@ -1172,6 +1243,7 @@ def build_bazel(name, description, deps, linked=()):
         f"{data_attr}"
         f'    module_name = "{name}",\n'
         f"{defines_attr}"
+        f"{copts}"
         f"{deps_attr}"
         f"{testing_attr}"
         '    visibility = ["//visibility:public"],\n'
@@ -1378,6 +1450,7 @@ def test_targets_bazel(name, deps, size, srcs, tags, simulator=False, environmen
         f"    srcs = {srcs},\n"
         f"{data_attr}"
         f'    module_name = "{name}",\n'
+        f"{copts_attr(name)}"
         f"{tags_attr}"
         "    # Read by //:package_swift_test, which checks Package.swift against the Bazel graph.\n"
         '    visibility = ["//:__pkg__"],\n'
@@ -1426,6 +1499,7 @@ def simulator_half_bazel(name, deps, srcs, tags, env_attr):
         f"    srcs = {srcs},\n"
         f"{data_attr}"
         f'    module_name = "{name}",\n'
+        f"{copts_attr(name)}"
         f"{tags_attr}"
         '    target_compatible_with = ["@platforms//os:ios"],\n'
         f"{bazel_deps(deps, testing=True, ios=True)}"
@@ -1479,6 +1553,7 @@ def simulator_test_build_bazel(name, deps, size):
         f"{srcs_attr}"
         f"{data_attr}"
         f'    module_name = "{name}",\n'
+        f"{copts_attr(name)}"
         f'    tags = ["{RELEASE_EXCLUDED_TAG}"],\n'
         '    target_compatible_with = ["@platforms//os:ios"],\n'
         f"{bazel_deps(deps)}"

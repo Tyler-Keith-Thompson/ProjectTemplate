@@ -707,6 +707,63 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn('"Sources/Screens"', (directory / "tools" / "ios.bzl").read_text())
         self.assertIn('"Tests/ScreensTests"', (directory / "tools" / "ios.bzl").read_text())
 
+    def test_language_features_reach_both_build_systems_merged_with_mocking_and_a_speed_reliant_target_inherits_them(self):
+        directory = self.render(self.scratch / "language-features", "--library")
+        modules = directory / "scripts" / "modules.py"
+        performance = directory / "Tests" / "GreetingsTests" / "Performance"
+        performance.mkdir()
+        (performance / "GreetingSpeedTests.swift").write_text("import Testing\n")
+        modules.write_text(modules.read_text()
+                           .replace("EXPERIMENTAL_FEATURES = {}", 'EXPERIMENTAL_FEATURES = {"Greetings": ["Extern"]}', 1)
+                           .replace("UPCOMING_FEATURES = {}", 'UPCOMING_FEATURES = {"GreetingsTests": ["ExistentialAny"]}', 1)
+                           .replace("PERFORMANCE_TESTS = [\n", 'PERFORMANCE_TESTS = [\n    "GreetingsTests",\n', 1)
+                           .replace('    # ("mockable", "https://github.com/Kolos65/Mockable", "0.6.4"),',
+                                    '    ("mockable", "https://github.com/Kolos65/Mockable", "0.6.4"),', 1)
+                           .replace('"Greetings", "Example", "Greeting: a greeting composed from a name and modifiers. Replace with the first real module.", []',
+                                    '"Greetings", "Example", "Greeting: a greeting composed from a name and modifiers. Replace with the first real module.", ["mockable/Mockable"]', 1))
+        expected_module = ', swiftSettings: [.define("MOCKING", .when(configuration: .debug)), .enableExperimentalFeature("Extern")]),'
+        expected_tests = ', swiftSettings: [.enableUpcomingFeature("ExistentialAny")]),'
+        expected_module_copts = '    copts = [\n        "-enable-experimental-feature",\n        "Extern",\n    ],\n'
+        expected_tests_copts = '    copts = [\n        "-enable-upcoming-feature",\n        "ExistentialAny",\n    ],\n'
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = (directory / "Package.swift").read_text().splitlines()
+        actual = {name: next(line for line in manifest if f'arget(name: "{name}"' in line)
+                  for name in ("Greetings", "GreetingsTests", "GreetingsPerformanceTests")}
+        self.assertTrue(actual["Greetings"].endswith(expected_module), actual["Greetings"])
+        self.assertTrue(actual["GreetingsTests"].endswith(expected_tests), actual["GreetingsTests"])
+        self.assertTrue(actual["GreetingsPerformanceTests"].endswith(expected_tests), actual["GreetingsPerformanceTests"])
+        self.assertNotIn("unsafeFlags", "\n".join(manifest))
+        self.assertIn(expected_module_copts, (directory / "Sources" / "Greetings" / "BUILD.bazel").read_text())
+        tests_build = (directory / "Tests" / "GreetingsTests" / "BUILD.bazel").read_text()
+        self.assertEqual(tests_build.count(expected_tests_copts), 2, tests_build)
+
+    def test_check_refuses_a_language_feature_for_an_unknown_target_or_a_malformed_repeated_or_doubled_one(self):
+        directory = self.render(self.scratch / "language-feature-checks", "--library")
+        modules = directory / "scripts" / "modules.py"
+        original = modules.read_text()
+
+        def generate(experimental, upcoming="{}"):
+            modules.write_text(original.replace("EXPERIMENTAL_FEATURES = {}", f"EXPERIMENTAL_FEATURES = {experimental}", 1)
+                               .replace("UPCOMING_FEATURES = {}", f"UPCOMING_FEATURES = {upcoming}", 1))
+            return run(sys.executable, "scripts/modules.py", cwd=directory).stderr
+
+        actual = {
+            "unknown": generate('{"NoSuchModule": ["Extern"]}'),
+            "empty": generate('{"Greetings": []}'),
+            "malformed": generate('{"Greetings": ["-enable-experimental-feature Extern"]}'),
+            "repeated": generate('{"Greetings": ["Extern", "Extern"]}'),
+            "doubled": generate('{"Greetings": ["Extern"]}', '{"Greetings": ["Extern"]}'),
+        }
+
+        self.assertIn("EXPERIMENTAL_FEATURES names NoSuchModule, which is neither a module nor a test target", actual["unknown"])
+        self.assertIn("EXPERIMENTAL_FEATURES gives Greetings no features", actual["empty"])
+        self.assertIn("which isn't a feature's name", actual["malformed"])
+        self.assertIn("EXPERIMENTAL_FEATURES lists Extern for Greetings more than once", actual["repeated"])
+        self.assertIn("Greetings lists Extern as both experimental and upcoming", actual["doubled"])
+
     def test_a_test_target_lists_fixtures_in_resources_and_check_refuses_unknown_names_and_missing_paths(self):
         directory = self.render(self.scratch / "test-fixtures", "--library")
         modules = directory / "scripts" / "modules.py"

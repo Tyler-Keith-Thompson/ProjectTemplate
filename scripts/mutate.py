@@ -322,8 +322,11 @@ def sync_coverage_workspace(module, bundles):
         subprocess.run(["rsync", "-a", "-c", "--delete", os.path.join(WORK, item), COVERAGE_WORK], check=True)
     with open(os.path.join(WORK, "Package.swift")) as f:
         manifest = f.read()
-    manifest, found = re.subn(rf'(\.(?:target|macro)\(name: "{module}",.*?)\),\n',
-                              rf'\1, swiftSettings: [{INSTRUMENT}]),\n', manifest, count=1)
+    # A target with settings of its own (MOCKING, EXPERIMENTAL_FEATURES in scripts/modules.py) takes
+    # the instrumentation into its list: a second `swiftSettings:` argument wouldn't parse.
+    manifest, found = re.subn(rf'(\.(?:target|macro)\(name: "{module}"(?:,.*?)?)(?:, swiftSettings: \[(.*)\])?\),\n',
+                              lambda m: f'{m[1]}, swiftSettings: [{INSTRUMENT}{", " + m[2] if m[2] else ""}]),\n',
+                              manifest, count=1)
     if not found:
         sys.exit(f"No target {module} in Package.swift")
     for b in bundles:

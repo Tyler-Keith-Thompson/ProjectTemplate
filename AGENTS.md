@@ -118,6 +118,20 @@ in beside the project's own: keep one definition, holding the project's rows, an
   only their cached results depend on it. Not `--test_env` in `.bazelrc`, which hands it to every
   test. SwiftPM passes the whole environment already. `check()` refuses a name that isn't a test
   target.
+- Compile a target with a Swift language feature (`@_extern(c)` needs `Extern` on Swift 6.4): the
+  module or test target's name and the features in `EXPERIMENTAL_FEATURES` or `UPCOMING_FEATURES`
+  (`{"<Module>": ["Extern"]}`), then `just modules`. Package.swift gets
+  `.enableExperimentalFeature` or `.enableUpcomingFeature` in the target's `swiftSettings`, beside
+  MOCKING's define, and never `unsafeFlags`, which would stop other packages depending on this
+  one. Bazel gets the matching `-enable-experimental-feature` or `-enable-upcoming-feature` in
+  `copts` (a firmware module's Embedded Swift copy too), <!-- embedded:line -->
+  `copts`, <!-- !embedded:line -->
+  and `//:package_swift_test` fails while the two disagree. A test target's speed-reliant target
+  takes its features. Only the target named compiles with them, so a module that uses one in its
+  implementation alone asks nothing of its dependents. `check()` refuses a name that isn't a module
+  or test target, and a feature listed twice or under both tables. A release compiler refuses an
+  experimental feature that isn't available in production, so build with Xcode's toolchain after
+  adding one.
 - Add an executable: a row in `EXECUTABLES` (name, description, dependencies). It holds only
   `@main`; its code lives in a module, where tests reach it.
 - Add an example module (a demo app's views, a sample server's routes): a row in `MODULES` and its
