@@ -187,7 +187,8 @@ IOS_MINIMUM = "18.0"
 # sample server's routes) rather than part of it. They build and test like any module, but
 # Package.swift offers no library product for them, and the umbrella and the docs leave them out,
 # so neither they nor their dependencies ship in `import ProjectName`. Only executables, test
-# targets and other example modules may depend on one.
+# targets and other example modules may depend on one. A compiler plugin (MACROS) an example module
+# uses is listed here too: plugins ship nothing anyway, and the listing lets only examples use it.
 EXAMPLE_MODULES = []
 
 # Modules offered as products of their own but left out of the umbrella, by name from MODULES:
@@ -237,7 +238,13 @@ RESOURCES = {}
 GENERATED_SOURCES = {}
 
 # Compiler plugins holding macros: (name, group, description, dependencies), whose dependencies
-# are packages' products only (swift-syntax's). A module lists one among its dependencies to offer its
+# are packages' products (swift-syntax's) and modules from MODULES: a library holding expansions
+# that plugins share, here and in adopters' own `.macro` targets, which keeps its product. Such a
+# module runs inside the compiler, so it may not be an iOS module or one in TESTING_MODULES, nor
+# reach a plugin through its own dependencies; SwiftPM builds it for the host as well, and Bazel in
+# the exec configuration. A plugin is never another plugin's dependency. A plugin of an example
+# module, or one depending on an example module, is an example too: list it in EXAMPLE_MODULES.
+# A module lists one among its dependencies to offer its
 # macros: SwiftPM takes it as a dependency of a `.macro` target, Bazel as a `plugins` entry of a
 # swift_compiler_plugin, which rules_swift loads for that module and the modules that depend on it
 # directly. A plugin is no library: it has no product, no docs and no place in the umbrella, so the
@@ -632,7 +639,7 @@ def copts_attr(name):
 
 def check():
     names = [m[0] for m in MODULES]
-    # A plugin is a dependency like a module, but no list of modules below may name one.
+    # A plugin is a dependency like a module, but no list of modules below but EXAMPLE_MODULES may name one.
     plugins = macro_names()
     assert len(names + plugins) == len(set(names + plugins)), "duplicate module"
     for name in APPLE_ONLY_TESTS:
@@ -688,7 +695,17 @@ def check():
             else:
                 assert d in names + plugins, f"{name} depends on unknown {d}"
     for name, _, _, deps in MACROS:
-        assert all("/" in d for d in deps), f"the plugin {name} may depend on packages only"
+        for d in deps:
+            if "/" in d:
+                continue
+            assert not is_macro(d), f"the plugin {name} depends on the plugin {d}: share the code through a module in MODULES"
+            assert d not in IOS_MODULES, f"the plugin {name} depends on the iOS module {d}, which the compiler can't load"
+            assert d not in TESTING_MODULES, f"the plugin {name} depends on {d}, which imports Testing, a test-only library"
+            reached = plugins_reached(d)
+            assert not reached, (f"the plugin {name} depends on {d}, which reaches the plugin {reached[0]}: a plugin's "
+                                 "modules run inside the compiler and use no macros")
+            assert d not in EXAMPLE_MODULES or name in EXAMPLE_MODULES, \
+                f"the plugin {name} depends on the example module {d}, so it must be in EXAMPLE_MODULES"
     executables = [e[0] for e in EXECUTABLES]
     assert not set(executables) & set(names + plugins + [PROJECT]), "an executable shares a module's name"
     tests = [t[0] for t in TEST_TARGETS]
@@ -720,7 +737,7 @@ def check():
     for name in IOS_MODULES:
         assert name in names, f"IOS_MODULES names unknown module {name}"
     for name in EXAMPLE_MODULES:
-        assert name in names, f"EXAMPLE_MODULES names unknown module {name}"
+        assert name in names + plugins, f"EXAMPLE_MODULES names unknown module {name}"
     for name in NON_UMBRELLA_MODULES:
         assert name in names, f"NON_UMBRELLA_MODULES names unknown module {name}"
         assert name != PROJECT and umbrella(), f"NON_UMBRELLA_MODULES lists {name}, but the package has no umbrella to leave it out of"
@@ -768,6 +785,22 @@ def check():
 def macro_names():
     """The compiler plugins' names (MACROS)."""
     return [m[0] for m in MACROS]
+
+
+def plugins_reached(name):
+    """The compiler plugins module `name` depends on, directly or through other modules, sorted."""
+    deps = {m[0]: m[3] for m in MODULES}
+    reached, seen, pending = set(), set(), [name]
+    while pending:
+        d = pending.pop()
+        if d in seen or "/" in d:
+            continue
+        seen.add(d)
+        if is_macro(d):
+            reached.add(d)
+        else:
+            pending += deps.get(d, [])
+    return sorted(reached)
 
 
 def is_macro(d):

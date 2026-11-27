@@ -180,8 +180,8 @@ in beside the project's own: keep one definition, holding the project's rows, an
   writes. Commit the copy, and run `just sources` after a change to the generator or its inputs.
   `check()` refuses a copy that doesn't exist, and a speed-reliant, iOS or firmware target.
   Simulated benchmarks measure the generator's output, at the copy's path. <!-- benchmarks:line -->
-- Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and only
-  package products as dependencies: swift-syntax's, with `swift-syntax` in `PACKAGES`), its sources
+- Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and as
+  dependencies swift-syntax's products, with `swift-syntax` in `PACKAGES`, and modules), its sources
   in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`
   and `just resolve`. The module that declares the macros (`#externalMacro(module: "<Plugin>",
   type: ...)`) lists the plugin among its dependencies: Package.swift gets a `.macro` target, Bazel
@@ -205,6 +205,13 @@ in beside the project's own: keep one definition, holding the project's rows, an
   code. A source that must not compile (a macro's diagnostic as the compiler reports it) is a
   `swift_compile_failure_test` (`tools/compile_failure_test.bzl`) in `Tests/CompileFailures`, a
   hand-written BUILD.bazel no Package.swift target holds, with a control that compiles.
+  Expansion code that several plugins share (the package's own and adopters' `.macro` targets)
+  lives in a library module in `MODULES` that the plugins list among their dependencies; it keeps
+  its product, so adopters' plugins can depend on it. It runs inside the compiler (SwiftPM builds it
+  for the host as well, Bazel in the exec configuration), so `check()` refuses one that is an iOS
+  module, in `TESTING_MODULES`, or reaches a plugin through its own dependencies, and a plugin that
+  depends on another plugin. A plugin that an example module uses, or that depends on one, goes
+  in `EXAMPLE_MODULES` too.
   A plugin takes planted bugs like a module (`scripts/mutants/<Plugin>.py`), with its expansion <!-- mutation:line -->
   tests as the spec's `TESTS`. <!-- mutation:line -->
 - Add a command plugin (`swift package <verb>`): a row in `PLUGINS` (name, verb, description, and

@@ -955,6 +955,56 @@ class TemplateCommandTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, version)
             self.assertIn(f"PACKAGES gives swift-syntax {version!r}", result.stderr)
 
+    def test_a_compiler_plugin_depends_on_a_support_module_in_both_build_systems(self):
+        directory = self.render(self.scratch / "plugin-support", "--library")
+        modules = directory / "scripts" / "modules.py"
+        package = '    ("swift-syntax", "https://github.com/swiftlang/swift-syntax", "range:603.0.0..<605.0.0"),\n'
+        modules.write_text(modules.read_text()
+                           .replace("PACKAGES = [\n", "PACKAGES = [\n" + package, 1)
+                           .replace("MODULES = [\n", 'MODULES = [\n    ("MacroSupport", "Macros", "Expansions plugins share.", ["swift-syntax/SwiftSyntax"]),\n', 1)
+                           .replace("MACROS = []", 'MACROS = [("GreetingsMacros", "Macros", "Expands #demo.", ["swift-syntax/SwiftCompilerPlugin", "MacroSupport"])]', 1))
+        expected_manifest = '.macro(name: "GreetingsMacros", dependencies: [.product(name: "SwiftCompilerPlugin", package: "swift-syntax"), "MacroSupport"]'
+        expected_label = '"//Sources/MacroSupport",'
+
+        result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(expected_manifest, (directory / "Package.swift").read_text())
+        self.assertIn(expected_label, (directory / "Sources" / "GreetingsMacros" / "BUILD.bazel").read_text())
+
+    def test_check_refuses_a_plugin_on_a_plugin_an_ios_or_testing_module_one_reaching_a_plugin_or_an_example(self):
+        directory = self.render(self.scratch / "plugin-refusals", "--library", "--ios")
+        modules = directory / "scripts" / "modules.py"
+        package = '    ("swift-syntax", "https://github.com/swiftlang/swift-syntax", "range:603.0.0..<605.0.0"),\n'
+        original = (modules.read_text()
+                    .replace("PACKAGES = [\n", "PACKAGES = [\n" + package, 1)
+                    .replace("MODULES = [\n", 'MODULES = [\n    ("Support", "Macros", "Expansions.", []),\n'
+                             '    ("Declarations", "Macros", "Declares #demo.", ["DemoMacros"]),\n', 1))
+        demo = '("DemoMacros", "Macros", "Expands #demo.", ["swift-syntax/SwiftCompilerPlugin"])'
+
+        def generate(dependency, **tables):
+            text = original.replace("MACROS = []", f'MACROS = [{demo}, ("OtherMacros", "Macros", "Expands #other.", ["{dependency}"])]', 1)
+            for table, value in tables.items():
+                text = re.sub(rf"^{table} = \[\](  # [!a-z]+:line)?$", f"{table} = {value}", text, count=1, flags=re.M)
+            modules.write_text(text)
+            return run(sys.executable, "scripts/modules.py", cwd=directory)
+
+        actual = {
+            "plugin": generate("DemoMacros").stderr,
+            "ios": generate("Support", IOS_MODULES='["Support"]').stderr,
+            "testing": generate("Support", TESTING_MODULES='["Support"]', NON_UMBRELLA_MODULES='["Support"]').stderr,
+            "reaches": generate("Declarations").stderr,
+            "example": generate("Support", EXAMPLE_MODULES='["Support"]').stderr,
+        }
+        listed = generate("Support", EXAMPLE_MODULES='["Support", "OtherMacros"]')
+
+        self.assertIn("the plugin OtherMacros depends on the plugin DemoMacros: share the code through a module in MODULES", actual["plugin"])
+        self.assertIn("the plugin OtherMacros depends on the iOS module Support, which the compiler can't load", actual["ios"])
+        self.assertIn("the plugin OtherMacros depends on Support, which imports Testing, a test-only library", actual["testing"])
+        self.assertIn("the plugin OtherMacros depends on Declarations, which reaches the plugin DemoMacros", actual["reaches"])
+        self.assertIn("the plugin OtherMacros depends on the example module Support, so it must be in EXAMPLE_MODULES", actual["example"])
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+
     def test_update_reports_a_table_the_project_already_defines_and_never_leaves_the_empty_one_in_effect(self):
         # The template before it had MACROS: the stock file without its assignment.
         modules = self.template / "scripts" / "modules.py"
