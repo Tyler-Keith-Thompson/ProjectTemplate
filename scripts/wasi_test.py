@@ -25,6 +25,7 @@ an older Xcode: `--xcode /Applications/Xcode-26.2.0.app` (or set <PROJECT>_WASI_
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -84,6 +85,19 @@ class TestBinaries:
         self.missing = missing
 
 
+def stack_toolset():
+    """The path of a toolset file, written under .build/wasm, that links wasm binaries with
+    LINEAR_STACK, the linear-memory stack deep chains of non-suspending awaits overrun.
+
+    A toolset applies to the target's tools alone. `-Xlinker` would also reach the host link of a
+    macro's compiler plugin (MACROS in scripts/modules.py), and the macOS linker has no `-z`."""
+    path = os.path.join(SCRATCH, "stack-toolset.json")
+    os.makedirs(SCRATCH, exist_ok=True)
+    with open(path, "w") as file:
+        json.dump({"schemaVersion": "1.0", "linker": {"extraCLIOptions": ["-z", f"stack-size={LINEAR_STACK}"]}}, file)
+    return path
+
+
 def test_binaries(products, group):
     """The test binaries a group's build wrote: one `<Target>-test-runner.wasm` per target, else (an
     older toolchain) the one `<Project>PackageTests.xctest`. Once any target has its runner, every
@@ -131,8 +145,7 @@ def main():
         testable = ["-Xswiftc", "-enable-testing"] if args.configuration == "release" else []
         build = ["swiftly", "run", "swift", "build", "-c", args.configuration, "--build-tests",
                  "--swift-sdk", sdk, "--scratch-path", SCRATCH, *testable,
-                 # The linear-memory stack, which deep chains of non-suspending awaits overrun.
-                 "-Xlinker", "-z", "-Xlinker", f"stack-size={LINEAR_STACK}", f"+{args.swift}"]
+                 "--toolset", stack_toolset(), f"+{args.swift}"]
         if run(build, env, os.path.join(logs, tag + "-build.log"), args.timeout) != 0:
             print(f"{tag} build FAILED ({', '.join(group)}): see .build/wasm/logs/{tag}-build.log")
             failed.append(tag)

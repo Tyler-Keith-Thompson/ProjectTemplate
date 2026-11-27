@@ -856,6 +856,19 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertEqual(partial.returncode, 0, partial.stderr)
         self.assertEqual(partial.stdout.strip(), f"['GreetingsTests-test-runner.wasm'] ['{NAME}Tests']")
 
+    def test_wasi_test_links_its_stack_through_a_toolset_so_no_linker_flag_reaches_a_host_plugin(self):
+        directory = self.render(self.scratch / "wasi-toolset", "--library", "--wasm")
+        expected = {"schemaVersion": "1.0", "linker": {"extraCLIOptions": ["-z", f"stack-size={64 * 1024 * 1024}"]}}
+        probe = "import sys; sys.path.insert(0, 'scripts'); import wasi_test; print(wasi_test.stack_toolset())"
+
+        result = run(sys.executable, "-c", probe, cwd=directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        toolset = pathlib.Path(result.stdout.strip())
+        self.assertEqual(toolset.resolve(), (directory / ".build" / "wasm" / "stack-toolset.json").resolve())
+        self.assertEqual(json.loads(toolset.read_text()), expected)
+        self.assertNotIn('"-Xlinker"', (directory / "scripts" / "wasi_test.py").read_text())
+
     def test_bench_simulated_rewrites_an_entry_measured_over_other_iterations_and_keeps_one_within_the_threshold(self):
         directory = self.render(self.scratch / "bench-iterations", "--library", "--benchmarks")
         spec = importlib.util.spec_from_file_location("bench_simulated_under_test", directory / "scripts" / "bench_simulated.py")
