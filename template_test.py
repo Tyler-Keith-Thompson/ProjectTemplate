@@ -14,6 +14,7 @@ import contextlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -439,6 +440,24 @@ class TemplateCommandTests(unittest.TestCase):
         actual = tree(directory)
 
         self.assertEqual([path for path in actual if path.startswith(".github/workflows/")], [])
+
+    def test_a_library_names_every_apple_sdk_once_and_other_types_name_none(self):
+        expected_sdks = ["AppleTVOS", "AppleTVSimulator", "MacOSX", "WatchOS", "WatchSimulator", "XROS",
+                         "XRSimulator", "iPhoneOS", "iPhoneSimulator"]
+        found = {}
+
+        for flags in (["--library"], ["--library", "--examples"], ["--server"], ["--mcp"], ["--embedded"], ["--app"]):
+            directory = self.scratch / ("sdks" + "".join(flags))
+            result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", *flags, NAME, str(directory),
+                         cwd=self.scratch)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            module = (directory / "MODULE.bazel").read_text()
+            calls = re.findall(r"system_sdk\.configure_sdks\(names = \[(.*?)\]\)", module, re.DOTALL)
+            found[" ".join(flags)] = [sorted(re.findall(r'"(\w+)"', call)) for call in calls]
+
+        expected_library = [sorted(expected_sdks)]
+        self.assertEqual(found, {"--library": expected_library, "--library --examples": expected_library,
+                                 "--server": [], "--mcp": [], "--embedded": [], "--app": []})
 
     def test_a_render_leaves_out_the_template_only_ignore_line_and_ends_on_content(self):
         found = {}

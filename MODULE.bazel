@@ -17,6 +17,24 @@ bazel_dep(name = "rules_apple", version = "5.4.0")
 #| # sh_binary, which Bazel 9 no longer has built in, for the UI tests' runner (tools/ui_test).
 #| bazel_dep(name = "rules_shell", version = "0.6.1")
 # simulator:end
+# library:begin
+
+# rules_swift reads the modules of the macOS and iOS SDKs alone unless the root module names more,
+# and analysis of a tvOS, watchOS or visionOS target (a build test, an example app) fails without
+# its SDK ("doesn't match this configuration"). PLATFORMS in scripts/modules.py lists all three.
+system_sdk = use_extension("@rules_swift//swift:extensions.bzl", "system_sdk")
+system_sdk.configure_sdks(names = [
+    "AppleTVOS",
+    "AppleTVSimulator",
+    "MacOSX",
+    "WatchOS",
+    "WatchSimulator",
+    "XROS",
+    "XRSimulator",
+    "iPhoneOS",
+    "iPhoneSimulator",
+])
+# library:end
 
 # ── Xcode project generation ─────────────────────────────────────────
 # Bazel is the build system, but the package still has to be workable in Xcode (debugger,
@@ -92,12 +110,3 @@ use_repo(
 #|     urls = ["https://github.com/cvs-health/ios-swiftui-accessibility-techniques/archive/refs/tags/0.7.0.tar.gz"],
 #| )
 # swiftui:end
-# examples:begin
-#|
-#| # ── visionOS and watchOS SDKs ────────────────────────────────────────
-#| # rules_swift reads the modules of the macOS and iOS SDKs alone unless the root module names more;
-#| # the visionOS and watchOS example apps fail analysis without theirs (all_cross_import_overlays
-#| # "doesn't match this configuration").
-#| system_sdk = use_extension("@rules_swift//swift:extensions.bzl", "system_sdk")
-#| system_sdk.configure_sdks(names = ["WatchOS", "WatchSimulator", "XROS", "XRSimulator"])
-# examples:end
