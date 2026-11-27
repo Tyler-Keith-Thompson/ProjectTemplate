@@ -11,5 +11,6 @@ python_test(
         "connected-iphone.sh",
         "install-iphone-app.sh",
         "provision-iphone.sh",
+        "signing-profile.sh",
     ],
 )

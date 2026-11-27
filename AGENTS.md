@@ -491,9 +491,15 @@ modules, which build on services, which hold no UI (Seams and composition, below
   runner of the project's own takes `pre_action = "//tools/ui_test:uninstall_apps"`.
 - **On an iPhone**: `just phone-provision` once per new iPhone (Developer Mode on, the Mac trusted),
   then `just phone-install` (debug, with the debug drawer) or `just phone-install-release`. A device
-  build (`--config=device`) signs with the development profile Xcode's automatic signing makes,
-  found by its name, "iOS Team Provisioning Profile: <bundle id>"; keep `bundle_id` in
-  `Apps/ProjectName/BUILD.bazel` and `PHONE_BUNDLE_ID` in the justfile in step. The team comes from
+  build (`--config=device`) signs with a development profile that Xcode's automatic signing makes or
+  reuses. That's "iOS Team Provisioning Profile: <bundle id>", or the team's wildcard "iOS Team
+  Provisioning Profile: *" when the team already has one and the app needs no capability.
+  `tools/iphone/signing-profile.sh` finds the one that holds the iPhone, and the install recipes
+  pass it as `--define=signing_profile=app|wildcard`. Keep `bundle_id` in
+  `Apps/ProjectName/BUILD.bazel` and `PHONE_BUNDLE_ID` in the justfile in step. The template's
+  `com.example.<name>` installs under the wildcard profile. Before adding a capability (push,
+  iCloud, App Groups), which needs an App ID of its own, change both to a reverse-DNS prefix you
+  own. The team comes from
   `DEVELOPMENT_TEAM` in the environment, else from the Apple Development certificate Xcode puts in
   the Keychain once you sign in (Settings > Accounts). No team ID, certificate or profile is
   committed. A locked iPhone is waited for (`PHONE_UNLOCK_WAIT`, 1800 seconds), and a newer install

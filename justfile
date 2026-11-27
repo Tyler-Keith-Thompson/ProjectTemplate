@@ -73,7 +73,8 @@ test:
 #|     {{BAZEL}} test //... --allow_analysis_cache_discard --nocache_test_results --test_env=SNAPSHOT_TESTING_RECORD=all --test_env=SNAPSHOT_REFERENCE_ROOT="$PWD"
 #|
 #| # The app's bundle identifier, which names its provisioning profile: bundle_id in
-#| # Apps/ProjectName/BUILD.bazel.
+#| # Apps/ProjectName/BUILD.bazel. com.example signs with the team's wildcard profile; an
+#| # app with a capability needs a prefix of your own (AGENTS.md, App).
 #| PHONE_BUNDLE_ID := "com.example.projectname"
 #|
 #| [doc("Have Xcode's automatic signing register the connected iPhone (or the one with this UDID) and make the app's provisioning profile: once, and again for each new iPhone")]
@@ -81,32 +82,42 @@ test:
 #|     bash {{PROJECT_ROOT}}/scripts/generate-xcodeproj.sh --no-open
 #|     bash {{PROJECT_ROOT}}/tools/iphone/provision-iphone.sh {{PROJECT_ROOT}}/xcode/ProjectName.xcodeproj ProjectName {{PHONE_BUNDLE_ID}} "{{udid}}"
 #|
-#| # The device build changes the configuration; analysing the ordinary one again afterwards keeps the
-#| # next build from refusing to discard the analysis cache. The .ipa is copied out before any wait
-#| # for an unlock, so restoring first is safe.
+#| # signing-profile.sh picks the profile that holds the iPhone, the bundle identifier's or the team's
+#| # wildcard one, and fails before building when neither does. The device build changes the
+#| # configuration; analysing the ordinary one again afterwards keeps the next build from refusing to
+#| # discard the analysis cache. The .ipa is copied out before any wait for an unlock, so restoring
+#| # first is safe.
 #| [doc('Install and launch a debug build, with its debug drawer, on the connected iPhone or the one with this UDID, waiting up to PHONE_UNLOCK_WAIT seconds (1800) for it to be unlocked; a newer install ends the wait')]
 #| phone-install udid="":
 #|     #!/usr/bin/env bash
 #|     set -euo pipefail
+#|     udid="{{udid}}"
+#|     [[ -n "$udid" ]] || udid=$(bash {{PROJECT_ROOT}}/tools/iphone/connected-iphone.sh)
+#|     profile=$(bash {{PROJECT_ROOT}}/tools/iphone/signing-profile.sh {{PHONE_BUNDLE_ID}} "$udid")
+#|     device=(--config=device --define=signing_profile="$profile")
 #|     restore() { {{BAZEL}} build --nobuild --allow_analysis_cache_discard //Apps/ProjectName >/dev/null 2>&1 || true; }
 #|     trap restore EXIT
-#|     {{BAZEL}} build --config=device //Apps/ProjectName
-#|     ipa="$({{BAZEL}} info --config=device execution_root 2>/dev/null)/$({{BAZEL}} cquery --config=device --output=files //Apps/ProjectName 2>/dev/null)"
+#|     {{BAZEL}} build "${device[@]}" //Apps/ProjectName
+#|     ipa="$({{BAZEL}} info "${device[@]}" execution_root 2>/dev/null)/$({{BAZEL}} cquery "${device[@]}" --output=files //Apps/ProjectName 2>/dev/null)"
 #|     restore
 #|     trap - EXIT
-#|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "{{udid}}"
+#|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "$udid"
 #|
 #| [doc('Install and launch the optimized build, without the debug drawer, on the connected iPhone or the one with this UDID, waiting for it to be unlocked')]
 #| phone-install-release udid="":
 #|     #!/usr/bin/env bash
 #|     set -euo pipefail
+#|     udid="{{udid}}"
+#|     [[ -n "$udid" ]] || udid=$(bash {{PROJECT_ROOT}}/tools/iphone/connected-iphone.sh)
+#|     profile=$(bash {{PROJECT_ROOT}}/tools/iphone/signing-profile.sh {{PHONE_BUNDLE_ID}} "$udid")
+#|     device=(--config=device --define=signing_profile="$profile")
 #|     restore() { {{BAZEL_RELEASE}} build --config=release --nobuild --allow_analysis_cache_discard //Apps/ProjectName >/dev/null 2>&1 || true; }
 #|     trap restore EXIT
-#|     {{BAZEL_RELEASE}} build --config=release --config=device //Apps/ProjectName
-#|     ipa="$({{BAZEL_RELEASE}} info --config=release --config=device execution_root 2>/dev/null)/$({{BAZEL_RELEASE}} cquery --config=release --config=device --output=files //Apps/ProjectName 2>/dev/null)"
+#|     {{BAZEL_RELEASE}} build --config=release "${device[@]}" //Apps/ProjectName
+#|     ipa="$({{BAZEL_RELEASE}} info --config=release "${device[@]}" execution_root 2>/dev/null)/$({{BAZEL_RELEASE}} cquery --config=release "${device[@]}" --output=files //Apps/ProjectName 2>/dev/null)"
 #|     restore
 #|     trap - EXIT
-#|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "{{udid}}"
+#|     bash {{PROJECT_ROOT}}/tools/iphone/install-iphone-app.sh "$ipa" "$udid"
 # app:end
 # ios:begin
 #|

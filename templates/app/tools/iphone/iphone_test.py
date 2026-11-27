@@ -21,6 +21,7 @@ HERE = pathlib.Path("tools/iphone").resolve()
 INSTALL = HERE / "install-iphone-app.sh"
 CONNECTED = HERE / "connected-iphone.sh"
 PROVISION = HERE / "provision-iphone.sh"
+SIGNING_PROFILE = HERE / "signing-profile.sh"
 
 STILL_LOCKED = "ERROR: The operation failed because the device was still locked. (com.apple.dt.CoreDeviceError error 10003 (0x2713))"
 DISK_IMAGE = "ERROR: Failed to read the metadata for the developer disk image mounted on this device. (com.apple.dt.CoreDeviceError error 12018 (0x2EF2))"
@@ -43,10 +44,11 @@ exit 1
 STAND_IN_XCODEBUILD = """#!/usr/bin/env bash
 echo "$*" >>"{work}/xcodebuild-calls"
 cat "{work}/xcodebuild-output" 2>/dev/null
-if [[ -f "{work}/made.mobileprovision" ]]; then
+for made in "{work}"/*.mobileprovision; do
+    [[ -f "$made" ]] || continue
     mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-    cp "{work}/made.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"
-fi
+    cp "$made" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"
+done
 exit 65
 """
 
@@ -257,6 +259,24 @@ class ProvisionTests(unittest.TestCase):
         self.assertIn("-destination id=PHONE", call)
         self.assertIn("DEVELOPMENT_TEAM=TEAM123", call)
 
+    def test_the_teams_wildcard_profile_that_includes_the_phone_succeeds(self):
+        stand_ins = StandIns(self, devices=[device("PHONE")])
+        (stand_ins.work / "made.mobileprovision").write_bytes(profile("*", ["PHONE"]))
+
+        actual = self.provision(stand_ins, DEVELOPMENT_TEAM="TEAM123")
+
+        self.assertEqual(actual.returncode, 0, actual.stderr)
+        self.assertIn('"iOS Team Provisioning Profile: *" includes this iPhone (PHONE)', actual.stdout)
+
+    def test_another_apps_profile_that_includes_the_phone_fails(self):
+        stand_ins = StandIns(self, devices=[device("PHONE")])
+        (stand_ins.work / "made.mobileprovision").write_bytes(profile("com.example.other", ["PHONE"]))
+
+        actual = self.provision(stand_ins, DEVELOPMENT_TEAM="TEAM123")
+
+        self.assertEqual(actual.returncode, 1)
+        self.assertIn("No provisioning profile includes this iPhone (PHONE)", actual.stderr)
+
     def test_developer_mode_off_is_reported_without_building(self):
         stand_ins = StandIns(self, devices=[device("PHONE", developer_mode="disabled")])
 
@@ -294,6 +314,64 @@ class ProvisionTests(unittest.TestCase):
         self.assertEqual(actual.returncode, 1)
         self.assertIn("set DEVELOPMENT_TEAM", actual.stderr)
         self.assertEqual(stand_ins.calls("xcodebuild-calls"), [])
+
+
+class SigningProfileTests(unittest.TestCase):
+    def signing_profile(self, stand_ins, *profiles, udid="PHONE"):
+        directory = stand_ins.home / "Library/MobileDevice/Provisioning Profiles"
+        directory.mkdir(parents=True)
+        for index, contents in enumerate(profiles):
+            (directory / f"{index}.mobileprovision").write_bytes(contents)
+        return run([SIGNING_PROFILE, "com.example.app", udid], stand_ins.environment())
+
+    def test_the_bundle_identifiers_profile_that_includes_the_phone_is_app(self):
+        stand_ins = StandIns(self)
+
+        actual = self.signing_profile(stand_ins, profile("com.example.app", ["PHONE"]))
+
+        self.assertEqual(actual.returncode, 0, actual.stderr)
+        self.assertEqual(actual.stdout, "app\n")
+
+    def test_the_wildcard_profile_that_includes_the_phone_is_wildcard(self):
+        stand_ins = StandIns(self)
+
+        actual = self.signing_profile(stand_ins, profile("*", ["OTHER", "PHONE"]))
+
+        self.assertEqual(actual.returncode, 0, actual.stderr)
+        self.assertEqual(actual.stdout, "wildcard\n")
+
+    def test_the_bundle_identifiers_profile_comes_first_when_both_include_the_phone(self):
+        stand_ins = StandIns(self)
+
+        actual = self.signing_profile(stand_ins, profile("*", ["PHONE"]), profile("com.example.app", ["PHONE"]))
+
+        self.assertEqual(actual.stdout, "app\n")
+
+    def test_the_wildcard_profile_is_taken_when_the_bundle_identifiers_lacks_the_phone(self):
+        stand_ins = StandIns(self)
+
+        actual = self.signing_profile(stand_ins, profile("com.example.app", ["OTHER"]), profile("*", ["PHONE"]))
+
+        self.assertEqual(actual.stdout, "wildcard\n")
+
+    def test_no_profile_that_includes_the_phone_fails_naming_phone_provision(self):
+        stand_ins = StandIns(self)
+
+        actual = self.signing_profile(stand_ins, profile("com.example.other", ["PHONE"]), profile("*", ["OTHER"]))
+
+        self.assertEqual(actual.returncode, 1)
+        self.assertEqual(actual.stdout, "")
+        self.assertIn("No provisioning profile includes this iPhone (PHONE). Run just phone-provision first.", actual.stderr)
+
+    def test_without_a_udid_the_connected_iphone_is_used(self):
+        stand_ins = StandIns(self, devices=[device("SIM", reality="simulated"), device("PHONE")])
+        directory = stand_ins.home / "Library/MobileDevice/Provisioning Profiles"
+        directory.mkdir(parents=True)
+        (directory / "wildcard.mobileprovision").write_bytes(profile("*", ["PHONE"]))
+
+        actual = run([SIGNING_PROFILE, "com.example.app"], stand_ins.environment())
+
+        self.assertEqual(actual.stdout, "wildcard\n")
 
 
 if __name__ == "__main__":

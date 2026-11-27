@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Has Xcode's automatic signing register the iPhone and make the app's development provisioning
-# profile, then checks that the profile includes the iPhone, for `just phone-provision`: once per
-# Mac, and again for each new iPhone. Bazel's device builds sign with that profile
+# Has Xcode's automatic signing register the iPhone and make or update a development provisioning
+# profile for the app, then checks that a profile includes the iPhone (signing-profile.sh), for
+# `just phone-provision`: once per Mac, and again for each new iPhone. Xcode makes the bundle
+# identifier's profile, or uses the team's wildcard one when the team has it and the app needs no
+# capability; Bazel's device builds sign with whichever holds the iPhone
 # (Apps/ProjectName/BUILD.bazel).
 #
 # The team is DEVELOPMENT_TEAM when it is set, else the team of the first Apple Development
@@ -52,16 +54,11 @@ xcodebuild -project "$project" -scheme "$scheme" -destination "id=$udid" \
     -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
     CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" build >"$log" 2>&1 || true
 
-for profile in "$HOME"/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision \
-    "$HOME"/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
-    [[ -f "$profile" ]] || continue
-    plist=$(security cms -D -i "$profile" 2>/dev/null) || continue
-    [[ $(plutil -extract Name raw - <<<"$plist" 2>/dev/null) == "iOS Team Provisioning Profile: $identifier" ]] || continue
-    if plutil -extract ProvisionedDevices json -o - - <<<"$plist" 2>/dev/null | grep -q "\"$udid\""; then
-        echo "The provisioning profile includes this iPhone ($udid). Next: just phone-install"
-        exit 0
-    fi
-done
+if kind=$(bash "$(dirname "$0")/signing-profile.sh" "$identifier" "$udid" 2>/dev/null); then
+    [[ "$kind" == app ]] && name=$identifier || name='*'
+    echo "The provisioning profile \"iOS Team Provisioning Profile: $name\" includes this iPhone ($udid). Next: just phone-install"
+    exit 0
+fi
 
 grep -qi "developer mode" "$log" && developer_mode_off
 echo "xcodebuild said:" >&2
