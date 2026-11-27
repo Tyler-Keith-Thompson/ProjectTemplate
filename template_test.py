@@ -749,6 +749,29 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ScreensTests runs in the simulator alone, which PERFORMANCE_TESTS doesn't support", result.stderr)
 
+    def test_mutate_refuses_a_stmt_mutant_that_replaces_a_declaration_or_a_defer_before_building(self):
+        directory = self.render(self.scratch / "mutate-refusals", "--library", "--mutation")
+        spec = directory / "scripts" / "mutants" / "Greetings.py"
+        environment = {**os.environ, f"{NAME.upper()}_MUTATION_DIR": str(self.scratch / "mutate-refusals-work")}
+        cases = [
+            ('Mutant("copied", G, "var copy = self", "var copy = self.formal()", mode="stmt")',
+             "copied: a stmt mutant can't replace a declaration (`let`, `var`)", "with an expr mutant"),
+            ('Mutant("salutation", G, "  let salutation = switch register", "let salutation = switch register", mode="stmt")',
+             "salutation: a stmt mutant can't replace a declaration (`let`, `var`)", "with an expr mutant"),
+            ('Mutant("deferred", G, "defer { text.append(punctuation) }", "", mode="stmt")',
+             "deferred: a stmt mutant can't replace a `defer`", "inside the defer"),
+        ]
+        for mutant, expected_message, expected_alternative in cases:
+            spec.write_text(f'TESTS = ["GreetingsTests"]\nG = "Greeting.swift"\nMUTANTS = [{mutant}]\n')
+
+            result = subprocess.run([sys.executable, "scripts/mutate.py", "Greetings"], cwd=directory, env=environment,
+                                    capture_output=True, text=True, timeout=120)
+
+            self.assertNotEqual(result.returncode, 0, mutant)
+            self.assertIn(expected_message, result.stderr)
+            self.assertIn(expected_alternative, result.stderr)
+            self.assertFalse((self.scratch / "mutate-refusals-work" / "modules" / "Greetings" / "work").exists(), mutant)
+
     def test_language_features_reach_both_build_systems_merged_with_mocking_and_a_speed_reliant_target_inherits_them(self):
         directory = self.render(self.scratch / "language-features", "--library")
         modules = directory / "scripts" / "modules.py"
