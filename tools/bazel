@@ -6,7 +6,7 @@
 # helper that reads the key from the Keychain, so it is never written to a file. Without a key,
 # and on Linux (CI writes its own user.bazelrc from the repository secret), Bazel runs unchanged.
 #
-# On macOS, at most once a day, it also starts tools/sweep-output-bases in the background: Bazel
+# On macOS, at most once an hour, it also starts tools/sweep-output-bases in the background: Bazel
 # never deletes an output base, so every deleted checkout and idle one would keep its gigabytes
 # under the output user root. The sweep is detached, with its output in a log beside the stamp, so
 # it never delays the command or changes its exit status. CI's containers start empty and are
@@ -19,7 +19,7 @@ if [[ "${OSTYPE:-}" == darwin* ]]; then
     # Bazel's default output user root on macOS.
     output_user_root="$HOME/Library/Caches/bazel/_bazel_${USER:-$(id -un)}"
     stamp="$output_user_root/.sweep-output-bases"
-    if [ -d "$output_user_root" ] && [ -z "$(find "$stamp" -mmin -1440 2>/dev/null)" ] \
+    if [ -d "$output_user_root" ] && [ -z "$(find "$stamp" -mmin -60 2>/dev/null)" ] \
         && command -v python3 >/dev/null 2>&1; then
         # The stamp is touched before the sweep starts, so commands run meanwhile start no other.
         touch "$stamp" 2>/dev/null \

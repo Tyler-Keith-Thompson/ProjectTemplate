@@ -2,7 +2,7 @@
 
 load(":python_test.bzl", "python_test")
 
-# tools/bazel's daily sweep of stale output bases (tools/sweep-output-bases).
+# tools/bazel's hourly sweep of stale output bases (tools/sweep-output-bases).
 python_test(
     name = "sweep_output_bases_test",
     size = "small",

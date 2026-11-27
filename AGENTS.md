@@ -42,7 +42,7 @@ Examples/                        The example apps, a SwiftPM package of their ow
 Firmware/                        The ESP-IDF project: main/ is the app; BUILD.bazel gathers the modules it imports <!-- embedded:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
                                  tools/bazel turns BuildBuddy on when the Keychain holds its key, and
-                                 on macOS sweeps stale output bases once a day (tools/sweep-output-bases):
+                                 on macOS sweeps stale output bases hourly (tools/sweep-output-bases):
                                  a deleted workspace's, or one idle 7 days
 tools/embedded.bzl               Modules compiled as Embedded Swift, through tools/embedded-swift's toolchain <!-- embedded:line -->
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->

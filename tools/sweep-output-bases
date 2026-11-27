@@ -3,7 +3,7 @@
 
 Bazel gives every workspace an output base under the output user root and never removes one, so
 each deleted checkout, worktree and scratch copy leaves gigabytes behind. tools/bazel starts this
-in the background at most once a day. An output base is stale when the workspace its README names
+in the background at most once an hour. An output base is stale when the workspace its README names
 no longer exists, or when no command has run in it for --max-idle-days. A stale base has its
 server stopped, then is deleted. Everything here is a cache Bazel rebuilds on the next command.
 
