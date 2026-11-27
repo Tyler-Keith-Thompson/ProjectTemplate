@@ -28,9 +28,9 @@ deleted.
 ## Toolchain
 
 Xcode's toolchain does not include the libFuzzer runtime (`libclang_rt.fuzzer_osx.a`); the
-swift.org toolchains do. The scripts build with `swiftly run swift build +6.3.3` (override with
+swift.org toolchains do. The scripts build with `swiftly run swift build +6.4.3` (override with
 `<PROJECT>_FUZZ_SWIFT`, the project's name in capitals), so install it once with
-`swiftly install 6.3.3`. The build may print `unknown argument: '-target-arch-variant'` while
+`swiftly install 6.4.3`. The build may print `unknown argument: '-target-arch-variant'` while
 reading a newer SDK's interfaces, then falls back and succeeds; the scripts hide it.
 
 Targets are built in release mode with AddressSanitizer: preconditions stay on, and unsafe buffer

@@ -16,8 +16,8 @@ their stylesheet, the one `.wasm` they share, and the JavaScript that loads it, 
 with relative URLs. Check a page by serving that directory, for example
 `python3 -m http.server -d Explore/dist 8000`, and opening `http://localhost:8000/<page>.html`.
 
-It needs swiftly's swift.org toolchain (`EXPLORE_SWIFT`, default 6.3.3), its Swift SDK for
-WebAssembly (`EXPLORE_SDK`, default `swift-6.3.3-RELEASE_wasm`; `swift sdk list`), and, to shrink
+It needs swiftly's swift.org toolchain (`EXPLORE_SWIFT`, default 6.4.3), its Swift SDK for
+WebAssembly (`EXPLORE_SDK`, default `swift-6.4.3-RELEASE_wasm`; `swift sdk list`), and, to shrink
 the `.wasm`, `wasm-opt` (`brew install binaryen`). If the toolchain crashes compiling a package
 manifest against a newer Xcode's macOS SDK, name an older Xcode:
 `EXPLORE_XCODE=/Applications/Xcode-<older>.app just explore`.

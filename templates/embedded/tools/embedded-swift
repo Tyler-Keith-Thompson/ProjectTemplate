@@ -8,11 +8,11 @@
 #   tools/embedded-swift llvm-ar ARGUMENT…  run its llvm-ar
 #
 # Xcode's toolchain has no Embedded Swift standard library for RISC-V, so this is a swift.org
-# toolchain of exactly VERSION: swiftly's (`swiftly install 6.3.3`), else the swiftc on PATH (the
+# toolchain of exactly VERSION: swiftly's (`swiftly install 6.4.3`), else the swiftc on PATH (the
 # CI image). Bazel's cache keys include this file, so changing VERSION rebuilds every module.
 set -euo pipefail
 
-VERSION=6.3.3
+VERSION=6.4.3
 TRIPLE=riscv32-none-none-eabi
 
 usable() {  # usable <usr directory>: it has the Embedded Swift standard library for TRIPLE

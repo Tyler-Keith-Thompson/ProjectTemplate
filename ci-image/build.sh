@@ -15,9 +15,9 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 bazel_version="$(cat "$here/../.bazelversion")"
 image=ghcr.io/tyler-keith-thompson/swift-bazel
-# swift:6.3 for CI.yml and docc.yml; swift:6.3.3 for the embedded type, which pins the patch;
-# swift:6.4 for projects whose floor is above the template's.
-swift_versions=(6.3 6.3.3 6.4)
+# swift:6.4 for CI.yml and docc.yml; swift:6.4.3 for the embedded type, which pins the patch;
+# swift:6.3 and 6.3.3 for projects still on the previous floor.
+swift_versions=(6.3 6.3.3 6.4 6.4.3)
 
 push=false
 if [ "${1:-}" = "--push" ]; then

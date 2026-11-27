@@ -25,9 +25,9 @@ jobs:
     # Swift with Bazel already in it (ci-image/ in the project template): rules_swift's Linux
     # toolchain is whatever swiftc is on the PATH, and Bazelisk runs the Bazel in .bazelversion.
     container:
-      image: ghcr.io/tyler-keith-thompson/swift-bazel:6.3-9.3.1 # !embedded:line
+      image: ghcr.io/tyler-keith-thompson/swift-bazel:6.4-9.3.1 # !embedded:line
       # The swiftc tools/embedded-swift accepts for the Embedded Swift modules: exactly its VERSION. # embedded:line
-      #| image: ghcr.io/tyler-keith-thompson/swift-bazel:6.3.3-9.3.1 # embedded:line
+      #| image: ghcr.io/tyler-keith-thompson/swift-bazel:6.4.3-9.3.1 # embedded:line
       # The image is a private package that grants this repository access (Actions access in
       # the package's settings); the job's token pulls it.
       credentials:
@@ -72,8 +72,8 @@ jobs:
   swiftpm:
     name: SwiftPM tests
     runs-on: ubuntu-26.04-arm
-    container: swift:6.3 # !embedded:line
-    #| container: swift:6.3.3 # embedded:line
+    container: swift:6.4 # !embedded:line
+    #| container: swift:6.4.3 # embedded:line
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6

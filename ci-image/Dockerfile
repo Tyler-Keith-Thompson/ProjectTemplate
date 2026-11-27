@@ -1,7 +1,7 @@
 # The container CI's Bazel jobs run in: Swift, Bazelisk, and the Bazel that .bazelversion pins,
 # already downloaded, with what rules_swift and rules_swift_package_manager call. Built and
 # pushed by ci-image/build.sh as ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>.
-ARG SWIFT_VERSION=6.3
+ARG SWIFT_VERSION=6.4
 FROM swift:${SWIFT_VERSION}
 
 LABEL org.opencontainers.image.source=https://github.com/Tyler-Keith-Thompson/ProjectTemplate

@@ -2,7 +2,7 @@
 # The production image: the server built by SwiftPM in release, on a plain Ubuntu runtime.
 # `just docker` builds and runs it locally; Fly.io builds it from fly.toml.
 
-FROM swift:6.3-noble AS build
+FROM swift:6.4-noble AS build
 WORKDIR /build
 
 # Dependencies first, so a source change reuses them. swift/Package.resolved pins the same

@@ -92,7 +92,7 @@ workflows run in Linux containers, and an iOS app's tests need a Mac.
 
 ## Requirements
 
-Every project needs macOS with Xcode's Swift 6.3 toolchain, and `bazelisk` and `just` from
+Every project needs macOS with Xcode's Swift 6.4 toolchain, and `bazelisk` and `just` from
 Homebrew. The rest depends on what you turn on:
 
 | For | You need |
@@ -101,9 +101,9 @@ Homebrew. The rest depends on what you turn on:
 | A server | Docker, and `k6` for the load test |
 | Fly.io deployment | `flyctl` |
 | `just ci-secrets` | `gh`, signed in |
-| Fuzzing | `swiftly` with a swift.org toolchain (`swiftly install 6.3.3`): Xcode's has no libFuzzer runtime |
+| Fuzzing | `swiftly` with a swift.org toolchain (`swiftly install 6.4.3`): Xcode's has no libFuzzer runtime |
 | Differential testing | `uv` |
 | WebAssembly tests | swiftly's toolchain, its Swift SDK for WebAssembly, and `wasmtime` |
 | The explorer | swiftly's toolchain and WebAssembly SDK, and `binaryen` for `wasm-opt` |
-| Firmware | swiftly's Swift 6.3.3 (Xcode's has no Embedded Swift for RISC-V), and [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/) 5.5 in `~/esp/esp-idf` or `IDF_PATH` |
+| Firmware | swiftly's Swift 6.4.3 (Xcode's has no Embedded Swift for RISC-V), and [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/) 5.5 in `~/esp/esp-idf` or `IDF_PATH` |
 | An app, `--ios` or `--simulator` | An iOS 18 simulator runtime in Xcode (the device and runtime `.bazelrc` names) |

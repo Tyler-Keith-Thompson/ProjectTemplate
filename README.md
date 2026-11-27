@@ -7,7 +7,7 @@
 
 ## Installation
 
-ProjectName requires Swift 6.3 and supports macOS 15, iOS 18, tvOS 18, watchOS 11 and visionOS 2
+ProjectName requires Swift 6.4 and supports macOS 15, iOS 18, tvOS 18, watchOS 11 and visionOS 2
 or later.
 
 ```swift
@@ -42,7 +42,7 @@ print(greeting.text)  // Good day, Ada!
 
 ## Running
 
-ProjectName is a [Vapor](https://vapor.codes) server and requires Swift 6.3 on macOS 15 or Linux.
+ProjectName is a [Vapor](https://vapor.codes) server and requires Swift 6.4 on macOS 15 or Linux.
 
 ```sh
 just run                          # http://localhost:8080
@@ -99,7 +99,7 @@ Once per Mac:
 
 - [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/) 5.5 in
   `~/esp/esp-idf` (or wherever `IDF_PATH` points), installed for the chip: `./install.sh esp32c6`.
-- Swift 6.3.3 from [swiftly](https://www.swift.org/install/): `swiftly install 6.3.3`. Xcode's
+- Swift 6.4.3 from [swiftly](https://www.swift.org/install/): `swiftly install 6.4.3`. Xcode's
   toolchain has no Embedded Swift for RISC-V.
 
 ```sh
@@ -116,7 +116,7 @@ The log prints "Good day, ProjectName! (1)", counting up once a second.
 
 ## Running
 
-ProjectName is an iOS app in SwiftUI and requires Xcode with Swift 6.3 and an iOS 18 simulator.
+ProjectName is an iOS app in SwiftUI and requires Xcode with Swift 6.4 and an iOS 18 simulator.
 
 ```sh
 just run          # the app, in the simulator .bazelrc names
@@ -134,7 +134,7 @@ Type a name and, once typing pauses, the screen greets it: "Good day, Ada!".
 
 ## Use it from Claude Code
 
-ProjectName is an [MCP](https://modelcontextprotocol.io) server over stdio, and requires Swift 6.3
+ProjectName is an [MCP](https://modelcontextprotocol.io) server over stdio, and requires Swift 6.4
 on macOS 15 or Linux. `just install` builds it optimized and installs it at
 `~/.local/bin/projectname-mcp`; run it again after pulling to update. Then register the binary:
 
@@ -188,7 +188,7 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just docker` | The production image, built and run <!-- server:line --> |
 | `just load` | A k6 load test against the production image (`brew install k6`) <!-- server:line --> |
 | `just deploy` | This checkout, to Fly.io <!-- fly:line --> |
-| `just firmware` | The firmware image (needs ESP-IDF and swiftly's Swift 6.3.3) <!-- embedded:line --> |
+| `just firmware` | The firmware image (needs ESP-IDF and swiftly's Swift 6.4.3) <!-- embedded:line --> |
 | `just flash`, `just monitor` | The image, flashed to the board; the board's log <!-- embedded:line --> |
 | `just install` | The server, optimized, into `~/.local/bin` for `claude mcp add` <!-- mcp:line --> |
 | `just run` | The server over stdio, waiting for a client <!-- mcp:line --> |

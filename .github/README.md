@@ -11,7 +11,7 @@ git clone https://github.com/Tyler-Keith-Thompson/ProjectTemplate ~/workspace/Pr
 The script asks for the type and options, writes `~/workspace/MyThing`, resolves its dependencies
 and runs its tests. Nothing in the project depends on the template after that.
 
-You need macOS with Xcode's Swift 6.3 toolchain, and `bazelisk` and `just` from Homebrew. Some
+You need macOS with Xcode's Swift 6.4 toolchain, and `bazelisk` and `just` from Homebrew. Some
 options need more; [What a new project has](docs/projects.md#requirements) lists them.
 
 ## Types

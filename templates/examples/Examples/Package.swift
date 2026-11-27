@@ -1,4 +1,4 @@
-// swift-tools-version: 6.3
+// swift-tools-version: 6.4
 import PackageDescription
 
 // The example apps, in their own package so the published library never depends on what they use.
