@@ -1020,6 +1020,79 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertEqual(actual[2]["name"], "steady")
         self.assertEqual(actual[3], recorded["results"][3])
 
+    def test_bench_simulated_with_a_filter_keeps_every_entry_it_did_not_measure_and_fresh_writes_only_what_it_did(self):
+        directory = self.render(self.scratch / "bench-filter", "--library", "--benchmarks")
+        spec = importlib.util.spec_from_file_location("bench_simulated_filter_under_test", directory / "scripts" / "bench_simulated.py")
+        bench_simulated = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bench_simulated)
+        path = directory / "Benchmarks" / ".benchmarkBaselines" / "GreetingsBenchmarks" / "simulated" / "results.json"
+
+        def entry(instructions, cache_misses):
+            # HdrHistogram with 2048 sub-buckets: a value below 1024 sits at its own index.
+            def histogram(value):
+                return {"subBucketHalfCountMagnitude": 10, "unitMagnitude": 0, "maxValue": value,
+                        "counts": [0] * value + [3]}
+            return [{"metric": {"instructions": {}}, "scalingFactor": 1, "statistics": {"histogram": histogram(instructions)}},
+                    {"metric": {"cacheMisses": {}}, "scalingFactor": 1, "statistics": {"histogram": histogram(cache_misses)}}]
+
+        def baseline(**entries):
+            results = []
+            for name, value in entries.items():
+                results += [{"target": "GreetingsBenchmarks", "name": name}, value]
+            return {"baselineName": "simulated", "machine": {}, "results": results}
+
+        # A stand-in BenchmarkHarness checkout: `just harness` builds nothing, and the binary writes,
+        # in its own compact encoding, the benchmarks of the measurement the test names.
+        checkout = self.scratch / "bench-filter-harness"
+        release = checkout / "Harness" / ".build" / "release"
+        release.mkdir(parents=True)
+        (checkout / "justfile").write_text("harness:\n    true\n")
+        measurement = self.scratch / "bench-filter-measurement.json"
+        harness = release / "benchmark-harness"
+        harness.write_text(f"#!/bin/sh\nmkdir -p '{path.parent}'\ncp '{measurement}' '{path}'\n")
+        harness.chmod(0o755)
+        environment = dict(os.environ, BENCHMARK_HARNESS=str(checkout))
+
+        def record(*options):
+            return subprocess.run([sys.executable, "scripts/bench_simulated.py", "simulated", "--target", "GreetingsBenchmarks", *options],
+                                  cwd=directory, capture_output=True, text=True, env=environment)
+
+        recorded = baseline(alpha=entry(500, 400), beta=entry(600, 400), gamma=entry(700, 400))
+        recorded_text = bench_simulated.encode(recorded) + "\n"
+        # beta moved past the threshold; gamma's cache misses varied but its instructions didn't.
+        measured = baseline(beta=entry(900, 100), gamma=entry(705, 100))
+        measurement.write_text(json.dumps(measured, separators=(",", ":")))
+        expected = bench_simulated.encode(baseline(alpha=recorded["results"][1], beta=measured["results"][1],
+                                                   gamma=recorded["results"][5])) + "\n"
+        alpha_lines = bench_simulated.encode(recorded["results"][1], "    ")
+
+        for options in (("--filter", "beta|gamma"), ("--skip=alpha",)):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(recorded_text)
+
+            result = record(*options)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            actual = path.read_text()
+            self.assertEqual(actual, expected, options)
+            self.assertIn(alpha_lines, recorded_text)
+            self.assertIn(alpha_lines, actual)
+
+        path.write_text(recorded_text)
+
+        result = record("--iterations", "3")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        expected_without_alpha = bench_simulated.encode(baseline(beta=measured["results"][1], gamma=recorded["results"][5])) + "\n"
+        self.assertEqual(path.read_text(), expected_without_alpha)
+
+        path.write_text(recorded_text)
+
+        result = record("--fresh", "--filter", "beta|gamma")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(path.read_text(), bench_simulated.encode(measured) + "\n")
+
     def test_a_speed_reliant_target_lists_its_own_fixtures_and_check_refuses_one_without_performance_tests(self):
         directory = self.render(self.scratch / "performance-fixtures", "--library")
         modules = directory / "scripts" / "modules.py"

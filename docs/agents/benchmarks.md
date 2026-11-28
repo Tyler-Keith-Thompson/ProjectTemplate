@@ -11,5 +11,7 @@ entry. So the file changes only where a benchmark did, and pull requests that ch
 benchmarks of one target merge without a conflict. Resolve a conflict by re-recording after
 the merge, never by hand. A benchmark whose mallocs drop to zero, or that was measured over a
 different number of iterations, counts as moved. Harness options (`--iterations`, `--filter`)
-measure uncached and write the same format, keeping the entries that didn't move. To rewrite
+measure uncached and write the same format, keeping the entries that didn't move. A `--filter`
+or `--skip` run also keeps every entry it didn't measure; with `--fresh`, the file holds only
+what it measured. To rewrite
 every entry (a change aimed at cache misses alone), delete the file first.

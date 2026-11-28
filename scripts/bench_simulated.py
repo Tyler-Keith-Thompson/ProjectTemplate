@@ -16,6 +16,9 @@ where a benchmark did; --fresh writes every entry as measured.
 Any other option (--filter, --skip, --iterations, ...) runs the harness directly on the package,
 uncached, as `benchmark-harness baseline update` would; what it writes is then rewritten the same
 way, keeping the format and every entry that didn't move (all of them as measured with --fresh).
+A --filter or --skip run measures only some benchmarks, and the harness writes only those: every
+recorded entry it didn't measure is kept as it was, and a target it measured nothing of is left
+alone. With --fresh, the file holds only what was measured.
 
 BENCHMARK_HARNESS names the BenchmarkHarness checkout (default ~/workspace/BenchmarkHarness).
 """
@@ -169,13 +172,16 @@ def main(argv):
         # so a re-record with these options keeps the format and the unmoved entries too.
         paths = {target: baseline_path(target, baseline) for target in targets or benchmark_targets()}
         recorded = {} if fresh else {target: read_json(path) for target, path in paths.items()}
+        # The harness writes only the benchmarks a filter selects, so the rest are carried over;
+        # without one it measures every benchmark, and an entry it lacks was deleted from the code.
+        partial = any(option.split("=", 1)[0] in SELECTING_OPTIONS for option in uncached)
         returncode = subprocess.run(command).returncode
         if returncode:
             sys.exit(returncode)
         for target, path in paths.items():
             measured = read_json(path)
             if measured is not None:
-                write_if_changed(path, encode(keep_unmoved(recorded.get(target), measured)) + "\n")
+                write_if_changed(path, encode(keep_unmoved(recorded.get(target), measured, keep_unmeasured=partial)) + "\n")
         sys.exit(0)
 
     known = benchmark_targets()
@@ -199,6 +205,10 @@ def main(argv):
         write_if_changed(path, encode(keep_unmoved(recorded, measured)) + "\n")
         print(f"Wrote baseline '{baseline}' for {target}")
 
+
+# The harness options that measure only some of a target's benchmarks (ordo-one's --filter and
+# --skip, each taking a regular expression).
+SELECTING_OPTIONS = ("--filter", "--skip")
 
 # The metrics that decide whether a benchmark moved: the counts the code determines. Cache misses,
 # mispredicted branches and the cycle estimate follow them, but also vary between runs of the same
@@ -270,18 +280,26 @@ def entries(document):
     return {json.dumps(results[i], sort_keys=True): (results[i], results[i + 1]) for i in range(0, len(results), 2)}
 
 
-def keep_unmoved(recorded, measured):
+def keep_unmoved(recorded, measured, keep_unmeasured=False):
     """The measured baseline, where every benchmark that didn't move keeps its recorded entry.
 
     Re-recording a target measures all of its benchmarks, and the counts of one that didn't change
     still vary a little between runs. Keeping its entry leaves those lines untouched, so branches
     that each change a different benchmark of a target merge without a conflict.
+
+    With `keep_unmeasured`, for a measurement of only some benchmarks (--filter, --skip), every
+    recorded benchmark the measurement lacks keeps its entry too; otherwise it is dropped, as a
+    benchmark deleted from the code.
     """
     kept = entries(recorded) if recorded else {}
-    results = []
-    for key, (identifier, entry) in sorted(entries(measured).items(), key=lambda item: (item[1][0].get("target", ""), item[1][0].get("name", ""))):
+    chosen = entries(measured)
+    for key, (identifier, entry) in chosen.items():
         if key in kept and not moved(kept[key][1], entry):
-            entry = kept[key][1]
+            chosen[key] = (identifier, kept[key][1])
+    if keep_unmeasured:
+        chosen = {**kept, **chosen}
+    results = []
+    for identifier, entry in sorted(chosen.values(), key=lambda pair: (pair[0].get("target", ""), pair[0].get("name", ""))):
         results += [identifier, entry]
     return {**measured, "results": results}
 
