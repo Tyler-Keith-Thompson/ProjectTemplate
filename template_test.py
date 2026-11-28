@@ -1093,6 +1093,36 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(path.read_text(), bench_simulated.encode(measured) + "\n")
 
+    def test_the_benchmark_recipes_pass_an_argument_with_a_space_on_as_one_argument(self):
+        directory = self.render(self.scratch / "bench-arguments", "--library", "--benchmarks")
+        # Stand-ins for the script and swift record each call's arguments, one JSON list per line.
+        calls = self.scratch / "bench-arguments-calls.jsonl"
+        recorder = f"import json, sys\nwith open({str(calls)!r}, 'a') as f:\n    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+        (directory / "scripts" / "bench_simulated.py").write_text(recorder)
+        swift = self.scratch / "bench-arguments-swift"
+        swift.write_text(f"#!{sys.executable}\n{recorder}")
+        swift.chmod(0o755)
+
+        def recipe(*arguments):
+            calls.write_text("")
+            result = run("just", "--set", "SWIFT", str(swift), *arguments, cwd=directory)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return [json.loads(line) for line in calls.read_text().splitlines()]
+
+        prefix = ["package", "--allow-writing-to-package-directory", "benchmark"]
+        compare = prefix + ["baseline", "compare", "simulated", "simulated-current"]
+
+        self.assertEqual(recipe("bench-simulated", "--target", "X", "--filter", "a b"),
+                         [["simulated", "--target", "X", "--filter", "a b"]])
+        self.assertEqual(recipe("bench-simulated-compare", "--target", "X", "--skip=a b"),
+                         [["simulated-current", "--fresh", "--target", "X", "--skip=a b"],
+                          compare + ["--target", "X", "--skip=a b"]])
+        self.assertEqual(recipe("bench", "--filter", "a b"), [prefix + ["--filter", "a b"]])
+        self.assertEqual(recipe("bench-simulated", "--target", "X", "--iterations", "3"),
+                         [["simulated", "--target", "X", "--iterations", "3"]])
+        self.assertEqual(recipe("bench-simulated-compare"), [["simulated-current", "--fresh"], compare])
+        self.assertEqual(recipe("bench-simulated"), [["simulated"]])
+
     def test_a_speed_reliant_target_lists_its_own_fixtures_and_check_refuses_one_without_performance_tests(self):
         directory = self.render(self.scratch / "performance-fixtures", "--library")
         modules = directory / "scripts" / "modules.py"

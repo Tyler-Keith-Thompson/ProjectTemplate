@@ -13,5 +13,6 @@ the merge, never by hand. A benchmark whose mallocs drop to zero, or that was me
 different number of iterations, counts as moved. Harness options (`--iterations`, `--filter`)
 measure uncached and write the same format, keeping the entries that didn't move. A `--filter`
 or `--skip` run also keeps every entry it didn't measure; with `--fresh`, the file holds only
-what it measured. To rewrite
+what it measured. Quote a regex that holds a space
+(`--filter "BASELINE raw write"`): the recipes pass it on as one argument. To rewrite
 every entry (a change aimed at cache misses alone), delete the file first.
