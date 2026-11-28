@@ -490,6 +490,35 @@ class TemplateCommandTests(unittest.TestCase):
                         self.assertNotIn("remote_cache=", actual)
                         self.assertNotIn("buildbuddy", actual)
 
+    def test_the_docc_workflow_publishes_the_site_at_the_root_beside_a_docs_directory(self):
+        directory = self.render(self.scratch / "docc-publish-dir", "--library")
+        lines = (directory / ".github" / "workflows" / "docc.yml").read_text().splitlines()
+        start = lines.index("      - name: Generate the combined documentation")
+        body = []
+        for line in lines[start + 2:]:
+            if line.strip() and not line.startswith(" " * 10):
+                break
+            body.append(line[10:])
+        script = "\n".join(body) + "\n"
+        publish_dir = next(line.split(":", 1)[1].strip() for line in lines
+                           if line.strip().startswith("publish_dir:"))
+        workspace = pathlib.Path(tempfile.mkdtemp(dir=self.scratch))
+        shutil.copytree(directory / "docs", workspace / "docs")
+        (workspace / "bazel-bin" / "docs" / "documentation").mkdir(parents=True)
+        (workspace / "bazel-bin" / "docs" / "documentation" / "index.html").write_text("site\n")
+        tools = pathlib.Path(tempfile.mkdtemp(dir=self.scratch))
+        (tools / "bazel").write_text("#!/bin/sh\nexit 0\n")
+        (tools / "bazel").chmod(0o755)
+        environment = {**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"}
+
+        result = subprocess.run(["bash", "-e", "-c", script], cwd=workspace, env=environment,
+                                capture_output=True, text=True)
+
+        actual = sorted(path.name for path in (workspace / publish_dir).iterdir())
+        self.assertTrue((directory / "docs" / "agents").is_dir())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(actual, ["documentation"])
+
     def test_a_render_without_ci_has_no_workflows(self):
         directory = self.render(self.scratch / "no-ci-workflows", "--library", "--no-ci")
 

@@ -149,24 +149,24 @@ jobs:
       - name: Generate the combined documentation
         run: |
           bazel build //:docs
-          cp -RL bazel-bin/docs ./docs
-          chmod -R u+w ./docs
+          cp -RL bazel-bin/docs ./_site
+          chmod -R u+w ./_site
       # explore:begin
       #| - name: Add the explorer
         #| if: needs.explore.result == 'success'
         #| uses: actions/download-artifact@v8
         #| with:
           #| name: explore
-          #| path: docs/explore
+          #| path: _site/explore
       #| - name: Keep the published explorer
         #| # The explorer did not build: publish the copy already on gh-pages rather than none.
         #| if: needs.explore.result != 'success'
         #| run: |
-          #| git fetch --depth=1 origin gh-pages && git archive FETCH_HEAD explore | tar -x -C docs \
+          #| git fetch --depth=1 origin gh-pages && git archive FETCH_HEAD explore | tar -x -C _site \
             #| || echo "::warning::No explorer published: it did not build and gh-pages has none."
       # explore:end
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
+          publish_dir: ./_site
