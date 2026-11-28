@@ -896,11 +896,9 @@ def package_tests():
 
 
 def package_dependencies():
-    """PACKAGES that Package.swift declares: those a target it declares uses, or every one when no
-    module is iOS-only. A package only iOS modules and simulator tests use is Bazel's alone
-    (swift/Package.swift), as SwiftPM warns about a dependency no target uses."""
-    if not IOS_MODULES:
-        return PACKAGES
+    """PACKAGES that Package.swift declares: always only those a target it declares uses, as SwiftPM
+    warns about a dependency no target uses. A package used only outside Package.swift (iOS modules,
+    simulator tests, a hand-written Bazel target) is Bazel's alone (swift/Package.swift)."""
     used = {d.split("/")[0] for _, deps in [(m[0], m[3]) for m in package_modules() + MACROS] + [(e[0], e[2]) for e in EXECUTABLES] + package_tests()
             for d in deps if "/" in d and not d.startswith("//")}
     return [p for p in PACKAGES if p[0] in used]

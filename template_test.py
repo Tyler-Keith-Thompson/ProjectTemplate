@@ -1076,6 +1076,23 @@ class TemplateCommandTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, version)
             self.assertIn(f"PACKAGES gives swift-syntax {version!r}", result.stderr)
 
+    def test_package_swift_leaves_out_a_package_no_target_uses_with_or_without_ios_modules(self):
+        row = '    ("swift-unused", "https://github.com/example/swift-unused", "1.0.0"),\n'
+        url = "https://github.com/example/swift-unused"
+        for label, flag in (("unused-library", "--library"), ("unused-app", "--app")):
+            directory = self.render(self.scratch / label, flag)
+            modules = directory / "scripts" / "modules.py"
+            original = modules.read_text()
+            self.assertEqual("IOS_MODULES = []\n" in original, flag == "--library", label)
+            modules.write_text(original.replace("PACKAGES = [\n", "PACKAGES = [\n" + row, 1))
+
+            result = run(sys.executable, "scripts/modules.py", cwd=directory)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn(url, (directory / "Package.swift").read_text(), label)
+            self.assertIn(url, (directory / "swift" / "Package.swift").read_text(), label)
+            self.assertIn("https://github.com/Tyler-Keith-Thompson/SwiftPRNG", (directory / "Package.swift").read_text(), label)
+
     def test_a_compiler_plugin_depends_on_a_support_module_in_both_build_systems(self):
         directory = self.render(self.scratch / "plugin-support", "--library")
         modules = directory / "scripts" / "modules.py"
