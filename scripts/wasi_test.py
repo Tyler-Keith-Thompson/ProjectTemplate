@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Builds the SwiftPM test targets for wasm32-unknown-wasi and runs them under wasmtime: the
-32-bit `Int` check. See AGENTS.md ("32-bit `Int` (WebAssembly)").
+32-bit `Int` check. See docs/agents/wasm.md.
 
     python3 scripts/wasi_test.py                     # every test target, debug
     python3 scripts/wasi_test.py -c release          # every test target, release

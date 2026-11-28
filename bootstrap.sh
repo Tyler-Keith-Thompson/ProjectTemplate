@@ -441,10 +441,10 @@ remove_unless() {  # remove_unless <enabled> <path>...
     fi
 }
 remove_unless "$LIBRARY" Tests/ProjectNameTests
-remove_unless "$BENCHMARKS" tools/benchmarks.bzl scripts/bench_simulated.py
+remove_unless "$BENCHMARKS" tools/benchmarks.bzl scripts/bench_simulated.py docs/agents/benchmarks.md
 remove_unless "$MUTATION" scripts/mutate.py scripts/mutants
 remove_unless "$FUZZ" Fuzz scripts/fuzz.py
-remove_unless "$WASM" scripts/wasi_test.py
+remove_unless "$WASM" scripts/wasi_test.py docs/agents/wasm.md
 remove_unless "$EXPLORE" Explore
 remove_unless "$SWIFTUI" tools/lint.bzl third_party .swiftlint.yml .swiftlint-tests.yml
 remove_unless "$DIFFERENTIAL" Differential scripts/differential.py scripts/differential_greetings.py

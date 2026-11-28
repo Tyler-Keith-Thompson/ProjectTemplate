@@ -41,9 +41,8 @@ Explore/                         The browser explorer: pages running the library
 Examples/                        The example apps, a SwiftPM package of their own; Apps/ExampleApp the Apple apps Bazel builds <!-- examples:line -->
 Firmware/                        The ESP-IDF project: main/ is the app; BUILD.bazel gathers the modules it imports <!-- embedded:line -->
 tools/                           Bazel rule wrappers (warnings as errors, Swift 6 mode), DocC rules;
-                                 tools/bazel turns BuildBuddy on when the Keychain holds its key, and
-                                 on macOS sweeps stale output bases once a day (tools/sweep-output-bases):
-                                 a deleted workspace's, or one idle 7 days
+                                 tools/bazel (BuildBuddy, sweeping stale output bases)
+docs/agents/                     How-tos for one kind of change each, linked from below
 tools/embedded.bzl               Modules compiled as Embedded Swift, through tools/embedded-swift's toolchain <!-- embedded:line -->
 Dockerfile                       The production image, built with SwiftPM <!-- server:line -->
 LoadTests/load.js                The k6 load test that `just load` runs against the image <!-- server:line -->
@@ -79,188 +78,25 @@ Bazel. See `Examples/README.md`.
 external packages and platforms. `just modules` regenerates `Package.swift`, every `BUILD.bazel`,
 the umbrella module and `swift/Package.swift` from it. Never edit the generated files by hand;
 `//:package_swift_test` fails when `Package.swift` disagrees with the Bazel graph.
-`just modules` refuses a table or function defined twice in it, which a template update can merge
-in beside the project's own: keep one definition, holding the project's rows, and delete the other.
+`just modules` refuses a table or function defined twice, as a template update can leave one:
+keep the definition holding the project's rows.
 
-- Add a module: a row in `MODULES` (name, group, description, dependencies), then `just modules`.
-- Add a test target: a row in `TEST_TARGETS`. A target with a `Performance/` directory of Swift
-  sources must be listed in `PERFORMANCE_TESTS`, and the reverse.
-- Run a test target in the iOS simulator as well (the tests of a module every platform builds that
-  holds code under `#if canImport(UIKit)`): its name in `SIMULATOR_TESTS`, then `just modules`. It
-  stays in Package.swift and keeps its run on the Mac and Linux, and gains
-  `//Tests/<Target>:<Target>Simulator`, an `ios_unit_test` of the same tests inside
-  `tools/test_host`, which `just test` runs on a Mac and Linux skips. Its UIKit tests sit under
-  `#if canImport(UIKit)`, and its exit tests under `#if !os(iOS)`, as iOS has none. At least one
-  test must run on the Mac, since Bazel's runner fails a run of none; a target whose Mac tests are
-  Apple's alone goes in `APPLE_ONLY_TESTS` too. A target that depends on an iOS module or a Bazel
-  label runs in the simulator alone already, so it isn't listed. A target in `PERFORMANCE_TESTS`
-  too takes only its debug tests into the simulator; its `Performance/` tests stay on the Mac and
-  Linux. A target that runs in the simulator alone can't be in `PERFORMANCE_TESTS`.
-  It needs the test host and the simulator settings in `.bazelrc`, which the app type and the <!-- !simulator:line -->
-  `--simulator` and `--ios` options ship (`just modules` refuses the table without them). <!-- !simulator:line -->
-  From the project template's checkout, `./template.py add <project> --simulator` brings them <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  without an app. <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  `just mutate` runs a spec's simulator targets through Bazel (`scripts/mutate.py`). <!-- mutation:line -->
-- Add an iOS module (a screen of the iOS app): a row in `MODULES` and its name in `IOS_MODULES`, <!-- ios:line -->
-  then `just modules`. Bazel builds it for the simulator alone; Package.swift, the umbrella and the <!-- ios:line -->
-  docs leave it out (`tools/ios.bzl`, generated), and a module that depends on it must be iOS too. <!-- ios:line -->
-  Its test target runs in the simulator alone, an `ios_unit_test` inside `tools/test_host` that <!-- ios:line -->
-  Linux skips. The app (`Apps/ProjectName/BUILD.bazel`) lists it among its dependencies. <!-- ios:line -->
-- Add an iOS app to this project: from the project template's checkout, <!-- !ios:line --><!-- !app:line --><!-- !embedded:line --><!-- !mcp:line -->
-  `./template.py add <project> --ios` (after `just template-update`, if the stamp predates the <!-- !ios:line --><!-- !app:line --><!-- !embedded:line --><!-- !mcp:line -->
-  option). It brings `Apps/ProjectName`, the test host, the simulator settings and `tools/ios.bzl`; <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  until then `just modules` refuses `IOS_MODULES` and simulator tests. <!-- !simulator:line --><!-- !embedded:line --><!-- !mcp:line -->
-  option). It brings `Apps/ProjectName`, whose screens are iOS modules; the test host, the <!-- simulator:line --><!-- !ios:line --><!-- !app:line -->
-  simulator settings and `tools/ios.bzl` are here already (`--simulator`). <!-- simulator:line --><!-- !ios:line --><!-- !app:line -->
-- Give a test target an environment variable under `bazel test` (an integration test that runs
-  only when `TEST_DATABASE_URL` is set, say): its name and the variables in `TEST_ENVIRONMENT`
-  (`{"<Target>Tests": ["TEST_DATABASE_URL"]}`), then `just modules`. Bazel strips the test
-  environment; the generator writes the names as `env_inherit` on that target's `swift_test`, its
-  Performance one and its simulator `ios_unit_test`, so only those targets see the variable and
-  only their cached results depend on it. Not `--test_env` in `.bazelrc`, which hands it to every
-  test. SwiftPM passes the whole environment already. `check()` refuses a name that isn't a test
-  target.
-- Compile a target with a Swift language feature (`@_extern(c)` needs `Extern` on Swift 6.4): the
-  module or test target's name and the features in `EXPERIMENTAL_FEATURES` or `UPCOMING_FEATURES`
-  (`{"<Module>": ["Extern"]}`), then `just modules`. Package.swift gets
-  `.enableExperimentalFeature` or `.enableUpcomingFeature` in the target's `swiftSettings`, beside
-  MOCKING's define, and never `unsafeFlags`, which would stop other packages depending on this
-  one. Bazel gets the matching `-enable-experimental-feature` or `-enable-upcoming-feature` in
-  `copts` (a firmware module's Embedded Swift copy too), <!-- embedded:line -->
-  `copts`, <!-- !embedded:line -->
-  and `//:package_swift_test` fails while the two disagree. A test target's speed-reliant target
-  takes its features. Only the target named compiles with them, so a module that uses one in its
-  implementation alone asks nothing of its dependents. `check()` refuses a name that isn't a module
-  or test target, and a feature listed twice or under both tables. A release compiler refuses an
-  experimental feature that isn't available in production, so build with Xcode's toolchain after
-  adding one.
-- Add an executable: a row in `EXECUTABLES` (name, description, dependencies). It holds only
-  `@main`; its code lives in a module, where tests reach it.
-- Add an example module (a demo app's views, a sample server's routes): a row in `MODULES` and its
-  name in `EXAMPLE_MODULES`, then `just modules`. It builds and tests like any module, but has no
-  library product, umbrella import or DocC archive, so neither it nor its dependencies ship. Only
-  executables, test targets and other example modules may depend on it (`check()` enforces it).
-- Offer a module on its own but not through `import ProjectName` (a test-support back end, such as
-  an in-memory store adopters use in their tests): its name in `NON_UMBRELLA_MODULES` too, then
-  `just modules`. It keeps its library product and DocC archive; only the umbrella leaves it out.
-  The umbrella catalog's topic list is hand-written: list it there under a heading of its own, not
-  among the production modules.
-- A library module that imports Swift Testing (a helper adopters add to their test targets: a
-  custom `Trait`, an assertion that records an `Issue`): its name in `TESTING_MODULES` and
-  `NON_UMBRELLA_MODULES` too, then `just modules`. Bazel finds Testing only on the developer search
-  paths, which rules_swift gives testonly targets alone; the generator gives them to its
-  `swift_library` and its docs' symbol graph. A module that depends on it must be listed too, and no
-  executable may (`check()` enforces both).
-- Give a module resources (data files, Apple's privacy manifest): put them under `Sources/<Module>/`
-  and list each in `RESOURCES` (`{"<Module>": [("process", "Data/x.json"), ("copy", "Fixtures")]}`,
-  paths relative to the module, rules as SwiftPM's `.process` and `.copy`), then `just modules`.
-  Package.swift gets `resources:`, and Bazel the same `ProjectName_<Module>.bundle`
-  (`tools/resources.bzl`): nested in an app's or test bundle's resources on Apple platforms, in the
-  runfiles of `bazel test` and `bazel run` on macOS and Linux, found by a generated `Bundle.module`.
-  The module reads them through `Bundle.module` under either build system, and its tests read them
-  through the module. Bazel processes `process` files only inside Apple bundles (strings, asset
-  catalogs); elsewhere they are copied as they are, as SwiftPM does off Apple platforms. A module
-  that calls a required-reason API or collects data ships `PrivacyInfo.xcprivacy`, listed as
-  `("copy", "PrivacyInfo.xcprivacy")` so it sits at the bundle's root; `check()` refuses one left
-  out, a listed path that doesn't exist, and one inside another listed directory.
-  A firmware module can't have resources: Embedded Swift has no bundles. <!-- embedded:line -->
-- Give a test target fixture files (JSON to compare byte for byte, a sample input): put them under
-  `Tests/<Target>/` and list them in `RESOURCES` under the target's name
-  (`{"<Target>": [("copy", "Fixtures")]}`, paths relative to `Tests/<Target>`), then `just modules`.
-  The target gets its own `ProjectName_<Target>.bundle` the same way, in its swift_test, its
-  simulator ios_unit_test and its SwiftPM test target, and its tests read the files through
-  `Bundle.module`. Not under `Performance/`, which the target leaves out: the speed-reliant tests
-  of a `PERFORMANCE_TESTS` target list theirs under `<X>PerformanceTests`, paths relative to
-  `Tests/<X>/Performance`, and read them through `Bundle.module` in debug and release alike.
-- Generate a Swift source at build time (overloads for each arity, tables from a data file): the
-  generator is a Bazel executable that writes the source to standard output, or, given output
-  names, gets their paths before a `--`. List it in `GENERATED_SOURCES` under the module or test
-  target (`{"<Module>": [("<Name>", "//tools/<generator>", [<input labels>], [])]}`), create an
-  empty `Generated/<Name>.swift` in the target's directory, then `just modules` and `just sources`.
-  Bazel compiles the generator's output; SwiftPM compiles the copy under `Generated/`, which
-  `just sources` rewrites and `<Name>_test` fails on while it differs from what the generator
-  writes. Commit the copy, and run `just sources` after a change to the generator or its inputs.
-  `check()` refuses a copy that doesn't exist, and a speed-reliant, iOS or firmware target.
-  Simulated benchmarks measure the generator's output, at the copy's path. <!-- benchmarks:line -->
-- Add a macro: its compiler plugin is a row in `MACROS` (name, group, description, and as
-  dependencies swift-syntax's products, with `swift-syntax` in `PACKAGES`, and modules), its sources
-  in `Sources/<Plugin>/` (an `@main` `CompilerPlugin` listing the macro types), then `just modules`
-  and `just resolve`. The module that declares the macros (`#externalMacro(module: "<Plugin>",
-  type: ...)`) lists the plugin among its dependencies: Package.swift gets a `.macro` target, Bazel
-  a `swift_compiler_plugin` in that module's `plugins`. The plugin has no product, docs or umbrella
-  import; adopters import the declaring module, and build swift-syntax with it (seconds in debug,
-  minutes in release). Unless the macro is the package's main job, the declaring module is its own
-  module in `NON_UMBRELLA_MODULES`, so adopters who don't use the macro never build swift-syntax.
-  A macro takes swift-syntax as a range of majors, `range:<lower>..<<upper>` in `PACKAGES`
-  (`range:602.0.0..<604.0.0`). A plain minimum admits one major, and two packages that need
-  different majors can't be used together in one graph, so list every major the plugin builds
-  with. When a new major ships and the plugin builds and passes its tests on it, widen the upper
-  bound and release. Where the API differs between majors, keep the older one and branch on the
-  empty marker module swift-syntax ships for each release up to its own
-  (`#if canImport(SwiftSyntax603)`); a feature only a newer major supports sits under that check.
-  Bazel and CI build only the version `swift/Package.resolved` pins (usually the newest in range),
-  so test the lower bound after a change to the plugin and before raising it: set the row to
-  `exact:<lower>`, run `just modules`, `just resolve` and `just test`, then restore the range and
-  resolve again. A test target that lists the plugin tests
-  its expansions (`assertMacroExpansion` from `SwiftSyntaxMacrosGenericTestSupport`, with
-  `Issue.record` as its failure handler); one that lists the declaring module tests the expanded
-  code. A source that must not compile (a macro's diagnostic as the compiler reports it) is a
-  `swift_compile_failure_test` (`tools/compile_failure_test.bzl`) in `Tests/CompileFailures`, a
-  hand-written BUILD.bazel no Package.swift target holds, with a control that compiles.
-  `copts` type-checks a fixture under the flags of the target it stands for
-  (`["-default-isolation", "MainActor"]`), and `error_count` pins how many errors it reports.
-  Expansion code that several plugins share (the package's own and adopters' `.macro` targets)
-  lives in a library module in `MODULES` that the plugins list among their dependencies; it keeps
-  its product, so adopters' plugins can depend on it. It runs inside the compiler (SwiftPM builds it
-  for the host as well, Bazel in the exec configuration), so `check()` refuses one that is an iOS
-  module, in `TESTING_MODULES`, or reaches a plugin through its own dependencies, and a plugin that
-  depends on another plugin. A plugin that an example module uses, or that depends on one, goes
-  in `EXAMPLE_MODULES` too.
-  A plugin takes planted bugs like a module (`scripts/mutants/<Plugin>.py`), with its expansion <!-- mutation:line -->
-  tests as the spec's `TESTS`. <!-- mutation:line -->
-- Add a command plugin (`swift package <verb>`): a row in `PLUGINS` (name, verb, description, and
-  the reason it writes to the package directory, or `None` when it writes nothing there), its
-  sources in `Plugins/<name>/` (an `@main` `CommandPlugin`), then `just modules`. Package.swift gets
-  a `.plugin` target and product; Bazel builds none of it, so no test reaches the plugin. Keep it
-  thin, its logic in a module or an executable it builds and runs, and run it on the package
-  (`swift package --allow-writing-to-package-directory <verb>`) after a change to it.
-- Add an external package: a row in `PACKAGES`, its `swiftpkg_<identity>` repository in
-  `MODULE.bazel`'s `use_repo`, then `just modules` and `just resolve`.
-- Generate mocks: uncomment the Mockable row in `PACKAGES`, add `mockable/Mockable` to the
-  module that declares the protocol and to its test target, add `swiftpkg_mockable` to
-  `use_repo`, then `just modules` and `just resolve`. The generator defines `MOCKING` for that
-  module in debug builds only, in both build systems.
-- A package whose main module takes the project's name (`import ProjectName` is the library
-  itself) lists it in `MODULES`; the generator then writes no umbrella.
-- A package only Apple platforms build (Objective-C, a wrapper of an Apple framework) goes in
-  `APPLE_ONLY_PACKAGES` too: its products are linked on Apple platforms only, so the targets still
-  build on Linux, and the code that uses them sits under `#if canImport(...)`.
-<!-- wasi:begin -->
-- A package that builds everywhere but WebAssembly (one on NIOPosix: Hummingbird, Vapor) goes in
-  `NON_WASI_PACKAGES` too: its products are linked on every other platform, so the package still
-  builds for wasm32-wasi, and the code that uses them sits under `#if canImport(...)`.
-<!-- wasi:end -->
-- Raise the Swift floor (a dependency's manifest needs a newer Swift): set `SWIFT` (every
-  manifest's tools version, CI's and the Docker image's Swift, the minimum the docs state) and
-  `SWIFT_TOOLCHAIN` (the swift.org release swiftly installs where Xcode's toolchain falls short)
-  in `scripts/modules.py`, then `just modules`. It writes them into the generated manifests and
-  replaces the previous ones in every other file that names them (`SWIFT_SITES`), from the record
-  in `tools/swift_version.bzl`. Never edit a version in those files by hand. `just template-update`
-  keeps the project's versions, and says when the template's have passed them.
-  The fuzz targets build with `SWIFT_TOOLCHAIN`. <!-- fuzz:line -->
-  `just wasi-test` builds with `SWIFT_TOOLCHAIN` and its WebAssembly SDK. <!-- wasm:line -->
-  The explorer builds with `SWIFT_TOOLCHAIN` and its WebAssembly SDK. <!-- explore:line -->
-  The firmware builds with `SWIFT_TOOLCHAIN`'s Embedded Swift. <!-- embedded:line -->
-  CI needs a `swift-bazel` image of the new version, published from the project template's <!-- ci:line -->
-  `ci-image/build.sh`; with the explorer, `just modules` asks for docc.yml's `WASM_SDK_SHA256`. <!-- ci:line --><!-- explore:line -->
-  `ci-image/build.sh`. <!-- ci:line --><!-- !explore:line -->
 - A module name takes a `Module` suffix only when it would otherwise equal its main type's name
   (`GreetingModule` would hold `Greeting`). No catch-all modules ("Core", "Utilities").
+
+Before a change to the graph, read its how-to in `docs/agents/`:
+
+- `module-graph.md`: modules, test targets, executables, external packages and mocks.
+- `resources.md`: a module's resources, a test target's fixtures.
+- `generated-sources.md`: Swift sources generated at build time.
+- `macros.md`: macros and their compiler plugins.
+- `plugins.md`: SwiftPM command plugins.
+- `swift-version.md`: raising the Swift floor.
 
 ## Commands
 
 Every shell command gets a timeout. macOS has no `timeout`; use
-`perl -e 'alarm 1800; exec @ARGV' <command>`. A bug can make a loop run forever.
+`perl -e 'alarm 1800; exec @ARGV' <command>`.
 
 | Command | Does |
 |---|---|
@@ -282,7 +118,7 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 | `just bench [--target X]` | Benchmarks; `just bench-compare` against the `main` baseline <!-- benchmarks:line --> |
 | `just bench-simulated-compare [--target X]` | Simulated counts (Callgrind in a Linux VM, from `~/workspace/BenchmarkHarness`) against the committed `simulated` baseline; `just bench-simulated [--target X]` re-records it. Both measure only targets whose code changed <!-- benchmarks:line --> |
 | `just docs` | Combined DocC site into `.build/docs` |
-| `just generate` | Xcode project from the Bazel graph, in `xcode/` (out of the root, where `xcodebuild` would pick it over `Package.swift`) |
+| `just generate` | Xcode project from the Bazel graph, in `xcode/` |
 | `just buildbuddy-key`, `just ci-secrets` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache); set it as this repository's Actions secret with `gh` <!-- ci:line --> |
 | `just buildbuddy-key` | Store the BuildBuddy key in the Keychain (once per Mac; builds then use the remote cache) <!-- !ci:line --> |
 | `just template-update` | Merge the project template's changes since `.template.json`'s commit; resolve conflicts, then `just modules`, `just test` |
@@ -312,18 +148,13 @@ Every shell command gets a timeout. macOS has no `timeout`; use
   `Tests/X/Performance/`.
 - Release builds use their own output base (see the justfile). Don't create other output bases
   or copies of the repo, and shut down any extra Bazel server you start.
-- Before a Bash command that builds or tests, Claude Code runs `tools/load-gate` (a hook in
-  `.claude/settings.json`). While the machine is busy (a one-minute load average above one per
-  core) the command waits, up to 10 minutes, and two heavy commands start at least 20 seconds
-  apart, so agents in other worktrees don't all build at once. A held command says how long it
-  waited. `LOAD_GATE=off` turns it off; the script's docstring lists the other settings.
+- `tools/load-gate` (a Claude Code hook) holds a command that builds or tests while the machine
+  is busy, and says how long it waited. `LOAD_GATE=off` turns it off; its docstring has the rest.
 - Run suites through Bazel, not `swift test --filter`.
 - First-party warnings are errors (`tools/swift_rules.bzl`); dependencies build quietly. Fix the
   warning, never suppress it. DocC's are too: `just docs` fails on a link that doesn't resolve.
-- CI's Bazel jobs run in `ghcr.io/tyler-keith-thompson/swift-bazel:<swift>-<bazel>`, Swift with <!-- ci:line -->
-  the Bazel in `.bazelversion` already in it, built by the project template's `ci-image/build.sh`. <!-- ci:line -->
-  Changing `.bazelversion` or the workflows' Swift version means a new tag from there. <!-- ci:line -->
-  The package is private; a repository pulls it once added under its Manage Actions access. <!-- ci:line -->
+- CI's Bazel jobs run in the project template's `swift-bazel` image: a new `.bazelversion` or <!-- ci:line -->
+  Swift needs a new tag of it (`docs/agents/swift-version.md`). <!-- ci:line -->
 - Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests: <!-- wasm:line -->
   builds for platforms that cannot start a child process leave those files out. <!-- wasm:line -->
 - Exit tests (`#expect(processExitsWith:)`) go in files of their own, apart from the other tests. <!-- !wasm:line -->
@@ -331,48 +162,10 @@ Every shell command gets a timeout. macOS has no `timeout`; use
 
 ### 32-bit `Int` (WebAssembly)
 
-watchOS's arm64_32 and wasm32 have a 32-bit `Int`. `just wasi-test` (`scripts/wasi_test.py`)
-builds the SwiftPM test targets with `swift build --build-tests --swift-sdk
-swift-6.4.3-RELEASE_wasm` through swiftly into `.build/wasm`, then runs each test binary (one
-`<Target>-test-runner.wasm` per target, or an older toolchain's one `<Project>PackageTests.xctest`)
-with `wasmtime run --dir . --dir <checkout>::<checkout> --argv0 <binary's path> <binary>
---testing-library swift-testing`, logs in `.build/wasm/logs`. The checkout at its own path and the
-binary's path as `argv[0]` are where SwiftPM's `Bundle.module` looks for a module's resource bundle
-(an absolute build path with the `.xctest`, beside `Bundle.main` with the per-target runners, which
-WASI's Foundation takes from `argv[0]`). `-c release` builds with `-enable-testing`, so suites that
-`@testable import` build in release too. A `--targets` name that isn't a test target is refused
-before anything builds, and a group fails when its build wrote no runner for one of its targets.
-Needs swiftly's 6.4.3 toolchain, its WebAssembly SDK (`swift sdk list`; swift.org's "Getting
-Started with Swift SDKs for WebAssembly" has the install command) and `brew install wasmtime`. If
-the toolchain crashes on the manifest against a newer Xcode's SDK, pass `--xcode
-/Applications/Xcode-<older>.app`.
-
-- One binary of every target can pass wasmtime's limit of a million functions, so targets run in
-  groups (`<PROJECT>_WASI_TESTS`, the project's name in capitals, makes `Package.swift` declare
-  only those).
-- Not run on WASI: files with exit tests (no child processes; the manifest leaves them out), and
-  anything needing threads (`#if !os(WASI)`). `//:package_swift_test` fails when a target's
-  `wasi: [...]` list names a file that no longer holds an exit test, or misses one that does; run
-  `just modules` after adding, renaming or deleting one.
-- WASI runs every task on one thread, and a sleep that is cancelled still holds it until its
-  deadline. A time limit's timer is such a sleep: the body runs, but the timer then holds the
-  thread for the whole limit, so every `.timeLimit` test reports its limit exceeded. The script
-  counts only the issues besides those. Tests run in parallel, so the timers overlap; `--serial`
-  (Swift Testing's `--no-parallel`) costs each time-limited test its whole limit. A test that
-  cancels a real-clock sleep waits it out the same way, which is one more reason code takes its
-  clock from `Container` and tests advance a `TestClock`.
-- Without wasm tail calls, an await that doesn't suspend deepens both stacks. The script links a
-  64 MB stack and gives wasmtime a 256 MB one, enough for a 10,000-deep chain of such awaits; a
-  deeper one traps or hangs on WASI alone.
-- Foundation on WASI drops the last character of a resource's file name when the lookup names a
-  subdirectory: `Bundle.module.url(forResource: "sample", withExtension: "txt", subdirectory:
-  "Fixtures")` returns `Fixtures/sample.tx`, which doesn't exist, and so do
-  `path(forResource:ofType:inDirectory:)`, `urls(forResourcesWithExtension:subdirectory:)` and a
-  name holding the directory. Look up the directory itself, then append the file:
-  `Bundle.module.url(forResource: "Fixtures", withExtension: nil)?.appending(path: "sample.txt")`.
-- A dependency that doesn't build for WASI (NIOPosix and what sits on it) fails the whole build.
-  List its package in `NON_WASI_PACKAGES` (`scripts/modules.py`), and put the code and tests that
-  use it under `#if canImport(<its module>)`.
+watchOS's arm64_32 and wasm32 have a 32-bit `Int`; `just wasi-test` runs the suites there. Before
+changing what runs on WASI, or when a test fails only there, read `docs/agents/wasm.md`: how the
+script builds and runs, and what WASI can't do (exit tests, threads, time limits, resource lookups
+in subdirectories, packages on NIOPosix).
 <!-- wasm:end -->
 
 <!-- server:begin -->
@@ -505,8 +298,8 @@ modules, which build on services, which hold no UI (Seams and composition, below
   `//tools/snapshots:BazelSnapshotTesting`) runs in the simulator as an `ios_unit_test` hosted by
   `tools/test_host`, with `__Snapshots__` packaged into its bundle. Package.swift leaves it out.
   A service whose module also holds UIKit code (`#if canImport(UIKit)`) keeps its tests on the Mac
-  and runs them in the simulator too through `SIMULATOR_TESTS` (Module graph), rather than
-  depending on a label to get there.
+  and runs them in the simulator too through `SIMULATOR_TESTS` (`docs/agents/module-graph.md`),
+  rather than depending on a label to get there.
 - **A view is a function of its state.** The state is one enum (`ViewState`) with a case per
   screen the view can show, set in one place from what the service returned. The view resolves its
   service and clock with `@ConstructorInjected`. Work starts in `.task` (`.task(id:)` restarts it
@@ -580,8 +373,8 @@ one, built for macOS by Bazel and for every platform by SwiftPM.
   and `.serialized`. The view's `let inspection = Inspection<Self>()` and its `.onReceive` are the
   one hook production code carries for tests; the test target makes `Inspection` an
   `InspectionEmissary`. To run them in the iOS simulator as well, widen their guard to
-  `#if os(macOS) || os(iOS)` and list the target in `SIMULATOR_TESTS` (Module graph); the snapshot
-  tests stay the Mac's.
+  `#if os(macOS) || os(iOS)` and list the target in `SIMULATOR_TESTS`
+  (`docs/agents/module-graph.md`); the snapshot tests stay the Mac's.
 - **Snapshot tests** pin how each state renders, in light and dark: `ImageRenderer` draws the view
   in the color scheme the test sets, and `assertSnapshot` compares it with the reference in
   `__Snapshots__` beside the test (Bazel puts them in the test's runfiles). macOS doesn't scale
@@ -601,20 +394,12 @@ one, built for macOS by Bazel and for every platform by SwiftPM.
 <!-- views:end -->
 ## Building blocks
 
-The owner's own libraries, first in line under "Don't reinvent the wheel" (House rules). Reach
-for them before writing a graph, a container or an operator chain by hand, and before adding a
-third-party package for the same job. Add one as a row in `PACKAGES` (`scripts/modules.py`) under its
-identity, the repository's name in lowercase (`swiftprng`), and list a product among a module's
-dependencies as `"<identity>/<Product>"` (`"swiftprng/Generators"`), as the rows below spell them.
-
-| Library | What it is | Use it for |
-|---|---|---|
-| [Grafluent](https://github.com/Tyler-Keith-Thompson/Grafluent) | A generic, high-performance graph library: copy-on-write representations (`AdjacencyList`, `CompressedSparseRow`, `AdjacencyMatrix`, pseudographs, stable graphs), graph classes with invariants (`DirectedAcyclicGraph`, `BipartiteGraph`, `Tree`) and algorithms (traversal, shortest paths, flows, matching, connectivity, isomorphism, layout) | Anything shaped like a graph or DAG: dependency orderings, scheduling, routing, state machines, reachability. Products are per module (`"grafluent/ShortestPaths"`); the umbrella is `grafluent/Grafluent`. |
-| [GrafluentCollections](https://github.com/Tyler-Keith-Thompson/GrafluentCollections) | Graph-shaped collections as copy-on-write values with the standard library's and swift-collections' API shape: balanced search trees (`AVLTree`/`AVLDictionary`, `RedBlackTree`, `Treap`, `SplayTree`) and `FenwickTree` so far; tries, suffix structures, decision diagrams, B-trees, segment, interval and spatial trees, ropes, persistent trees and an LRU cache planned. Tree- and graph-shaped ones convert to the matching Grafluent type | Sorted sets and dictionaries that take inserts and removals, prefix and range sums with updates; check its backlog before hand-writing a planned structure. Products are per module (`"grafluentcollections/BinarySearchTrees"`); the umbrella is `grafluentcollections/GrafluentCollections`. |
-| [SwiftPRNG](https://github.com/Tyler-Keith-Thompson/SwiftPRNG) | Seeded random numbers that reproduce bit for bit on every platform and Swift release: generators as values (`Xoshiro256StarStar`, `Xoroshiro128Plus`, `SplitMix64`, with `jump()` for streams that never overlap), platform-stable draws (`uniform(in:)`, `integer(in:)`, `bernoulli(_:)`, with `checked` spellings), `SeedTree` (a seed per named decision, so adding a draw shifts nothing elsewhere, with overrides and `fitting` to search one subtree for a seed that meets a predicate) and `SeedSearch` (the smallest matching seed, concurrently) | Every seeded test, and any program whose randomness must replay: simulations, procedural generation, games, sampling. Never hand-write a generator. `Xoroshiro128Plus(seed:)` gives the same numbers as a hand-written `SeededRandomNumberGenerator` (xoroshiro128+ seeded by SplitMix64), so replacing one changes no pinned value. Products are per module (`"swiftprng/Generators"`: `Generators`, `Sampling`, `SeedTrees`, `SeedDiscovery`); the umbrella is `swiftprng/SwiftPRNG`. |
-| [DependencyInjection](https://github.com/Tyler-Keith-Thompson/DependencyInjection) | Swift 6 dependency injection: `Factory` values on `Container`, `@Injected` / `@LazyInjected` / `@ConstructorInjected`, unique, cached and shared scopes, hierarchical containers, and `withTestContainer` so concurrent tests never share state | Any seam a test needs to replace (clocks, network, storage). Tests wrap their body in `withTestContainer { }` and register doubles there. Product `"dependencyinjection/DependencyInjection"`. |
-| [Afluent](https://github.com/Tyler-Keith-Thompson/Afluent) | Reactive operators over async/await: `DeferredTask` (a unit of work that yields one value) and `AsyncSequence` extensions with Combine's names (`map`, `flatMap`, `catch`, `retry`, `debounce`, `share`, …), plus `AfluentTesting` | Pipelines over async work where Combine would once have been used; a Combine replacement in new code. Products `"afluent/Afluent"` and, for test targets, `"afluent/AfluentTesting"`. |
-| [DebugDrawer](https://github.com/Tyler-Keith-Thompson/DebugDrawer) | A plugin-based debug drawer for SwiftUI apps on iOS and macOS: a slide-in panel attached at the root view (`.debugDrawer()`), opened by `DebugDrawer.shared.toggle()`, with a library per plugin (console, performance, network, UserDefaults, app info, …) and local plugins tied to a view's lifetime (`.debugLocalPlugin(_:)`). It compiles to no-ops in release builds | Any debug-only tool an app needs (a switch, a fake response, a state dump): write a DebugDrawer plugin, installed from the composition root, instead of a one-off debug screen or gesture. Products are per plugin (`"debugdrawer/DebugDrawerConsolePlugin"`, …); the core is `"debugdrawer/DebugDrawer"`. | <!-- swiftui:line -->
+The owner's own libraries come first under "Don't reinvent the wheel" (House rules), before
+hand-written code or a third-party package for the same job: Grafluent (graphs and their
+algorithms), GrafluentCollections (sorted and prefix-sum collections), SwiftPRNG (seeded
+randomness), DependencyInjection and Afluent (async pipelines).
+DebugDrawer holds an app's debug-only tools, as plugins. <!-- swiftui:line -->
+`docs/agents/building-blocks.md` says what each holds, its products and how to add one.
 
 Their conventions carry over: value types, typed errors, `checked:` spellings that throw where <!-- performance:line -->
 the plain spelling traps, tests with Swift Testing. <!-- performance:line -->
@@ -665,19 +450,8 @@ have.
    `just modules`) where speed matters, starting with a `BASELINE` entry: the hand-written form the code must keep pace with. Measure in
    release, and add a ratio test in `Tests/<Module>Tests/Performance/` where siblings have one.
    Use small inputs in debug builds, because the timing only runs in release.
-   Judge a speed change by `just bench-simulated-compare --target <Module>Benchmarks`: its
-   instruction, cache-miss and branch counts don't move when the machine is busy, as wall clock
-   does. Allocation counts and absolute times still come from `just bench`, on a quiet machine.
-   Re-record the `simulated` baseline for the targets a change touches
-   (`just bench-simulated --target X`) and commit it with the change. Its `results.json` is
-   pretty-printed with sorted keys, one benchmark's entry on lines of its own, and a benchmark
-   whose instruction and malloc counts moved less than compare's 5% threshold keeps its recorded
-   entry. So the file changes only where a benchmark did, and pull requests that change different
-   benchmarks of one target merge without a conflict. Resolve a conflict by re-recording after
-   the merge, never by hand. A benchmark whose mallocs drop to zero, or that was measured over a
-   different number of iterations, counts as moved. Harness options (`--iterations`, `--filter`)
-   measure uncached and write the same format, keeping the entries that didn't move. To rewrite every entry (a change aimed at cache misses alone), delete
-   the file first.
+   Judge a speed change by `just bench-simulated-compare --target <Module>Benchmarks`, and
+   re-record the `simulated` baseline it touches (`docs/agents/benchmarks.md`).
 <!-- benchmarks:end -->
 
 Watch for these:
@@ -766,8 +540,7 @@ first, `bazel test //...` in debug, then `--config=release`.
   data structure, algorithm, parser, concurrency primitive or test tool, look in this order:
   1. The owner's libraries (Building blocks above).
   2. Apple: the standard library and Foundation, then Apple's open-source packages
-     (swift-collections, swift-algorithms, swift-async-algorithms, swift-numerics, swift-atomics,
-     swift-system, swift-argument-parser, swift-log, swift-crypto, swift-nio), then
+     (swift-collections, swift-algorithms, swift-async-algorithms, swift-log, swift-nio, …), then
      the platform frameworks where every target, Linux CI included, has them. <!-- ci:line -->
      the platform frameworks where every target, Linux included, has them. <!-- !ci:line -->
   3. Well-maintained community packages (Mockable and swift-property-based are already the
@@ -788,8 +561,8 @@ first, `bazel test //...` in debug, then `--config=release`.
   so the body reads as a sentence.
 - No hooks or SPI added only for tests.
 - Underscored Swift features (`@_spi`, `_modify`, `@_effects`, `@_exported`) are fine where they
-  help. Apple private API is not: undocumented framework symbols, private selectors, private
-  frameworks, anything App Review rejects.
+  help. Apple private API is not (undocumented symbols, private selectors or frameworks, anything
+  App Review rejects).
 
 ### Seams and composition (*default*)
 
@@ -811,9 +584,8 @@ library with none of that can skip this section.
 - **The executable is the composition root.** Modules ship working defaults (an in-memory store);
   the executable registers what production swaps in (the store on disk) at startup.
 - **Async work is a pipeline of values.** With Afluent, a call returns a lazy unit of work
-  (`DeferredTask`, `AsynchronousUnitOfWork`) built from operators: `flatMap` to the next step,
-  `tryMap` to validate, `decode`, `handleEvents` for side effects (caching, logging), `tryCatch`
-  for a fallback, `shareFromCache` so simultaneous identical requests make one call. Nothing runs
+  (`DeferredTask`) built from operators (`flatMap`, `tryMap`, `decode`, `handleEvents`,
+  `tryCatch`, and `shareFromCache` so identical simultaneous requests make one call). Nothing runs
   until `execute()`, so callers compose, retry and cancel it freely.
 - **Time is a dependency.** Code that waits, debounces or times out takes a clock registered on
   `Container` (`AnyClock<Duration>`), never an inline `Task.sleep` or `ContinuousClock()`. Tests
@@ -827,11 +599,10 @@ library with none of that can skip this section.
   `URL(string:)!`. A force unwrap or trap that remains has a comment proving it can't fire and
   why a crash beats a thrown error no caller could handle.
 - **Logging.** A type that logs has one `private static let logger`: swift-log's
-  `Logger(label: "<module>.<Type>")`, or `os.Logger(subsystem:category:)` in Apple-only code, where
-  every interpolation of user data stays private. Levels mean something: `debug` for a path taken,
-  `info` for a notable event, `notice` for a degraded result (cached data served), `error` for a
-  failure. Cancellation is not a failure; don't log it as one. Logs are for developers; tests
-  don't pin them.
+  `Logger(label: "<module>.<Type>")`, or `os.Logger(subsystem:category:)` in Apple-only code,
+  keeping user data private. Levels: `debug` a path taken, `info` a notable event, `notice` a
+  degraded result (cached data served), `error` a failure; cancellation is not a failure. Tests
+  don't pin logs.
 
 ### Tests (*default*)
 
@@ -856,15 +627,13 @@ library with none of that can skip this section.
   response, a missing resource) has a test of what the caller sees.
 - Tests may call underscored and `package` API.
 - Test doubles come from [Mockable](https://github.com/Kolos65/Mockable): mark the protocol at the
-  seam `@Mockable` and use the generated `Mock<Protocol>` with `given`, `when` and `verify`
-  inside the test, rather than hand-writing doubles. With DependencyInjection, register the mock
-  inside the test's `withTestContainer { }`. Mocks exist only in debug builds, so a
-  `PerformanceTests` target never uses one.
+  seam `@Mockable` and use the generated `Mock<Protocol>` (`given`, `when`, `verify`), registered
+  in the test's `withTestContainer { }`, never a hand-written double. Mocks exist only in debug
+  builds, so a `PerformanceTests` target never uses one.
 - Property tests use swift-property-based (`import PropertyBased`, `propertyCheck`).
 - Randomized tests are seeded so a failure reproduces from its seed alone: a SwiftPRNG generator
-  (`Xoshiro256StarStar(seed:)`), drawn through its platform-stable `uniform(in:)`, `integer(in:)`
-  and `bernoulli(_:)` rather than the standard library's `random(in:using:)`, whose answers may
-  change between Swift releases.
+  drawn through its platform-stable `uniform(in:)`, `integer(in:)` and `bernoulli(_:)`, never the
+  standard library's `random(in:using:)`, whose answers may change between Swift releases.
 
 ### Docs (*default*)
 
@@ -880,12 +649,10 @@ library with none of that can skip this section.
 - The README's examples are tests (`Tests/ProjectNameTests`).
 - The README is the front page: what the project is, how to install or run it, one short example,
   and links. Everything else (guides, every option, reference) goes in the DocC catalogs, which
-  the README links to. When a section grows past a screen, move it out rather than trim the
-  README's other sections to make room.
-- Run prose docs through the `humanizer` skill (`/humanizer`) before committing them: READMEs, DocC
-  articles, doc comments and this file. It removes the tells of generated text (inflated claims,
-  stock phrases, forced lists of three) without changing what the text says. Docs only: not code,
-  `//` comments, commit messages or backlog items.
+  the README links to. A section that grows past a screen moves out there.
+- Run prose docs (READMEs, DocC articles, doc comments, this file and `docs/agents/`) through the
+  `humanizer` skill (`/humanizer`) before committing them; not code, `//` comments, commit
+  messages or backlog items.
 
 ### Git (*default*)
 

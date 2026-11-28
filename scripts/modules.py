@@ -389,7 +389,7 @@ SWIFT_SITES = [
     ".github/workflows/*.yml", "Dockerfile", "justfile",
     "scripts/wasi_test.py", "scripts/fuzz.py", "Explore/build.sh", "tools/embedded-swift", "tools/swift_rules.bzl",  # wasm:line
     #| "scripts/fuzz.py", "Explore/build.sh", "tools/embedded-swift", "tools/swift_rules.bzl",  # !wasm:line
-    "README.md", "AGENTS.md", ".github/README.md", ".github/docs/*.md", "Fuzz/README.md", "Explore/README.md", "Examples/README.md",
+    "README.md", "AGENTS.md", "docs/agents/*.md", ".github/README.md", ".github/docs/*.md", "Fuzz/README.md", "Explore/README.md", "Examples/README.md",
 ]
 
 

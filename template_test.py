@@ -400,6 +400,62 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertNotIn(".github/README.md", actual)
         self.assertEqual([path for path in actual if path.startswith(".github/docs/")], [])
 
+    def test_agents_md_names_every_how_to_a_render_ships_and_an_options_how_to_ships_with_it_alone(self):
+        plain = self.render(self.scratch / "how-tos-plain", "--library")
+        full = self.render(self.scratch / "how-tos-full", "--library", "--wasm", "--benchmarks")
+        marker = re.compile(r"<!--|\w:(?:line|begin|end)\b")
+
+        for directory in (plain, full):
+            agents = (directory / "AGENTS.md").read_text()
+            how_tos = sorted((directory / "docs" / "agents").glob("*.md"))
+            self.assertTrue(how_tos)
+            for how_to in how_tos:
+                self.assertRegex(agents, rf"(?:docs/agents/|`){re.escape(how_to.name)}", how_to)
+                self.assertIsNone(marker.search(how_to.read_text()), how_to)
+            for named in re.findall(r"docs/agents/([\w-]+\.md)", agents):
+                self.assertTrue((directory / "docs" / "agents" / named).is_file(), named)
+        self.assertFalse((plain / "docs" / "agents" / "wasm.md").exists())
+        self.assertFalse((plain / "docs" / "agents" / "benchmarks.md").exists())
+        self.assertTrue((full / "docs" / "agents" / "wasm.md").is_file())
+        self.assertTrue((full / "docs" / "agents" / "benchmarks.md").is_file())
+
+    def test_update_brings_in_a_new_how_to_and_keeps_the_projects_own_agents_md_section(self):
+        # The template before it shipped module-graph.md: its how-to written inline in AGENTS.md.
+        agents_md = self.template / "AGENTS.md"
+        how_to = self.template / "docs" / "agents" / "module-graph.md"
+        stock = agents_md.read_text()
+        pointer = "- `module-graph.md`: modules, test targets, executables, external packages and mocks.\n"
+        self.assertIn(pointer, stock)
+        git("checkout", "-q", "-b", "before-how-tos", cwd=self.template)
+        agents_md.write_text(stock.replace(pointer, how_to.read_text().split("## Modules and test targets\n\n", 1)[1]))
+        how_to.unlink()
+        git("commit", "-q", "-am", "before docs/agents/module-graph.md", cwd=self.template)
+        before = git("rev-parse", "HEAD", cwd=self.template)
+        result = run("bash", str(self.template / "bootstrap.sh"), "--render-only", "--library", NAME,
+                     str(self.scratch / "own-agents"), cwd=self.scratch)
+        git("checkout", "-q", "main", cwd=self.template)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        project = self.scratch / "own-agents"
+        (project / ".template.json").write_text(json.dumps({"commit": before, "name": NAME, "type": "library"}) + "\n")
+        own_section = "## Deploying\n\nThe owner deploys by hand; never deploy from an agent session.\n"
+        project_agents = project / "AGENTS.md"
+        project_agents.write_text(project_agents.read_text().replace(PLACEHOLDER, DESCRIPTION) + "\n" + own_section)
+        git("init", "-q", "-b", "main", cwd=project)
+        git("add", "-A", cwd=project)
+        git("commit", "-q", "-m", "project", cwd=project)
+        expected = self.render(self.scratch / "own-agents-expected", "--library")
+
+        result = self.template_py("update", str(project), "--to", self.commit)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        actual = project_agents.read_text()
+        self.assertEqual((project / "docs" / "agents" / "module-graph.md").read_bytes(),
+                         (expected / "docs" / "agents" / "module-graph.md").read_bytes())
+        self.assertIn(pointer, actual)
+        self.assertNotIn("- Add a module: a row in `MODULES`", actual)
+        self.assertTrue(actual.endswith(own_section), actual[-300:])
+        self.assertIn(DESCRIPTION, actual)
+
     def test_a_missing_buildbuddy_key_warns_in_both_workflows_and_leaves_the_build_uncached(self):
         directory = self.render(self.scratch / "buildbuddy-warning", "--library")
         expected_warning = ("::warning::BUILDBUDDY_API_KEY is not set; Bazel runs without the remote cache "

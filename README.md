@@ -199,7 +199,8 @@ Bazel is the development build; SwiftPM is the published package. Both are gener
 | `just record-snapshots` | Every snapshot reference, re-recorded into the workspace <!-- swiftui:line --> |
 | `just generate` | An Xcode project from the Bazel graph, in `xcode/` |
 
-`AGENTS.md` describes the layout, the workflow and the house rules in full.
+`AGENTS.md` describes the layout, the workflow and the house rules; `docs/agents/` holds its
+step-by-step how-tos.
 
 ## License
 
