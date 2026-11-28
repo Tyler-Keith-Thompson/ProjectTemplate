@@ -152,7 +152,11 @@ class HookTests(unittest.TestCase):
         shutil.rmtree(self.state, ignore_errors=True)
 
     def run_gate(self, stdin, **environment):
-        env = dict(os.environ, LOAD_GATE_STATE=self.state, **environment)
+        # The caller's own LOAD_GATE settings (LOAD_GATE=off, say) would change what the gate
+        # does, so each test starts from none and sets only its own.
+        inherited = {name: value for name, value in os.environ.items()
+                     if not name.startswith("LOAD_GATE")}
+        env = dict(inherited, LOAD_GATE_STATE=self.state, **environment)
         return subprocess.run([sys.executable, "-I", GATE], input=stdin, capture_output=True,
                               text=True, env=env, timeout=60)
 
