@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record simulated benchmark counts as an ordo-one baseline, measuring only what changed.
 
-    scripts/bench_simulated.py <baseline> [--target <Target>]... [--fresh]
+    scripts/bench_simulated.py <baseline> [--target <Target>]... [--fresh] [--remeasure]
 
 Each benchmark target (BENCHMARKS in scripts/modules.py) is a Bazel target, //Benchmarks:<Target>,
 whose output is its counts from BenchmarkHarness (tools/benchmarks.bzl). Counts are deterministic,
@@ -19,6 +19,11 @@ way, keeping the format and every entry that didn't move (all of them as measure
 A --filter or --skip run measures only some benchmarks, and the harness writes only those: every
 recorded entry it didn't measure is kept as it was, and a target it measured nothing of is left
 alone. With --fresh, the file holds only what was measured.
+
+--remeasure takes that uncached path with no other option, so the harness measures every selected
+target even when nothing changed. A second cached run of unchanged code is a cache hit that
+measures nothing; re-record with --remeasure to check that a baseline reproduces (the file should
+not change), or to measure again after a change Bazel can't see.
 
 BENCHMARK_HARNESS names the BenchmarkHarness checkout (default ~/workspace/BenchmarkHarness).
 """
@@ -150,11 +155,14 @@ def main(argv):
     baseline, options = argv[0], argv[1:]
     harness_checkout = os.environ.get("BENCHMARK_HARNESS", os.path.expanduser("~/workspace/BenchmarkHarness"))
 
-    targets, uncached, fresh = [], [], False
+    targets, uncached, fresh, remeasure = [], [], False, False
     index = 0
     while index < len(options):
         if options[index] == "--fresh":
             fresh = True
+            index += 1
+        elif options[index] == "--remeasure":
+            remeasure = True
             index += 1
         elif options[index] == "--target" and index + 1 < len(options):
             targets.append(options[index + 1])
@@ -164,7 +172,7 @@ def main(argv):
             index += 1
 
     binary = prepare_harness(harness_checkout)
-    if uncached:
+    if uncached or remeasure:
         print("Measuring without the cache: only --target selects cached results.", file=sys.stderr)
         command = [binary, "baseline", "update", baseline, "--package-path", BENCHMARKS_DIR]
         command += [arg for target in targets for arg in ("--target", target)] + uncached

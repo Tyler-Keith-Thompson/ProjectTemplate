@@ -14,5 +14,8 @@ different number of iterations, counts as moved. Harness options (`--iterations`
 measure uncached and write the same format, keeping the entries that didn't move. A `--filter`
 or `--skip` run also keeps every entry it didn't measure; with `--fresh`, the file holds only
 what it measured. Quote a regex that holds a space
-(`--filter "BASELINE raw write"`): the recipes pass it on as one argument. To rewrite
+(`--filter "BASELINE raw write"`): the recipes pass it on as one argument. A second
+`just bench-simulated` on unchanged code is a cache hit and measures nothing, so to check that
+a baseline reproduces, re-record with `--remeasure` (`just bench-simulated --target X
+--remeasure`): the harness measures again, uncached, and the file shouldn't change. To rewrite
 every entry (a change aimed at cache misses alone), delete the file first.

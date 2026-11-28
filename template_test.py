@@ -1093,6 +1093,37 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(path.read_text(), bench_simulated.encode(measured) + "\n")
 
+    def test_bench_simulated_with_remeasure_runs_the_harness_every_time_and_does_not_pass_the_option_on(self):
+        directory = self.render(self.scratch / "bench-remeasure", "--library", "--benchmarks")
+        path = directory / "Benchmarks" / ".benchmarkBaselines" / "GreetingsBenchmarks" / "simulated" / "results.json"
+        # A stand-in BenchmarkHarness checkout: `just harness` builds nothing, and the binary records
+        # each call's arguments, one JSON list per line, then writes the same measurement.
+        checkout = self.scratch / "bench-remeasure-harness"
+        release = checkout / "Harness" / ".build" / "release"
+        release.mkdir(parents=True)
+        (checkout / "justfile").write_text("harness:\n    true\n")
+        calls = self.scratch / "bench-remeasure-calls.jsonl"
+        calls.write_text("")
+        measurement = {"baselineName": "simulated", "machine": {}, "results": []}
+        harness = release / "benchmark-harness"
+        harness.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                           f"with open({str(calls)!r}, 'a') as f:\n    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                           f"os.makedirs({str(path.parent)!r}, exist_ok=True)\n"
+                           f"with open({str(path)!r}, 'w') as f:\n    json.dump({measurement!r}, f)\n")
+        harness.chmod(0o755)
+        environment = dict(os.environ, BENCHMARK_HARNESS=str(checkout))
+        expected_call = ["baseline", "update", "simulated", "--package-path", str((directory / "Benchmarks").resolve()),
+                         "--target", "GreetingsBenchmarks"]
+        expected = [expected_call, expected_call]
+
+        for _ in range(2):
+            result = subprocess.run(["just", "bench-simulated", "--target", "GreetingsBenchmarks", "--remeasure"],
+                                    cwd=directory, capture_output=True, text=True, env=environment)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        actual = [json.loads(line) for line in calls.read_text().splitlines()]
+        self.assertEqual(actual, expected)
+
     def test_the_benchmark_recipes_pass_an_argument_with_a_space_on_as_one_argument(self):
         directory = self.render(self.scratch / "bench-arguments", "--library", "--benchmarks")
         # Stand-ins for the script and swift record each call's arguments, one JSON list per line.
