@@ -27,6 +27,9 @@ code. A source that must not compile (a macro's diagnostic as the compiler repor
 hand-written BUILD.bazel no Package.swift target holds, with a control that compiles.
 `copts` type-checks a fixture under the flags of the target it stands for
 (`["-default-isolation", "MainActor"]`), and `error_count` pins how many errors it reports.
+A fixture that uses code under `#if canImport(UIKit)` (a macro whose protocol refines a UIKit one)
+sets `ios_simulator_minimum_os` (`"18.0"`): it type-checks for the arm64 iOS simulator, against
+deps built for it, and takes `target_compatible_with = ["@platforms//os:macos"]`.
 Expansion code that several plugins share (the package's own and adopters' `.macro` targets)
 lives in a library module in `MODULES` that the plugins list among their dependencies; it keeps
 its product, so adopters' plugins can depend on it. It runs inside the compiler (SwiftPM builds it

@@ -8,6 +8,12 @@ failure, keeps a fixture that fails for another reason (a missing module, a typo
 With no `expected_errors` it passes only when the source compiles: a control, which shows that
 the search paths and the plugin work.
 
+`ios_simulator_minimum_os`, when set (`"18.0"`), type-checks the fixture for the arm64 iOS
+simulator (`xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios<version>-simulator`),
+against `deps` built for it with that minimum OS, so a fixture can use code under
+`#if canImport(UIKit)`: a swiftmodule built for the Mac can't be imported there. Such a test runs
+on macOS alone, so give it `target_compatible_with = ["@platforms//os:macos"]`.
+
 `copts` are compiler flags, passed after the search paths in both modes, so a fixture type-checks
 under the settings of the target it stands for (`["-default-isolation", "MainActor"]`,
 `["-enable-upcoming-feature", "InferIsolatedConformances"]`). `error_count`, when set, is how many
@@ -37,7 +43,9 @@ load("@rules_swift//swift:providers.bzl", "SwiftInfo")
 
 _SCRIPT = """#!/bin/sh
 set -u
-if command -v xcrun >/dev/null 2>&1; then
+if [ -n "%s" ]; then
+    swiftc="xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios%s-simulator"
+elif command -v xcrun >/dev/null 2>&1; then
     swiftc="xcrun swiftc"
 else
     swiftc="swiftc"
@@ -118,6 +126,8 @@ def _swift_compile_failure_test_impl(ctx):
     ctx.actions.write(
         script,
         _SCRIPT % (
+            ctx.attr.ios_simulator_minimum_os,
+            ctx.attr.ios_simulator_minimum_os,
             " ".join(arguments),
             ctx.file.src.short_path,
             "".join(ctx.attr.expected_errors).replace("'", ""),
@@ -135,16 +145,38 @@ def _swift_compile_failure_test_impl(ctx):
         runfiles = runfiles.merge(ctx.attr.plugin[DefaultInfo].default_runfiles)
     return [DefaultInfo(executable = script, runfiles = runfiles)]
 
+# The simulator's platform, which a fixture type-checked for the simulator builds its deps for.
+_IOS_SIMULATOR_PLATFORM = str(Label("@build_bazel_apple_support//platforms:ios_sim_arm64"))
+
+def _deps_platform_impl(settings, attr):
+    if attr.ios_simulator_minimum_os:
+        return {
+            "//command_line_option:platforms": [_IOS_SIMULATOR_PLATFORM],
+            "//command_line_option:ios_minimum_os": attr.ios_simulator_minimum_os,
+        }
+    return {
+        "//command_line_option:platforms": settings["//command_line_option:platforms"],
+        "//command_line_option:ios_minimum_os": settings["//command_line_option:ios_minimum_os"],
+    }
+
+# Builds deps for the simulator when the fixture type-checks for it, else leaves them as they are.
+_deps_platform = transition(
+    implementation = _deps_platform_impl,
+    inputs = ["//command_line_option:platforms", "//command_line_option:ios_minimum_os"],
+    outputs = ["//command_line_option:platforms", "//command_line_option:ios_minimum_os"],
+)
+
 swift_compile_failure_test = rule(
     implementation = _swift_compile_failure_test_impl,
     doc = "Passes when `src` fails to type-check against `deps` with every one of `expected_errors` (and `error_count` errors, when set), or compiles when there are none.",
     attrs = {
         "src": attr.label(allow_single_file = [".swift"], mandatory = True),
-        "deps": attr.label_list(providers = [SwiftInfo]),
+        "deps": attr.label_list(providers = [SwiftInfo], cfg = _deps_platform),
         "plugin": attr.label(executable = True, cfg = "exec"),
         "plugin_module_name": attr.string(doc = "The plugin's module name, which `-load-plugin-executable` pairs with it."),
         "expected_errors": attr.string_list(doc = "Text the compiler's output must hold; none for a source that must compile."),
         "copts": attr.string_list(doc = "Compiler flags, passed after the search paths whether the source must fail or compile."),
+        "ios_simulator_minimum_os": attr.string(doc = "The iOS version to type-check for in the arm64 simulator, against `deps` built for it, or empty for the host."),
         "error_count": attr.int(doc = "How many `error:` lines the compiler's output must hold, or 0 to leave the count unchecked."),
     },
     test = True,

@@ -1130,7 +1130,7 @@ class TemplateCommandTests(unittest.TestCase):
         def run_script(error_count):
             # The arguments _swift_compile_failure_test_impl formats it with, in its order.
             expected = ["error: first"]
-            text = script % ("-I 'Sources/X' '-default-isolation' 'MainActor'", "Fixture.swift", "".join(expected),
+            text = script % ("", "", "-I 'Sources/X' '-default-isolation' 'MainActor'", "Fixture.swift", "".join(expected),
                              "Fixture.swift", "Fixture.swift", "\n".join(expected), error_count, error_count, error_count)
             return subprocess.run(["sh", "-c", text], cwd=directory, env=environment, capture_output=True, text=True)
 
@@ -1147,6 +1147,37 @@ class TemplateCommandTests(unittest.TestCase):
         self.assertIn("arguments + ctx.attr.copts]", rule)
         self.assertIn('"copts": attr.string_list(', rule)
         self.assertIn('"error_count": attr.int(', rule)
+
+    def test_a_compile_failure_test_for_the_simulator_type_checks_against_its_sdk_and_builds_deps_for_it(self):
+        directory = self.render(self.scratch / "compile-failure-simulator", "--library", "--simulator")
+        rule = (directory / "tools" / "compile_failure_test.bzl").read_text()
+        script = re.search(r'_SCRIPT = """(.*?)"""', rule, re.S).group(1)
+        bin_directory = directory / "fake-bin"
+        bin_directory.mkdir()
+        recorded = directory / "arguments"
+        # Stands in for xcrun and swiftc: records how it was called, then compiles cleanly.
+        for name in ("xcrun", "swiftc"):
+            (bin_directory / name).write_text(f'#!/bin/sh\nprintf "%s\\n" "{name}" "$@" > "{recorded}"\nexit 0\n')
+            (bin_directory / name).chmod(0o755)
+        environment = {**os.environ, "PATH": f"{bin_directory}:{os.environ['PATH']}", "TEST_TMPDIR": str(directory)}
+
+        def run_script(minimum_os):
+            # The arguments _swift_compile_failure_test_impl formats it with, in its order: a control.
+            text = script % (minimum_os, minimum_os, "-I 'Sources/X'", "Fixture.swift", "", "Fixture.swift", "Fixture.swift", "", 0, 0, 0)
+            result = subprocess.run(["sh", "-c", text], cwd=directory, env=environment, capture_output=True, text=True)
+            return result, recorded.read_text().splitlines()
+
+        simulator, simulator_arguments = run_script("18.0")
+        host, host_arguments = run_script("")
+
+        self.assertEqual(simulator.returncode, 0, simulator.stdout)
+        self.assertEqual(simulator_arguments[:6], ["xcrun", "--sdk", "iphonesimulator", "swiftc", "-target", "arm64-apple-ios18.0-simulator"])
+        self.assertEqual(host.returncode, 0, host.stdout)
+        self.assertEqual(host_arguments[:3], ["xcrun", "swiftc", "-typecheck"])
+        self.assertIn('"deps": attr.label_list(providers = [SwiftInfo], cfg = _deps_platform),', rule)
+        self.assertIn('Label("@build_bazel_apple_support//platforms:ios_sim_arm64")', rule)
+        self.assertIn('"//command_line_option:ios_minimum_os": attr.ios_simulator_minimum_os,', rule)
+        self.assertIn("ios_simulator_minimum_os", (directory / "docs" / "agents" / "macros.md").read_text())
 
     def test_check_refuses_a_plugin_on_a_plugin_an_ios_or_testing_module_one_reaching_a_plugin_or_an_example(self):
         directory = self.render(self.scratch / "plugin-refusals", "--library", "--ios")
